@@ -26,10 +26,13 @@ pub struct VerifyTokenResponse {
 
 #[cfg(feature = "http3")]
 use {
-    bytes::Bytes,
-    futures::future,
+    bytes::{Buf, Bytes},
     h3_quinn::quinn::{self, Endpoint},
     quinn_proto::crypto::rustls::QuicClientConfig,
+    rustls::pki_types::CertificateDer,
+    rustls::RootCertStore,
+    rustls_pemfile::certs,
+    std::io::BufReader,
     std::net::SocketAddr,
     std::sync::Arc,
 };
@@ -80,6 +83,10 @@ pub enum Protocol {
     #[cfg(feature = "http3")]
     Http3,
 }
+
+// Add HTTP/3 ALPN constant
+#[cfg(feature = "http3")]
+static ALPN_QUIC_HTTP3: &[u8] = b"h3";
 
 impl HessraClientBuilder {
     pub fn new() -> Self {
@@ -146,23 +153,40 @@ impl HessraClientBuilder {
 
     #[cfg(feature = "http3")]
     fn build_http3(&self) -> Result<Http3Client, Box<dyn Error>> {
-        let mut identity_pem = Vec::new();
-        identity_pem.extend(self.config.mtls_cert.as_bytes());
-        identity_pem.extend(self.config.mtls_key.as_bytes());
-
-        let roots = reqwest::Certificate::from_pem(self.config.server_ca.as_bytes())?;
-        let cert_chain = reqwest::Identity::from_pem(&identity_pem)?;
-
         rustls::crypto::ring::default_provider()
             .install_default()
             .expect("Failed to install rustls crypto provider");
 
+        // Parse root certificate
+        let mut root_store = RootCertStore::empty();
+        let mut reader = BufReader::new(self.config.server_ca.as_bytes());
+        let certs = certs(&mut reader);
+        for cert in certs {
+            root_store.add(cert?)?;
+        }
+
+        // Parse client certificate chain
+        let cert_chain: Vec<CertificateDer<'static>> =
+            rustls_pemfile::certs(&mut self.config.mtls_cert.as_bytes())
+                .collect::<Result<_, _>>()
+                .map_err(|e| format!("invalid PEM-encoded certificate: {}", e))?;
+
+        if cert_chain.is_empty() {
+            return Err("No client certificates found".into());
+        }
+
+        // Parse private key
+        let key = rustls_pemfile::private_key(&mut self.config.mtls_key.as_bytes())
+            .map_err(|e| format!("malformed private key: {}", e))?
+            .ok_or_else(|| Box::<dyn Error>::from("no private keys found"))?;
+
         let mut client_crypto = rustls::ClientConfig::builder()
-            .with_root_certificates(roots.to_owned())
-            .with_client_auth_cert(cert_chain.to_owned(), key)
+            .with_root_certificates(root_store)
+            .with_client_auth_cert(cert_chain, key)
             .map_err(|e| format!("Failed to build client crypto: {}", e))?;
 
-        client_crypto.alpn_protocols = vec![b"h3".to_vec()];
+        // Set ALPN protocol
+        client_crypto.alpn_protocols = vec![ALPN_QUIC_HTTP3.into()];
         client_crypto.enable_early_data = true;
 
         let client_config = quinn::ClientConfig::new(Arc::new(
@@ -206,22 +230,22 @@ impl Http3Client {
         T: serde::Serialize,
         R: serde::de::DeserializeOwned,
     {
-        let server_addr: SocketAddr = format!(
-            "{}:{}",
-            self.config.base_url,
-            self.config.port.unwrap_or(443)
-        )
-        .parse()
-        .map_err(|e| format!("Invalid server address: {}", e))?;
+        let addr = tokio::net::lookup_host((
+            self.config.base_url.as_str(),
+            self.config.port.unwrap_or(443),
+        ))
+        .await?
+        .next()
+        .ok_or("dns found no addresses")?;
 
         let connection = self
             .endpoint
-            .connect(server_addr, &self.config.base_url)?
+            .connect(addr, &self.config.base_url)?
             .await
             .map_err(|e| format!("Failed to connect: {}", e))?;
 
         let quinn_conn = h3_quinn::Connection::new(connection);
-        let (mut driver, mut send_request) = h3::client::new(quinn_conn).await?;
+        let (_driver, mut send_request) = h3::client::new(quinn_conn).await?;
 
         let request = http::Request::builder()
             .uri(format!(
@@ -237,7 +261,7 @@ impl Http3Client {
         stream.send_data(Bytes::from(body)).await?;
         stream.finish().await?;
 
-        let response = stream.recv_response().await?;
+        let _response = stream.recv_response().await?;
         let mut response_data = Vec::new();
 
         while let Some(chunk) = stream.recv_data().await? {
@@ -261,7 +285,11 @@ impl Http1Client {
     {
         let response = self
             .client
-            .post(format!("{}/{}", self.config.get_base_url(), endpoint))
+            .post(format!(
+                "https://{}/{}",
+                self.config.get_base_url(),
+                endpoint
+            ))
             .json(request_body)
             .send()
             .await?
