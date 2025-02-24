@@ -26,6 +26,13 @@ tokio = { version = "1.36", features = ["full"] }
 http = "1.0"
 anyhow = "1.0"
 
+[dev-dependencies]
+hyper = { version = "0.14", features = ["server", "http1", "tcp", "client"] }
+tokio-util = { version = "0.7", features = ["compat", "io"] }
+mockito = "1.2"
+wiremock = "0.5"
+futures-util = "0.3"
+
 [features]
 default = []
 http3 = ["h3", "h3-quinn", "quinn", "quinn-proto", "rustls", "rustls-pemfile", "bytes", "futures"]

@@ -345,3 +345,50 @@ impl HessraClient {
         Ok(response.response_msg)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_base_config_get_base_url_with_port() {
+        let config = BaseConfig {
+            base_url: "example.com".to_string(),
+            port: Some(8443),
+            mtls_key: "".to_string(),
+            mtls_cert: "".to_string(),
+            server_ca: "".to_string(),
+        };
+
+        assert_eq!(config.get_base_url(), "example.com:8443");
+    }
+
+    #[test]
+    fn test_base_config_get_base_url_without_port() {
+        let config = BaseConfig {
+            base_url: "example.com".to_string(),
+            port: None,
+            mtls_key: "".to_string(),
+            mtls_cert: "".to_string(),
+            server_ca: "".to_string(),
+        };
+
+        assert_eq!(config.get_base_url(), "example.com");
+    }
+
+    #[test]
+    fn test_builder_methods() {
+        let builder = HessraClientBuilder::new()
+            .base_url("test.example.com")
+            .port(8443)
+            .mtls_cert("CERT")
+            .mtls_key("KEY")
+            .server_ca("CA");
+
+        assert_eq!(builder.config.base_url, "test.example.com");
+        assert_eq!(builder.config.port, Some(8443));
+        assert_eq!(builder.config.mtls_cert, "CERT");
+        assert_eq!(builder.config.mtls_key, "KEY");
+        assert_eq!(builder.config.server_ca, "CA");
+    }
+}
