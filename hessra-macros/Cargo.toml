@@ -2,6 +2,14 @@
 name = "hessra-macros"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+authors = ["Jake Valentic <jake@hessra.net>"]
+description = "Hessra authorization service macros for Rust"
+repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
+documentation = "https://docs.rs/hessra-macros"
+keywords = ["hessra", "authorization", "rust", "sdk", "biscuit"]
+categories = ["authentication", "api-bindings", "web-programming"]
+readme = "README.md"
 
 [lib]
 proc-macro = true
