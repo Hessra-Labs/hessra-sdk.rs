@@ -2,6 +2,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
+// Re-export configuration module
+mod config;
+pub use config::*;
+
 #[derive(Serialize, Deserialize)]
 pub struct TokenRequest {
     pub resource: String,
@@ -77,7 +81,7 @@ pub struct HessraClientBuilder {
     protocol: Protocol,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Protocol {
     Http1,
     #[cfg(feature = "http3")]
