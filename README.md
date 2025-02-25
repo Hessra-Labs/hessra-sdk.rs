@@ -20,7 +20,7 @@ use hessra_sdk::{HessraClient, Protocol};
 
 // Create a client using the builder pattern
 let client = HessraClient::builder()
-    .base_url("auth.example.com")
+    .base_url("yourco.hessra.net")
     .protocol(Protocol::Http1)
     .mtls_cert(include_str!("certs/client.crt"))
     .mtls_key(include_str!("certs/client.key"))
