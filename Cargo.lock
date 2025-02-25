@@ -712,6 +712,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hessra-macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5791a14796d36a45436d62d9a6b541c98e95d1ab0c0204de77067ae241320f17"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "hessra-sdk"
 version = "0.1.0"
 dependencies = [
@@ -722,7 +733,7 @@ dependencies = [
  "futures-util",
  "h3",
  "h3-quinn",
- "hessra-macros",
+ "hessra-macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 1.2.0",
  "hyper 0.14.32",
  "mockito",

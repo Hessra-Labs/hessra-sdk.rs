@@ -15,7 +15,7 @@ readme = "README.md"
 members = ["hessra-macros"]
 
 [dependencies]
-hessra-macros = { path = "hessra-macros", version = "0.1.0" }
+hessra-macros = "0.1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
