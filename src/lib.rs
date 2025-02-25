@@ -31,7 +31,7 @@
 //!     .protocol(Protocol::Http1)
 //!     .mtls_cert(include_str!("../certs/client.crt"))
 //!     .mtls_key(include_str!("../certs/client.key"))
-//!     .server_ca(include_str!("../certs/ca.pem"))
+//!     .server_ca(include_str!("../certs/ca.crt"))
 //!     .build()?;
 //!
 //! // Request a token for a specific resource
@@ -59,7 +59,7 @@
 //!     Protocol::Http1,
 //!     include_str!("../certs/client.crt"),
 //!     include_str!("../certs/client.key"),
-//!     include_str!("../certs/ca.pem"),
+//!     include_str!("../certs/ca.crt"),
 //! );
 //!
 //! // 2. From a JSON file
@@ -528,16 +528,16 @@ impl HessraClient {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use hessra_sdk::{HessraClient, Protocol};
     ///
     /// let client = HessraClient::builder()
     ///     .base_url("auth.example.com")
     ///     .port(443)
     ///     .protocol(Protocol::Http1)
-    ///     .mtls_cert("CERT CONTENT")
-    ///     .mtls_key("KEY CONTENT")
-    ///     .server_ca("CA CONTENT")
+    ///     .mtls_cert("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----")
+    ///     .mtls_key("-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----")
+    ///     .server_ca("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----")
     ///     .build()
     ///     .expect("Failed to build client");
     /// ```

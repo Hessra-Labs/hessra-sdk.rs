@@ -226,9 +226,9 @@ fn test_config_from_env_or_file() {
     let temp_dir = tempfile::tempdir().unwrap();
 
     // Create certificate files
-    let cert_path = temp_dir.path().join("cert.pem");
-    let key_path = temp_dir.path().join("key.pem");
-    let ca_path = temp_dir.path().join("ca.pem");
+    let cert_path = temp_dir.path().join("client.crt");
+    let key_path = temp_dir.path().join("client.key");
+    let ca_path = temp_dir.path().join("ca.crt");
 
     fs::write(
         &cert_path,
