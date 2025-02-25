@@ -43,7 +43,7 @@ impl Parse for MacroArgs {
 ///
 /// // With client config parameter
 /// #[request_authorization("my-resource", client_config)]
-/// async fn protected_function(client_config: &HessraConfig) {
+/// async fn protected_function(client_config: HessraConfig) {
 ///     // This function will be called after token is obtained
 /// }
 ///
@@ -55,7 +55,7 @@ impl Parse for MacroArgs {
 ///
 /// // With individual connection parameters
 /// #[request_authorization("my-resource")]
-/// async fn custom_protected_function(base_url: &str, mtls_cert: &str, mtls_key: &str, server_ca: &str) {
+/// async fn custom_protected_function(base_url: String, mtls_cert: String, mtls_key: String, server_ca: String) {
 ///     // This function will be called after token is obtained using provided parameters
 /// }
 /// ```
@@ -103,11 +103,12 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
 
     let expanded = if is_async {
         if has_config_param {
-            // Use the provided client config parameter
+            // Use the provided client config parameter - now using cloned ownership
             quote! {
                 #fn_vis #fn_generics async fn #fn_name(#fn_args) #fn_output {
-                    // Create client from the provided configuration
-                    let client = #config_param.create_client()
+                    // Create client from the provided configuration (clone to avoid borrowing issues)
+                    let config_clone = #config_param.clone();
+                    let client = config_clone.create_client()
                         .expect("Failed to create Hessra client from configuration");
 
                     // Request a token for the resource
@@ -121,17 +122,17 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
                 }
             }
         } else if has_base_url_param {
-            // Create a new client from function parameters
+            // Create a new client from function parameters - using owned values
             quote! {
                 #fn_vis #fn_generics async fn #fn_name(#fn_args) #fn_output {
                     // Create a temporary configuration from parameters
                     let config = hessra_sdk::HessraConfig::new(
-                        base_url,
+                        base_url.clone(),
                         None, // default port
                         hessra_sdk::Protocol::Http1,
-                        mtls_cert,
-                        mtls_key,
-                        server_ca
+                        mtls_cert.clone(),
+                        mtls_key.clone(),
+                        server_ca.clone()
                     );
 
                     // Create client from the config
@@ -152,9 +153,10 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
             // Use global configuration
             quote! {
                 #fn_vis #fn_generics async fn #fn_name(#fn_args) #fn_output {
-                    // Get the global configuration
+                    // Get the global configuration (clone to avoid reference issues)
                     let config = hessra_sdk::get_default_config()
-                        .or_else(|| hessra_sdk::try_load_default_config().as_ref())
+                        .cloned()
+                        .or_else(|| hessra_sdk::try_load_default_config())
                         .expect("No Hessra configuration found. Set a default configuration or provide parameters.");
 
                     // Create client from the config
@@ -180,8 +182,9 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
                     // Create a runtime for the asynchronous token request
                     let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
 
-                    // Create client from the provided configuration
-                    let client = #config_param.create_client()
+                    // Create client from the provided configuration (clone to avoid borrowing issues)
+                    let config_clone = #config_param.clone();
+                    let client = config_clone.create_client()
                         .expect("Failed to create Hessra client from configuration");
 
                     // Request a token for the resource
@@ -201,12 +204,12 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
 
                     // Create a temporary configuration from parameters
                     let config = hessra_sdk::HessraConfig::new(
-                        base_url,
+                        base_url.clone(),
                         None, // default port
                         hessra_sdk::Protocol::Http1,
-                        mtls_cert,
-                        mtls_key,
-                        server_ca
+                        mtls_cert.clone(),
+                        mtls_key.clone(),
+                        server_ca.clone()
                     );
 
                     // Create client from the config
@@ -229,9 +232,10 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
                     // Create a runtime for the asynchronous token request
                     let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
 
-                    // Get the global configuration
+                    // Get the global configuration (clone to avoid reference issues)
                     let config = hessra_sdk::get_default_config()
-                        .or_else(|| hessra_sdk::try_load_default_config().as_ref())
+                        .cloned()
+                        .or_else(|| hessra_sdk::try_load_default_config())
                         .expect("No Hessra configuration found. Set a default configuration or provide parameters.");
 
                     // Create client from the config
@@ -266,7 +270,7 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
 ///
 /// // With client config parameter
 /// #[authorize("my-resource", client_config)]
-/// async fn protected_function(token: String, client_config: &HessraConfig) {
+/// async fn protected_function(token: String, client_config: HessraConfig) {
 ///     // This function will be called if token is valid
 /// }
 ///
@@ -278,7 +282,7 @@ pub fn request_authorization(attr: TokenStream, item: TokenStream) -> TokenStrea
 ///
 /// // With individual connection parameters
 /// #[authorize("my-resource")]
-/// async fn custom_protected_function(token: String, base_url: &str, mtls_cert: &str, mtls_key: &str, server_ca: &str) {
+/// async fn custom_protected_function(token: String, base_url: String, mtls_cert: String, mtls_key: String, server_ca: String) {
 ///     // This function will be called if token is valid using provided parameters
 /// }
 /// ```
@@ -339,8 +343,9 @@ pub fn authorize(attr: TokenStream, item: TokenStream) -> TokenStream {
         if has_config_param {
             quote! {
                 #fn_vis #fn_generics async fn #fn_name(#fn_args) #fn_output {
-                    // Create client from the provided configuration
-                    let client = #config_param.create_client()
+                    // Create client from the provided configuration (clone to avoid borrowing issues)
+                    let config_clone = #config_param.clone();
+                    let client = config_clone.create_client()
                         .expect("Failed to create Hessra client from configuration");
 
                     // Verify the token for the specified resource
@@ -364,12 +369,12 @@ pub fn authorize(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #fn_vis #fn_generics async fn #fn_name(#fn_args) #fn_output {
                     // Create a temporary configuration from parameters
                     let config = hessra_sdk::HessraConfig::new(
-                        base_url,
+                        base_url.clone(),
                         None, // default port
                         hessra_sdk::Protocol::Http1,
-                        mtls_cert,
-                        mtls_key,
-                        server_ca
+                        mtls_cert.clone(),
+                        mtls_key.clone(),
+                        server_ca.clone()
                     );
 
                     // Create client from the config
@@ -396,9 +401,10 @@ pub fn authorize(attr: TokenStream, item: TokenStream) -> TokenStream {
             // Use global configuration
             quote! {
                 #fn_vis #fn_generics async fn #fn_name(#fn_args) #fn_output {
-                    // Get the global configuration
+                    // Get the global configuration (clone to avoid reference issues)
                     let config = hessra_sdk::get_default_config()
-                        .or_else(|| hessra_sdk::try_load_default_config().as_ref())
+                        .cloned()
+                        .or_else(|| hessra_sdk::try_load_default_config())
                         .expect("No Hessra configuration found. Set a default configuration or provide parameters.");
 
                     // Create client from the config
@@ -430,8 +436,9 @@ pub fn authorize(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // Create a runtime for the asynchronous token verification
                     let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
 
-                    // Create client from the provided configuration
-                    let client = #config_param.create_client()
+                    // Create client from the provided configuration (clone to avoid borrowing issues)
+                    let config_clone = #config_param.clone();
+                    let client = config_clone.create_client()
                         .expect("Failed to create Hessra client from configuration");
 
                     // Verify the token for the specified resource
@@ -458,12 +465,12 @@ pub fn authorize(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                     // Create a temporary configuration from parameters
                     let config = hessra_sdk::HessraConfig::new(
-                        base_url,
+                        base_url.clone(),
                         None, // default port
                         hessra_sdk::Protocol::Http1,
-                        mtls_cert,
-                        mtls_key,
-                        server_ca
+                        mtls_cert.clone(),
+                        mtls_key.clone(),
+                        server_ca.clone()
                     );
 
                     // Create client from the config
@@ -493,9 +500,10 @@ pub fn authorize(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // Create a runtime for the asynchronous token verification
                     let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
 
-                    // Get the global configuration
+                    // Get the global configuration (clone to avoid reference issues)
                     let config = hessra_sdk::get_default_config()
-                        .or_else(|| hessra_sdk::try_load_default_config().as_ref())
+                        .cloned()
+                        .or_else(|| hessra_sdk::try_load_default_config())
                         .expect("No Hessra configuration found. Set a default configuration or provide parameters.");
 
                     // Create client from the config
