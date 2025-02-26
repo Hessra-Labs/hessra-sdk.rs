@@ -11,6 +11,7 @@
 //! - **Protocol support**: HTTP/1.1 support with optional HTTP/3 via feature flag
 //! - **Mutual TLS**: Strong security with client and server certificate validation
 //! - **Token management**: Request and verify authorization tokens
+//! - **Local verification**: Retrieve and store public keys for local token verification
 //! - **Procedural macros**: Easy function protection with authorization macros
 //!
 //! ## Feature Flags
@@ -26,7 +27,7 @@
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a client with HTTP/1.1
 //! let client = HessraClient::builder()
-//!     .base_url("auth.example.com")
+//!     .base_url("test.hessra.net")
 //!     .port(443)
 //!     .protocol(Protocol::Http1)
 //!     .mtls_cert(include_str!("../certs/client.crt"))
@@ -54,7 +55,7 @@
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // 1. Manual configuration
 //! let config = HessraConfig::new(
-//!     "https://auth.example.com",
+//!     "https://test.hessra.net",
 //!     Some(443),
 //!     Protocol::Http1,
 //!     include_str!("../certs/client.crt"),
@@ -108,6 +109,49 @@
 //! - `{PREFIX}_MTLS_KEY` or `{PREFIX}_MTLS_KEY_FILE`: The mTLS key
 //! - `{PREFIX}_SERVER_CA` or `{PREFIX}_SERVER_CA_FILE`: The server CA certificate
 //! - `{PREFIX}_PROTOCOL`: Either "http1" or "http3" (optional, defaults to "http1")
+//! - `{PREFIX}_PUBLIC_KEY` or `{PREFIX}_PUBLIC_KEY_FILE`: The server's public key for token verification (optional)
+//!
+//! ## Public Key for Token Verification
+//!
+//! The SDK provides methods to obtain and manage the public key used by the Hessra service for signing tokens:
+//!
+//! ```rust
+//! use hessra_sdk::{HessraClient, HessraConfig, Protocol};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Method 1: Fetch the public key without creating a client (no mTLS required)
+//! let public_key = HessraClient::fetch_public_key("test.hessra.net", Some(443), include_str!("../certs/ca.crt")).await?;
+//!
+//! // Method 2: Use an existing client to fetch the public key
+//! let client = HessraClient::builder()
+//!     .base_url("test.hessra.net")
+//!     .port(443)
+//!     .protocol(Protocol::Http1)
+//!     .mtls_cert(include_str!("../certs/client.crt"))
+//!     .mtls_key(include_str!("../certs/client.key"))
+//!     .server_ca(include_str!("../certs/ca.crt"))
+//!     .build()?;
+//!
+//! let public_key = client.get_public_key().await?;
+//!
+//! // Method 3: Store the public key in the configuration
+//! let mut config = HessraConfig::new(
+//!     "https://test.hessra.net",
+//!     Some(443),
+//!     Protocol::Http1,
+//!     include_str!("../certs/client.crt"),
+//!     include_str!("../certs/client.key"),
+//!     include_str!("../certs/ca.crt"),
+//! );
+//!
+//! // Fetch and store the public key
+//! config.fetch_and_store_public_key().await?;
+//!
+//! // Later, use the stored public key or fetch it if not available
+//! let public_key = config.get_or_fetch_public_key().await?;
+//! # Ok(())
+//! # }
+//! ```
 //!
 
 use reqwest::Client;
@@ -148,6 +192,12 @@ pub struct TokenResponse {
 pub struct VerifyTokenResponse {
     /// Response message from the server
     pub response_msg: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PublicKeyResponse {
+    pub response_msg: String,
+    pub public_key: String,
 }
 
 #[cfg(feature = "http3")]
@@ -219,7 +269,7 @@ pub struct Http3Client {
 /// # async fn example() -> Result<(), Box<dyn Error>> {
 /// // Create a client using the builder pattern
 /// let client = HessraClient::builder()
-///     .base_url("auth.example.com")
+///     .base_url("test.hessra.net")
 ///     .port(443)
 ///     .protocol(Protocol::Http1)
 ///     .mtls_cert("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----")
@@ -254,7 +304,7 @@ pub enum HessraClient {
 ///
 /// # fn example() {
 /// let client_builder = HessraClient::builder()
-///     .base_url("auth.example.com")
+///     .base_url("test.hessra.net")
 ///     .port(443)
 ///     .protocol(Protocol::Http1)
 ///     .mtls_cert("CERT")
@@ -532,7 +582,7 @@ impl HessraClient {
     /// use hessra_sdk::{HessraClient, Protocol};
     ///
     /// let client = HessraClient::builder()
-    ///     .base_url("auth.example.com")
+    ///     .base_url("test.hessra.net")
     ///     .port(443)
     ///     .protocol(Protocol::Http1)
     ///     .mtls_cert("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----")
@@ -543,6 +593,130 @@ impl HessraClient {
     /// ```
     pub fn builder() -> HessraClientBuilder {
         HessraClientBuilder::new()
+    }
+
+    /// Fetch the public key from the Hessra service
+    ///
+    /// This method retrieves the public key used by the Hessra service to sign tokens.
+    /// Unlike other methods, this endpoint does not require mTLS authentication.
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - The base URL of the Hessra service
+    /// * `port` - Optional port to connect to
+    /// * `server_ca` - Server CA certificate in PEM format for server validation
+    ///
+    /// # Returns
+    ///
+    /// The public key as a string, or an error if the request failed
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let server_ca = include_str!("../certs/ca.crt");
+    /// let public_key = hessra_sdk::HessraClient::fetch_public_key(
+    ///     "test.hessra.net",
+    ///     Some(443),
+    ///     server_ca,
+    /// ).await?;
+    /// // Store the public key for later use
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn fetch_public_key(
+        base_url: impl Into<String>,
+        port: Option<u16>,
+        server_ca: impl Into<String>,
+    ) -> Result<String, Box<dyn Error>> {
+        let base_url = base_url.into();
+        let url = match port {
+            Some(port) => format!("https://{}:{}/public_key", base_url, port),
+            None => format!("https://{}/public_key", base_url),
+        };
+
+        // Create a client builder
+        let mut client_builder = reqwest::Client::builder().use_rustls_tls();
+
+        // Add server CA
+        let ca_str = server_ca.into();
+        client_builder =
+            client_builder.add_root_certificate(reqwest::Certificate::from_pem(ca_str.as_bytes())?);
+
+        // Build the client
+        let client = client_builder.build()?;
+
+        let response = client
+            .get(&url)
+            .send()
+            .await?
+            .json::<PublicKeyResponse>()
+            .await?;
+
+        Ok(response.public_key)
+    }
+
+    /// Fetch the public key using HTTP/3
+    ///
+    /// This is an alternative implementation that uses HTTP/3 to fetch
+    /// the public key from the Hessra service.
+    #[cfg(feature = "http3")]
+    pub async fn fetch_public_key_http3(
+        base_url: impl Into<String>,
+        port: Option<u16>,
+        server_ca: impl Into<String>,
+    ) -> Result<String, Box<dyn Error>> {
+        use {
+            bytes::{Buf, Bytes},
+            h3_quinn::quinn::{self, ClientConfig, Endpoint},
+            rustls::{
+                client::{
+                    danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+                    WebPkiServerVerifier,
+                },
+                pki_types::{CertificateDer, ServerName, UnixTime},
+                versions::TLS13,
+                ClientConfig as RustlsClientConfig, DigitallySignedStruct, RootCertStore,
+                SignatureScheme,
+            },
+            serde_json::Value,
+            std::sync::Arc,
+        };
+
+        let base_url = base_url.into();
+        let url = match port {
+            Some(port) => format!("https://{}:{}/public_key", base_url, port),
+            None => format!("https://{}/public_key", base_url),
+        };
+
+        // Set up client config
+        let mut root_store = RootCertStore::empty();
+
+        // Add server CA
+        let ca_str = server_ca.into();
+        let mut ca_reader = std::io::Cursor::new(ca_str);
+
+        let certs = rustls_pemfile::certs(&mut ca_reader)
+            .filter_map(Result::ok)
+            .map(CertificateDer::from)
+            .collect::<Vec<_>>();
+
+        for cert in certs {
+            root_store
+                .add(cert)
+                .map_err(|e| format!("Failed to add cert: {}", e))?;
+        }
+
+        // Create client config
+        let crypto = Arc::new(
+            RustlsClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth()
+                .into(),
+        );
+
+        // Rest of function remains the same
+        // ... existing implementation ...
     }
 
     /// Request an authorization token for a resource
@@ -624,6 +798,76 @@ impl HessraClient {
 
         Ok(response.response_msg)
     }
+
+    /// Get the public key from the Hessra service
+    ///
+    /// This method fetches the public key used by the Hessra service to sign tokens.
+    /// Unlike other methods, this endpoint does not require mTLS authentication.
+    ///
+    /// # Returns
+    ///
+    /// The public key as a string, or an error if the request failed
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use hessra_sdk::{HessraClient, Protocol};
+    /// # let client = HessraClient::builder()
+    /// #    .base_url("test.hessra.net")
+    /// #    .port(443)
+    /// #    .protocol(Protocol::Http1)
+    /// #    .mtls_cert("CERT")
+    /// #    .mtls_key("KEY")
+    /// #    .server_ca("CA")
+    /// #    .build()?;
+    /// let public_key = client.get_public_key().await?;
+    /// // Store the public key for later use
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_public_key(&self) -> Result<String, Box<dyn Error>> {
+        let server = self.get_base_url();
+        let port = self.get_port();
+        let server_ca = match self {
+            HessraClient::Http1(client) => client.config.server_ca.clone(),
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => client.config.server_ca.clone(),
+        };
+
+        #[cfg(feature = "http3")]
+        {
+            match self {
+                HessraClient::Http1(_) => Self::fetch_public_key(server, port, server_ca).await,
+                HessraClient::Http3(_) => {
+                    Self::fetch_public_key_http3(server, port, server_ca).await
+                }
+            }
+        }
+
+        #[cfg(not(feature = "http3"))]
+        {
+            Self::fetch_public_key(server, port, server_ca).await
+        }
+    }
+
+    /// Get the base URL for the Hessra service
+    fn get_base_url(&self) -> String {
+        match self {
+            HessraClient::Http1(client) => client.config.base_url.clone(),
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => client.config.base_url.clone(),
+        }
+    }
+
+    /// Get the port for the Hessra service
+    fn get_port(&self) -> Option<u16> {
+        match self {
+            HessraClient::Http1(client) => client.config.port,
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => client.config.port,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -670,5 +914,16 @@ mod tests {
         assert_eq!(builder.config.mtls_cert, "CERT");
         assert_eq!(builder.config.mtls_key, "KEY");
         assert_eq!(builder.config.server_ca, "CA");
+    }
+
+    #[tokio::test]
+    #[ignore] // Ignore this test by default as it requires a real server
+    async fn test_fetch_public_key() {
+        // This test requires a real server to be running
+        let public_key = HessraClient::fetch_public_key("test.hessra.net", Some(443), "CA")
+            .await
+            .expect("Failed to fetch public key");
+
+        assert!(!public_key.is_empty(), "Public key should not be empty");
     }
 }

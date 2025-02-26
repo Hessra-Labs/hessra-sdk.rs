@@ -21,7 +21,7 @@ use std::sync::OnceLock;
 /// use hessra_sdk::{HessraConfig, Protocol};
 ///
 /// let config = HessraConfig::new(
-///     "https://auth.example.com", // base URL
+///     "https://test.hessra.net", // base URL
 ///     Some(443),                  // port (optional)
 ///     Protocol::Http1,            // protocol
 ///     include_str!("../certs/client.crt"), // mTLS certificate
@@ -46,7 +46,7 @@ use std::sync::OnceLock;
 /// use hessra_sdk::HessraConfig;
 ///
 /// // Assuming the following environment variables are set:
-/// // HESSRA_BASE_URL=https://auth.example.com
+/// // HESSRA_BASE_URL=https://test.hessra.net
 /// // HESSRA_PORT=443
 /// // HESSRA_MTLS_CERT=<certificate content>
 /// // HESSRA_MTLS_KEY=<key content>
@@ -62,7 +62,7 @@ use std::sync::OnceLock;
 ///
 /// // Set up the global configuration
 /// let config = HessraConfig::new(
-///     "https://auth.example.com",
+///     "https://test.hessra.net",
 ///     Some(443),
 ///     Protocol::Http1,
 ///     "<certificate content>",
@@ -86,6 +86,9 @@ pub struct HessraConfig {
     pub server_ca: String,
     #[serde(default = "default_protocol")]
     pub protocol: Protocol,
+    /// The server's public key for token verification
+    #[serde(default)]
+    pub public_key: Option<String>,
 }
 
 fn default_protocol() -> Protocol {
@@ -191,6 +194,7 @@ impl HessraConfig {
             mtls_cert: mtls_cert.into(),
             mtls_key: mtls_key.into(),
             server_ca: server_ca.into(),
+            public_key: None,
         }
     }
 
@@ -236,7 +240,7 @@ impl HessraConfig {
     /// use std::env;
     ///
     /// // Set environment variables (in a real app, these would be set externally)
-    /// env::set_var("APP_BASE_URL", "https://auth.example.com");
+    /// env::set_var("APP_BASE_URL", "https://test.hessra.net");
     /// env::set_var("APP_PORT", "443");
     /// env::set_var("APP_MTLS_CERT", "-----BEGIN CERTIFICATE-----\n...");
     /// env::set_var("APP_MTLS_KEY", "-----BEGIN PRIVATE KEY-----\n...");
@@ -288,6 +292,13 @@ impl HessraConfig {
             Err(e) => return Err(e.into()),
         };
 
+        // Try to load public key from environment variable
+        let public_key = match env::var(format!("{}_PUBLIC_KEY", prefix)) {
+            Ok(key) => Some(key),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(e) => return Err(e.into()),
+        };
+
         let config = HessraConfig {
             base_url,
             port,
@@ -295,6 +306,7 @@ impl HessraConfig {
             mtls_cert,
             mtls_key,
             server_ca,
+            public_key,
         };
 
         config.validate()?;
@@ -335,7 +347,7 @@ impl HessraConfig {
     /// File::create(ca_path).unwrap().write_all(b"-----BEGIN CERTIFICATE-----\n...").unwrap();
     ///
     /// // Set environment variables pointing to the files
-    /// env::set_var("SERVICE_BASE_URL", "https://auth.example.com");
+    /// env::set_var("SERVICE_BASE_URL", "https://test.hessra.net");
     /// env::set_var("SERVICE_PORT", "443");
     /// env::set_var("SERVICE_MTLS_CERT_FILE", cert_path);
     /// env::set_var("SERVICE_MTLS_KEY_FILE", key_path);
@@ -367,45 +379,32 @@ impl HessraConfig {
             Err(e) => return Err(e.into()),
         };
 
-        // Try to load certificate from environment variable or file
-        let mtls_cert = match env::var(format!("{}_MTLS_CERT", prefix)) {
-            Ok(cert) => cert,
-            Err(std::env::VarError::NotPresent) => {
-                // Try to load from file
-                match env::var(format!("{}_MTLS_CERT_FILE", prefix)) {
-                    Ok(file_path) => fs::read_to_string(file_path)?,
-                    Err(e) => return Err(e.into()),
-                }
-            }
+        // Try to get mTLS certificate from file or directly
+        let mtls_cert = match env::var(format!("{}_MTLS_CERT_FILE", prefix)) {
+            Ok(cert_file) => fs::read_to_string(cert_file).map_err(|e| {
+                ConfigError::IOError(format!("Failed to read certificate file: {}", e))
+            })?,
+            Err(std::env::VarError::NotPresent) => env::var(format!("{}_MTLS_CERT", prefix))?,
             Err(e) => return Err(e.into()),
         };
 
-        // Try to load key from environment variable or file
-        let mtls_key = match env::var(format!("{}_MTLS_KEY", prefix)) {
-            Ok(key) => key,
-            Err(std::env::VarError::NotPresent) => {
-                // Try to load from file
-                match env::var(format!("{}_MTLS_KEY_FILE", prefix)) {
-                    Ok(file_path) => fs::read_to_string(file_path)?,
-                    Err(e) => return Err(e.into()),
-                }
-            }
+        // Try to get mTLS key from file or directly
+        let mtls_key = match env::var(format!("{}_MTLS_KEY_FILE", prefix)) {
+            Ok(key_file) => fs::read_to_string(key_file)
+                .map_err(|e| ConfigError::IOError(format!("Failed to read key file: {}", e)))?,
+            Err(std::env::VarError::NotPresent) => env::var(format!("{}_MTLS_KEY", prefix))?,
             Err(e) => return Err(e.into()),
         };
 
-        // Try to load server CA from environment variable or file
-        let server_ca = match env::var(format!("{}_SERVER_CA", prefix)) {
-            Ok(ca) => ca,
-            Err(std::env::VarError::NotPresent) => {
-                // Try to load from file
-                match env::var(format!("{}_SERVER_CA_FILE", prefix)) {
-                    Ok(file_path) => fs::read_to_string(file_path)?,
-                    Err(e) => return Err(e.into()),
-                }
-            }
+        // Try to get server CA from file or directly
+        let server_ca = match env::var(format!("{}_SERVER_CA_FILE", prefix)) {
+            Ok(ca_file) => fs::read_to_string(ca_file)
+                .map_err(|e| ConfigError::IOError(format!("Failed to read CA file: {}", e)))?,
+            Err(std::env::VarError::NotPresent) => env::var(format!("{}_SERVER_CA", prefix))?,
             Err(e) => return Err(e.into()),
         };
 
+        // Try to get protocol from environment variable
         let protocol = match env::var(format!("{}_PROTOCOL", prefix)) {
             Ok(protocol_str) => match protocol_str.to_lowercase().as_str() {
                 "http1" => Protocol::Http1,
@@ -422,6 +421,20 @@ impl HessraConfig {
             Err(e) => return Err(e.into()),
         };
 
+        // Try to get public key from file or directly
+        let public_key = match env::var(format!("{}_PUBLIC_KEY_FILE", prefix)) {
+            Ok(key_file) => Some(fs::read_to_string(key_file).map_err(|e| {
+                ConfigError::IOError(format!("Failed to read public key file: {}", e))
+            })?),
+            Err(std::env::VarError::NotPresent) => match env::var(format!("{}_PUBLIC_KEY", prefix))
+            {
+                Ok(key) => Some(key),
+                Err(std::env::VarError::NotPresent) => None,
+                Err(e) => return Err(e.into()),
+            },
+            Err(e) => return Err(e.into()),
+        };
+
         let config = HessraConfig {
             base_url,
             port,
@@ -429,6 +442,7 @@ impl HessraConfig {
             mtls_cert,
             mtls_key,
             server_ca,
+            public_key,
         };
 
         config.validate()?;
@@ -507,6 +521,86 @@ impl HessraConfig {
             .mtls_key(&self.mtls_key)
             .server_ca(&self.server_ca)
             .build()
+    }
+
+    /// Fetch and store the public key from the server
+    ///
+    /// This method retrieves the public key from the Hessra service
+    /// and stores it in the configuration for later use.
+    ///
+    /// # Returns
+    ///
+    /// The fetched public key as a string, or an error if the request failed
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// use hessra_sdk::HessraConfig;
+    ///
+    /// let mut config = HessraConfig::new(
+    ///     "https://test.hessra.net",
+    ///     Some(443),
+    ///     hessra_sdk::Protocol::Http1,
+    ///     "CERT",
+    ///     "KEY",
+    ///     "CA"
+    /// );
+    ///
+    /// // Fetch and store the public key
+    /// let public_key = config.fetch_and_store_public_key().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn fetch_and_store_public_key(&mut self) -> Result<String, Box<dyn Error>> {
+        let url_host =
+            if self.base_url.starts_with("http://") || self.base_url.starts_with("https://") {
+                let url_parts: Vec<&str> = self.base_url.split("://").collect();
+                url_parts[1].to_string()
+            } else {
+                self.base_url.clone()
+            };
+
+        let public_key =
+            HessraClient::fetch_public_key(url_host, self.port, self.server_ca.as_str()).await?;
+        self.public_key = Some(public_key.clone());
+        Ok(public_key)
+    }
+
+    /// Get the stored public key, or fetch it if not available
+    ///
+    /// This method returns the stored public key if available,
+    /// or fetches it from the server if not.
+    ///
+    /// # Returns
+    ///
+    /// The public key as a string, or an error if the request failed
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// use hessra_sdk::HessraConfig;
+    ///
+    /// let mut config = HessraConfig::new(
+    ///     "https://test.hessra.net",
+    ///     Some(443),
+    ///     hessra_sdk::Protocol::Http1,
+    ///     "CERT",
+    ///     "KEY",
+    ///     "CA"
+    /// );
+    ///
+    /// // Get the public key, fetching it if necessary
+    /// let public_key = config.get_or_fetch_public_key().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_or_fetch_public_key(&mut self) -> Result<String, Box<dyn Error>> {
+        match &self.public_key {
+            Some(key) => Ok(key.clone()),
+            None => self.fetch_and_store_public_key().await,
+        }
     }
 }
 
