@@ -64,7 +64,7 @@ Add the SDK to your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-sdk = "0.1.0"
+hessra-sdk = "0.2"
 hessra-macros = "0.1.0"  # For procedural macros
 ```
 
@@ -72,7 +72,7 @@ For HTTP/3 support:
 
 ```toml
 [dependencies]
-hessra-sdk = { version = "0.1.0", features = ["http3"] }
+hessra-sdk = { version = "0.2", features = ["http3"] }
 ```
 
 ## Examples
