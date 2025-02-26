@@ -342,10 +342,19 @@ fn test_default_config() {
 #[test]
 fn test_http3_protocol() {
     // Test HTTP/3 protocol with environment variables
-    env::set_var("HTTP3_TEST_BASE_URL", "http3.example.com");
-    env::set_var("HTTP3_TEST_MTLS_CERT", "HTTP3 CERT");
-    env::set_var("HTTP3_TEST_MTLS_KEY", "HTTP3 KEY");
-    env::set_var("HTTP3_TEST_SERVER_CA", "HTTP3 CA");
+    env::set_var("HTTP3_TEST_BASE_URL", "https://http3.example.com");
+    env::set_var(
+        "HTTP3_TEST_MTLS_CERT",
+        "-----BEGIN CERTIFICATE-----\nHTTP3 CERT\n-----END CERTIFICATE-----",
+    );
+    env::set_var(
+        "HTTP3_TEST_MTLS_KEY",
+        "-----BEGIN PRIVATE KEY-----\nHTTP3 KEY\n-----END PRIVATE KEY-----",
+    );
+    env::set_var(
+        "HTTP3_TEST_SERVER_CA",
+        "-----BEGIN CERTIFICATE-----\nHTTP3 CA\n-----END CERTIFICATE-----",
+    );
     env::set_var("HTTP3_TEST_PROTOCOL", "http3");
 
     // Load the configuration

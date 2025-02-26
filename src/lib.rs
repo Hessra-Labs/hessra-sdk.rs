@@ -667,19 +667,11 @@ impl HessraClient {
         server_ca: impl Into<String>,
     ) -> Result<String, Box<dyn Error>> {
         use {
-            bytes::{Buf, Bytes},
-            h3_quinn::quinn::{self, ClientConfig, Endpoint},
-            rustls::{
-                client::{
-                    danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-                    WebPkiServerVerifier,
-                },
-                pki_types::{CertificateDer, ServerName, UnixTime},
-                versions::TLS13,
-                ClientConfig as RustlsClientConfig, DigitallySignedStruct, RootCertStore,
-                SignatureScheme,
-            },
-            serde_json::Value,
+            bytes::Buf,
+            h3_quinn::quinn::{ClientConfig, Endpoint},
+            quinn_proto::crypto::rustls::QuicClientConfig,
+            rustls::{pki_types::CertificateDer, RootCertStore},
+            std::net::SocketAddr,
             std::sync::Arc,
         };
 
@@ -707,16 +699,70 @@ impl HessraClient {
                 .map_err(|e| format!("Failed to add cert: {}", e))?;
         }
 
-        // Create client config
-        let crypto = Arc::new(
-            RustlsClientConfig::builder()
-                .with_root_certificates(root_store)
-                .with_no_client_auth()
-                .into(),
-        );
+        // Create rustls client config
+        let mut client_crypto = rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
-        // Rest of function remains the same
-        // ... existing implementation ...
+        // Set ALPN protocol
+        client_crypto.alpn_protocols = vec![b"h3".to_vec()];
+
+        // Convert to quinn client config
+        let client_config = ClientConfig::new(Arc::new(
+            QuicClientConfig::try_from(client_crypto)
+                .map_err(|e| format!("Failed to create QUIC config: {}", e))?,
+        ));
+
+        // Create endpoint
+        let bind_addr: SocketAddr = "0.0.0.0:0".parse()?;
+        let mut endpoint = Endpoint::client(bind_addr)?;
+        endpoint.set_default_client_config(client_config);
+
+        // Connect to server
+        let port = port.unwrap_or(443);
+        let remote_addr = format!("{}:{}", base_url, port).parse()?;
+
+        let connection = endpoint
+            .connect(remote_addr, &base_url)?
+            .await
+            .map_err(|e| format!("Failed to connect: {}", e))?;
+
+        // Set up HTTP/3 client
+        let h3_connection = h3_quinn::Connection::new(connection);
+        let (driver, mut send_request) = h3::client::new(h3_connection).await?;
+
+        // Spawn driver task to process connection events
+        tokio::spawn(async move {
+            let _ = driver; // Driver runs when dropped
+        });
+
+        // Create request
+        let request = http::Request::builder()
+            .method("GET")
+            .uri(url)
+            .header("content-type", "application/json")
+            .body(())?;
+
+        // Send request
+        let mut stream = send_request.send_request(request).await?;
+        stream.finish().await?;
+
+        // Get response
+        let response = stream.recv_response().await?;
+
+        if !response.status().is_success() {
+            return Err(format!("HTTP error: {}", response.status()).into());
+        }
+
+        // Read response body
+        let mut body = Vec::new();
+        while let Some(chunk) = stream.recv_data().await? {
+            body.extend_from_slice(chunk.chunk());
+        }
+
+        // Parse response
+        let response: PublicKeyResponse = serde_json::from_slice(&body)?;
+        Ok(response.public_key)
     }
 
     /// Request an authorization token for a resource
