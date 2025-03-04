@@ -95,6 +95,183 @@ fn default_protocol() -> Protocol {
     Protocol::Http1
 }
 
+/// Builder for HessraConfig
+///
+/// This struct provides a more flexible way to construct a HessraConfig object.
+///
+/// # Examples
+///
+/// ```no_run
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// use hessra_sdk::{HessraConfigBuilder, Protocol};
+///
+/// // Create a new config using the builder pattern
+/// let config = HessraConfigBuilder::new()
+///     .base_url("https://test.hessra.net")
+///     .port(443)
+///     .protocol(Protocol::Http1)
+///     .mtls_cert(include_str!("../certs/client.crt"))
+///     .mtls_key(include_str!("../certs/client.key"))
+///     .server_ca(include_str!("../certs/ca.crt"))
+///     .build()?;
+///
+/// // Use the config to create a client
+/// let client = config.create_client()?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// You can also modify an existing configuration:
+///
+/// ```no_run
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # use hessra_sdk::{HessraConfig, Protocol};
+/// # let config = HessraConfig::new(
+/// #     "https://test.hessra.net",
+/// #     Some(443),
+/// #     Protocol::Http1,
+/// #     "CERT",
+/// #     "KEY",
+/// #     "CA"
+/// # );
+/// // Convert existing config to a builder
+/// let new_config = config.to_builder()
+///     .port(8443)  // Change the port
+///     .build()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Default, Debug)]
+pub struct HessraConfigBuilder {
+    base_url: Option<String>,
+    port: Option<u16>,
+    mtls_cert: Option<String>,
+    mtls_key: Option<String>,
+    server_ca: Option<String>,
+    protocol: Option<Protocol>,
+    public_key: Option<String>,
+}
+
+impl HessraConfigBuilder {
+    /// Create a new HessraConfigBuilder with default values
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a new HessraConfigBuilder from an existing HessraConfig
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The existing HessraConfig to use as a starting point
+    pub fn from_config(config: &HessraConfig) -> Self {
+        Self {
+            base_url: Some(config.base_url.clone()),
+            port: config.port,
+            mtls_cert: Some(config.mtls_cert.clone()),
+            mtls_key: Some(config.mtls_key.clone()),
+            server_ca: Some(config.server_ca.clone()),
+            protocol: Some(config.protocol.clone()),
+            public_key: config.public_key.clone(),
+        }
+    }
+
+    /// Set the base URL for the Hessra service
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - The base URL for the Hessra service
+    pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.base_url = Some(base_url.into());
+        self
+    }
+
+    /// Set the port for the Hessra service
+    ///
+    /// # Arguments
+    ///
+    /// * `port` - The port to use for the Hessra service
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
+    }
+
+    /// Set the mTLS certificate for client authentication
+    ///
+    /// # Arguments
+    ///
+    /// * `cert` - The client certificate in PEM format
+    pub fn mtls_cert(mut self, cert: impl Into<String>) -> Self {
+        self.mtls_cert = Some(cert.into());
+        self
+    }
+
+    /// Set the mTLS private key for client authentication
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The client private key in PEM format
+    pub fn mtls_key(mut self, key: impl Into<String>) -> Self {
+        self.mtls_key = Some(key.into());
+        self
+    }
+
+    /// Set the server CA certificate for server validation
+    ///
+    /// # Arguments
+    ///
+    /// * `ca` - The server CA certificate in PEM format
+    pub fn server_ca(mut self, ca: impl Into<String>) -> Self {
+        self.server_ca = Some(ca.into());
+        self
+    }
+
+    /// Set the protocol to use for the Hessra service
+    ///
+    /// # Arguments
+    ///
+    /// * `protocol` - The protocol to use (HTTP/1.1 or HTTP/2)
+    pub fn protocol(mut self, protocol: Protocol) -> Self {
+        self.protocol = Some(protocol);
+        self
+    }
+
+    /// Set the public key for token verification
+    ///
+    /// # Arguments
+    ///
+    /// * `public_key` - The public key in PEM format
+    pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
+        self.public_key = Some(public_key.into());
+        self
+    }
+
+    /// Build the HessraConfig
+    ///
+    /// # Returns
+    ///
+    /// A Result containing either the built HessraConfig or a ConfigError
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any required field is missing or invalid
+    pub fn build(self) -> Result<HessraConfig, ConfigError> {
+        let config = HessraConfig {
+            base_url: self.base_url.ok_or(ConfigError::MissingBaseUrl)?,
+            port: self.port,
+            mtls_cert: self.mtls_cert.ok_or(ConfigError::MissingCertificate)?,
+            mtls_key: self.mtls_key.ok_or(ConfigError::MissingKey)?,
+            server_ca: self.server_ca.ok_or(ConfigError::MissingServerCA)?,
+            protocol: self.protocol.unwrap_or_else(default_protocol),
+            public_key: self.public_key,
+        };
+
+        // Validate the config to ensure all fields are valid
+        config.validate()?;
+
+        Ok(config)
+    }
+}
+
 /// Errors that can occur when working with Hessra configuration
 #[derive(Debug)]
 pub enum ConfigError {
@@ -196,6 +373,15 @@ impl HessraConfig {
             server_ca: server_ca.into(),
             public_key: None,
         }
+    }
+
+    pub fn builder() -> HessraConfigBuilder {
+        HessraConfigBuilder::new()
+    }
+
+    /// Convert this configuration to a builder for modification
+    pub fn to_builder(&self) -> HessraConfigBuilder {
+        HessraConfigBuilder::from_config(self)
     }
 
     /// Create a configuration from a JSON file
@@ -456,14 +642,6 @@ impl HessraConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.base_url.is_empty() {
             return Err(ConfigError::MissingBaseUrl);
-        }
-
-        // Validate URL format
-        if !self.base_url.starts_with("http://") && !self.base_url.starts_with("https://") {
-            return Err(ConfigError::ParseError(format!(
-                "Base URL must start with http:// or https://: {}",
-                self.base_url
-            )));
         }
 
         // Validate port if specified

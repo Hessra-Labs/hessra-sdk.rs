@@ -15,6 +15,9 @@ readme = "README.md"
 members = ["hessra-macros"]
 
 [dependencies]
+base64 = "0.22"
+biscuit-auth = { version = "6.0.0-beta.2", features = ["pem"] }
+chrono = "0.4"
 hessra-macros = "0.1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"

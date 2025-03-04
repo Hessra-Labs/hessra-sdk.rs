@@ -49,6 +49,53 @@
 //!
 //! The SDK offers multiple ways to configure the client:
 //!
+//! ### Using HessraConfigBuilder
+//!
+//! ```rust
+//! use hessra_sdk::{HessraConfigBuilder, Protocol};
+//!
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a configuration using the builder pattern
+//! let config = HessraConfigBuilder::new()
+//!     .base_url("https://test.hessra.net")
+//!     .port(443)
+//!     .protocol(Protocol::Http1)
+//!     .mtls_cert(include_str!("../certs/client.crt"))
+//!     .mtls_key(include_str!("../certs/client.key"))
+//!     .server_ca(include_str!("../certs/ca.crt"))
+//!     .build()?;
+//!
+//! // Use the configuration to create a client
+//! let client = config.create_client()?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Using environment variables
+//!
+//! When using `from_env()` or `from_env_or_file()`, the following variables are expected:
+//!
+//! ```text
+//! ${PREFIX}_BASE_URL     - Base URL of the Hessra service
+//! ${PREFIX}_PORT         - Optional port number
+//! ${PREFIX}_CERT         - Client certificate (PEM) or path to certificate file
+//! ${PREFIX}_KEY          - Client private key (PEM) or path to key file
+//! ${PREFIX}_SERVER_CA    - Server CA certificate (PEM) or path to CA file
+//! ${PREFIX}_PROTOCOL     - Optional protocol (HTTP1 or HTTP3)
+//! ```
+//!
+//! When using `from_env()` or `from_env_or_file()`, the following variables are expected:
+//!
+//! - `{PREFIX}_BASE_URL`: The base URL of the Hessra service
+//! - `{PREFIX}_PORT`: The port to connect to (optional)
+//! - `{PREFIX}_MTLS_CERT` or `{PREFIX}_MTLS_CERT_FILE`: The mTLS certificate
+//! - `{PREFIX}_MTLS_KEY` or `{PREFIX}_MTLS_KEY_FILE`: The mTLS key
+//! - `{PREFIX}_SERVER_CA` or `{PREFIX}_SERVER_CA_FILE`: The server CA certificate
+//! - `{PREFIX}_PROTOCOL`: Either "http1" or "http3" (optional, defaults to "http1")
+//! - `{PREFIX}_PUBLIC_KEY` or `{PREFIX}_PUBLIC_KEY_FILE`: The server's public key for token verification (optional)
+//!
+//! ### Using direct instantiation
+//!
 //! ```rust
 //! use hessra_sdk::{HessraConfig, Protocol, set_default_config};
 //!
@@ -77,39 +124,6 @@
 //! # Ok(())
 //! # }
 //! ```
-//!
-//! ## Using Procedural Macros
-//!
-//! The `hessra-macros` crate provides macros for easy integration:
-//!
-//! ```rust
-//! use hessra_macros::{request_authorization, authorize};
-//! use hessra_sdk::HessraConfig;
-//!
-//! // Request authorization before executing a function
-//! #[request_authorization("my-resource", config)]
-//! async fn protected_function(config: &HessraConfig) {
-//!     // Function is called after token is obtained
-//! }
-//!
-//! // Verify token before executing a function
-//! #[authorize("my-resource")]
-//! async fn authorized_function(token: String) {
-//!     // Function is called only if token is valid
-//! }
-//! ```
-//!
-//! ## Environment Variables
-//!
-//! When using `from_env()` or `from_env_or_file()`, the following variables are expected:
-//!
-//! - `{PREFIX}_BASE_URL`: The base URL of the Hessra service
-//! - `{PREFIX}_PORT`: The port to connect to (optional)
-//! - `{PREFIX}_MTLS_CERT` or `{PREFIX}_MTLS_CERT_FILE`: The mTLS certificate
-//! - `{PREFIX}_MTLS_KEY` or `{PREFIX}_MTLS_KEY_FILE`: The mTLS key
-//! - `{PREFIX}_SERVER_CA` or `{PREFIX}_SERVER_CA_FILE`: The server CA certificate
-//! - `{PREFIX}_PROTOCOL`: Either "http1" or "http3" (optional, defaults to "http1")
-//! - `{PREFIX}_PUBLIC_KEY` or `{PREFIX}_PUBLIC_KEY_FILE`: The server's public key for token verification (optional)
 //!
 //! ## Public Key for Token Verification
 //!
@@ -153,7 +167,32 @@
 //! # }
 //! ```
 //!
+//! ## Using Procedural Macros
+//!
+//! The `hessra-macros` crate provides macros for easy integration:
+//!
+//! ```rust
+//! use hessra_macros::{request_authorization, authorize};
+//! use hessra_sdk::HessraConfig;
+//!
+//! // Request authorization before executing a function
+//! #[request_authorization("my-resource", config)]
+//! async fn protected_function(config: &HessraConfig) {
+//!     // Function is called after token is obtained
+//! }
+//!
+//! // Verify token before executing a function
+//! #[authorize("my-resource")]
+//! async fn authorized_function(token: String) {
+//!     // Function is called only if token is valid
+//! }
+//! ```
+//!
 
+//use crate::config::get_default_config;
+use crate::verify::verify_biscuit_local;
+use base64::prelude::*;
+use biscuit_auth::PublicKey;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -161,6 +200,9 @@ use std::error::Error;
 // Re-export configuration module
 mod config;
 pub use config::*;
+
+// Import verification module
+mod verify;
 
 /// Request payload for requesting an authorization token
 #[derive(Serialize, Deserialize)]
@@ -213,7 +255,10 @@ use {
     std::sync::Arc,
 };
 
-/// Base configuration parameters for Hessra clients
+/// Base configuration for Hessra clients
+///
+/// This struct contains the common configuration parameters used by all Hessra client types.
+/// It includes connection details and certificates for mutual TLS authentication.
 #[derive(Clone)]
 pub struct BaseConfig {
     /// Base URL of the Hessra service (without protocol scheme)
@@ -226,6 +271,8 @@ pub struct BaseConfig {
     mtls_cert: String,
     /// Server CA certificate in PEM format
     server_ca: String,
+    /// Public key for token verification in PEM format
+    public_key: Option<String>,
 }
 
 impl BaseConfig {
@@ -304,8 +351,8 @@ pub enum HessraClient {
 ///
 /// # fn example() {
 /// let client_builder = HessraClient::builder()
-///     .base_url("test.hessra.net")
-///     .port(443)
+///     .base_url("test.example.com")
+///     .port(8443)
 ///     .protocol(Protocol::Http1)
 ///     .mtls_cert("CERT")
 ///     .mtls_key("KEY")
@@ -349,9 +396,23 @@ impl HessraClientBuilder {
                 mtls_key: "".to_string(),
                 mtls_cert: "".to_string(),
                 server_ca: "".to_string(),
+                public_key: None,
             },
             protocol: Protocol::Http1,
         }
+    }
+
+    /// Create a new client builder from a HessraConfig
+    pub fn from_config(mut self, config: &HessraConfig) -> Self {
+        self.config = BaseConfig {
+            base_url: config.base_url.clone(),
+            port: config.port,
+            mtls_key: config.mtls_key.clone(),
+            mtls_cert: config.mtls_cert.clone(),
+            server_ca: config.server_ca.clone(),
+            public_key: config.public_key.clone(),
+        };
+        self
     }
 
     /// Set the base URL for the Hessra service
@@ -798,7 +859,9 @@ impl HessraClient {
             }
         };
 
-        response.token.ok_or_else(|| "No token in response".into())
+        response
+            .token
+            .ok_or_else(|| "Failed to obtain token: server returned empty token".into())
     }
 
     /// Verify an authorization token for a resource
@@ -808,7 +871,7 @@ impl HessraClient {
     ///
     /// # Arguments
     ///
-    /// * `token` - The authorization token to verify
+    /// * `token` - The authorization token to verify, Base64 encoded
     /// * `resource` - The resource identifier to verify authorization against
     ///
     /// # Returns
@@ -826,7 +889,58 @@ impl HessraClient {
         token: String,
         resource: String,
     ) -> Result<String, Box<dyn Error>> {
-        let verify_token_request = VerifyTokenRequest { token, resource };
+        // First try to get the public key for local verification
+        let public_key = match self {
+            HessraClient::Http1(client) => client.config.public_key.clone(),
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => client.config.public_key.clone(),
+        };
+
+        // If we have a public key, try local verification
+        if let Some(pk_str) = public_key {
+            // Try to parse the public key
+            match PublicKey::from_pem(&pk_str) {
+                Ok(public_key) => {
+                    // Convert the token string to bytes
+                    let token_bytes = match BASE64_STANDARD.decode(token.clone()) {
+                        Ok(token) => token,
+                        Err(e) => {
+                            return Err(format!("Failed to decode token from Base64: {}", e).into());
+                        }
+                    };
+
+                    // Try local verification
+                    match verify_biscuit_local(
+                        token_bytes,
+                        public_key,
+                        "user".to_string(),
+                        resource.clone(),
+                    ) {
+                        Ok(_) => return Ok("Token verified locally".to_string()),
+                        Err(e) => {
+                            // If local verification fails due to a token error, return the error
+                            // Otherwise, fall back to remote verification
+                            if e.to_string().contains("token") {
+                                return Err(
+                                    format!("Local token verification failed: {}", e).into()
+                                );
+                            }
+                            // If the error is not token-related, we'll fall back to remote verification
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Failed to parse public key, fall back to remote verification
+                    // This is a silent fallback as it's a recoverable situation
+                }
+            }
+        }
+
+        // Fall back to remote verification if local verification is not possible or failed
+        let verify_token_request = VerifyTokenRequest {
+            token,
+            resource: resource.clone(),
+        };
 
         let response: VerifyTokenResponse = match self {
             HessraClient::Http1(client) => {
@@ -928,6 +1042,7 @@ mod tests {
             mtls_key: "".to_string(),
             mtls_cert: "".to_string(),
             server_ca: "".to_string(),
+            public_key: None,
         };
 
         assert_eq!(config.get_base_url(), "example.com:8443");
@@ -941,6 +1056,7 @@ mod tests {
             mtls_key: "".to_string(),
             mtls_cert: "".to_string(),
             server_ca: "".to_string(),
+            public_key: None,
         };
 
         assert_eq!(config.get_base_url(), "example.com");
