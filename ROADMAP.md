@@ -281,29 +281,36 @@ location /api {
 - [x] Create global/default configuration option
 - [x] Add comprehensive documentation and examples
 
-### Phase 3: WASM Integration 🚧
+### Phase 3: Adding and verifying attenuations 🚧
+
+- [ ] Add way to configure personal keypair
+- [ ] Add authenticated call (mTLS) to authorization service to give name and public key
+- [ ] Add unauthenticated call to retrieve non-Hessra public keys
+- [ ] Add biscuit attenuation using personal keypair
+- [ ] Add attenuated biscuit verification using Hessra public key plus the non-Hessra public keys
+
+### Phase 4: WASM Integration 🚧
 
 - [ ] Define clear WASM API boundaries
 - [ ] Create TypeScript type definitions
 - [ ] Build React/Next.js integration components
 - [ ] Add Deno compatibility
 
-### Phase 4: System Integrations 🚧
+### Phase 5: System Integrations 🚧
 
 - [ ] Develop Postgres extension
 - [ ] Design OCaml bindings
 - [ ] Implement Nginx module
 - [ ] Create configuration validation tools
 
-### Phase 5: Advanced Features 🚧
+### Phase 6: Advanced Features 🚧
 
 - [x] Local verification with public keys
-- [ ] Adding and verifying attenuations
 - [ ] Adding and verifying third-party blocks
 - [ ] Configuration hot-reloading
 - [ ] Performance optimizations
 
-### Phase 6: Ideas for beyond
+### Ideas for beyond
 
 - [ ] Develop browser-friendly mtls certificate handling
 
