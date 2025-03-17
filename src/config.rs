@@ -89,6 +89,9 @@ pub struct HessraConfig {
     /// The server's public key for token verification
     #[serde(default)]
     pub public_key: Option<String>,
+    /// The personal keypair for the user PEM formatted string
+    #[serde(default)]
+    pub personal_keypair: Option<String>,
 }
 
 fn default_protocol() -> Protocol {
@@ -150,12 +153,22 @@ pub struct HessraConfigBuilder {
     server_ca: Option<String>,
     protocol: Option<Protocol>,
     public_key: Option<String>,
+    personal_keypair: Option<String>,
 }
 
 impl HessraConfigBuilder {
     /// Create a new HessraConfigBuilder with default values
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            base_url: None,
+            port: None,
+            mtls_cert: None,
+            mtls_key: None,
+            server_ca: None,
+            protocol: None,
+            public_key: None,
+            personal_keypair: None,
+        }
     }
 
     /// Create a new HessraConfigBuilder from an existing HessraConfig
@@ -172,6 +185,7 @@ impl HessraConfigBuilder {
             server_ca: Some(config.server_ca.clone()),
             protocol: Some(config.protocol.clone()),
             public_key: config.public_key.clone(),
+            personal_keypair: config.personal_keypair.clone(),
         }
     }
 
@@ -245,6 +259,16 @@ impl HessraConfigBuilder {
         self
     }
 
+    /// Set the personal keypair for the user PEM formatted string
+    ///
+    /// # Arguments
+    ///
+    /// * `personal_keypair` - The personal keypair in PEM formatted string
+    pub fn personal_keypair(mut self, personal_keypair: impl Into<String>) -> Self {
+        self.personal_keypair = Some(personal_keypair.into());
+        self
+    }
+
     /// Build the HessraConfig
     ///
     /// # Returns
@@ -263,6 +287,7 @@ impl HessraConfigBuilder {
             server_ca: self.server_ca.ok_or(ConfigError::MissingServerCA)?,
             protocol: self.protocol.unwrap_or_else(default_protocol),
             public_key: self.public_key,
+            personal_keypair: self.personal_keypair,
         };
 
         // Validate the config to ensure all fields are valid
@@ -372,6 +397,7 @@ impl HessraConfig {
             mtls_key: mtls_key.into(),
             server_ca: server_ca.into(),
             public_key: None,
+            personal_keypair: None,
         }
     }
 
@@ -418,6 +444,7 @@ impl HessraConfig {
     /// - HESSRA_MTLS_KEY
     /// - HESSRA_SERVER_CA
     /// - HESSRA_PROTOCOL
+    /// - HESSRA_PERSONAL_KEYPAIR
     ///
     /// # Example
     ///
@@ -485,6 +512,12 @@ impl HessraConfig {
             Err(e) => return Err(e.into()),
         };
 
+        let personal_keypair = match env::var(format!("{}_PERSONAL_KEYPAIR", prefix)) {
+            Ok(key) => Some(key),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(e) => return Err(e.into()),
+        };
+
         let config = HessraConfig {
             base_url,
             port,
@@ -493,6 +526,7 @@ impl HessraConfig {
             mtls_key,
             server_ca,
             public_key,
+            personal_keypair,
         };
 
         config.validate()?;
@@ -512,6 +546,7 @@ impl HessraConfig {
     /// - HESSRA_MTLS_KEY or HESSRA_MTLS_KEY_FILE
     /// - HESSRA_SERVER_CA or HESSRA_SERVER_CA_FILE
     /// - HESSRA_PROTOCOL
+    /// - HESSRA_PERSONAL_KEYPAIR or HESSRA_PERSONAL_KEYPAIR_FILE
     ///
     /// # Example
     ///
@@ -621,6 +656,20 @@ impl HessraConfig {
             Err(e) => return Err(e.into()),
         };
 
+        let personal_keypair = match env::var(format!("{}_PERSONAL_KEYPAIR_FILE", prefix)) {
+            Ok(key_file) => Some(fs::read_to_string(key_file).map_err(|e| {
+                ConfigError::IOError(format!("Failed to read personal key file: {}", e))
+            })?),
+            Err(std::env::VarError::NotPresent) => {
+                match env::var(format!("{}_PERSONAL_KEYPAIR", prefix)) {
+                    Ok(key) => Some(key),
+                    Err(std::env::VarError::NotPresent) => None,
+                    Err(e) => return Err(e.into()),
+                }
+            }
+            Err(e) => return Err(e.into()),
+        };
+
         let config = HessraConfig {
             base_url,
             port,
@@ -629,6 +678,7 @@ impl HessraConfig {
             mtls_key,
             server_ca,
             public_key,
+            personal_keypair,
         };
 
         config.validate()?;
@@ -684,6 +734,17 @@ impl HessraConfig {
             return Err(ConfigError::InvalidCertificate(
                 "CA certificate does not contain 'BEGIN CERTIFICATE' marker".to_string(),
             ));
+        }
+
+        if let Some(personal_keypair) = &self.personal_keypair {
+            if !personal_keypair.contains("BEGIN")
+                || (!personal_keypair.contains("PRIVATE KEY")
+                    && !personal_keypair.contains("ENCRYPTED"))
+            {
+                return Err(ConfigError::InvalidCertificate(
+                    "Personal key does not contain proper PEM markers".to_string(),
+                ));
+            }
         }
 
         Ok(())
