@@ -89,7 +89,12 @@ pub struct HessraConfig {
     /// The server's public key for token verification
     #[serde(default)]
     pub public_key: Option<String>,
-    /// The personal keypair for the user PEM formatted string
+    /// The personal keypair for the user in PEM format
+    ///
+    /// This is used for service chain attestations. When acting as a node in a service chain,
+    /// this keypair is used to sign attestations that this node has processed the request.
+    /// The private key should be kept secret and only the public key should be shared with
+    /// the authentication service.
     #[serde(default)]
     pub personal_keypair: Option<String>,
 }

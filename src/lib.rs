@@ -188,11 +188,113 @@
 //! }
 //! ```
 //!
-
+/// # Service Chain Authorization
+///
+/// Service chains allow for a token to pass through multiple service nodes,
+/// with each node attesting that it has processed the request. This is useful
+/// for building secure microservice architectures where each service in a
+/// chain must validate and attest to the request before it proceeds to the next service.
+///
+/// ## Example: Verifying a Service Chain Token
+///
+/// ```rust
+/// use hessra_sdk::{HessraClient, Protocol, ServiceNode};
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create a client
+/// let client = HessraClient::builder()
+///     .base_url("test.hessra.net")
+///     .port(443)
+///     .protocol(Protocol::Http1)
+///     .mtls_cert(include_str!("../certs/client.crt"))
+///     .mtls_key(include_str!("../certs/client.key"))
+///     .server_ca(include_str!("../certs/ca.crt"))
+///     .public_key(include_str!("../certs/service_public_key.pem"))
+///     .personal_keypair(include_str!("../certs/node1.key"))
+///     .build()?;
+///
+/// // Define the service chain nodes (order matters)
+/// let service_nodes = vec![
+///     ServiceNode {
+///         component: "auth-service".to_string(),
+///         public_key: "ed25519/1234567890abcdef".to_string(),
+///     },
+///     ServiceNode {
+///         component: "payment-service".to_string(),
+///         public_key: "ed25519/abcdef1234567890".to_string(),
+///     },
+/// ];
+///
+/// // Verify a service chain token - this will verify nodes up to but not including "payment-service"
+/// let token = "base64-encoded-token".to_string();
+/// let resource = "my-protected-resource".to_string();
+/// let component = Some("payment-service".to_string()); // Current node in the chain
+///
+/// let result = client.verify_service_chain_token(
+///     token.clone(),
+///     resource.clone(),
+///     component,
+///     Some(service_nodes)
+/// ).await?;
+///
+/// // For the last node in the chain, verify the entire chain
+/// let result = client.verify_service_chain_token(
+///     token,
+///     resource,
+///     None, // No current component means verify the entire chain
+///     Some(service_nodes)
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// ## Example: Attenuating a Service Chain Token
+///
+/// ```rust
+/// use hessra_sdk::{HessraClient, Protocol};
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create a client with a personal keypair
+/// let client = HessraClient::builder()
+///     .base_url("test.hessra.net")
+///     .port(443)
+///     .protocol(Protocol::Http1)
+///     .mtls_cert(include_str!("../certs/client.crt"))
+///     .mtls_key(include_str!("../certs/client.key"))
+///     .server_ca(include_str!("../certs/ca.crt"))
+///     .public_key(include_str!("../certs/service_public_key.pem"))
+///     .personal_keypair(include_str!("../certs/node1.key"))
+///     .build()?;
+///
+/// // First, verify the token for the current component
+/// let token = "base64-encoded-token".to_string();
+/// let resource = "my-protected-resource".to_string();
+/// let component = "payment-service".to_string();
+///
+/// // Verify the token for this component
+/// client.verify_service_chain_token(
+///     token.clone(),
+///     resource.clone(),
+///     Some(component.clone()),
+///     None // Let the server handle verification
+/// ).await?;
+///
+/// // Add this component's attestation to the token
+/// let attenuated_token = client.attenuate_service_chain_token(
+///     token,
+///     resource,
+///     component
+/// )?;
+///
+/// // Now the attenuated token can be passed to the next service in the chain
+/// // The next service will be able to verify that this service has processed the request
+/// # Ok(())
+/// # }
+/// ```
 //use crate::config::get_default_config;
 use crate::verify::verify_biscuit_local;
 use base64::prelude::*;
-use biscuit_auth::PublicKey;
+use biscuit_auth::{KeyPair, PublicKey};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -203,6 +305,11 @@ pub use config::*;
 
 // Import verification module
 mod verify;
+use crate::verify::{verify_service_chain_biscuit_local, ServiceNode};
+
+// Import attestation module for service chains
+mod attenuate;
+use crate::attenuate::add_service_node_attenuation;
 
 /// Request payload for requesting an authorization token
 #[derive(Serialize, Deserialize)]
@@ -280,6 +387,8 @@ pub struct BaseConfig {
     server_ca: String,
     /// Public key for token verification in PEM format
     public_key: Option<String>,
+    /// Personal keypair for service chain attestation
+    personal_keypair: Option<String>,
 }
 
 impl BaseConfig {
@@ -404,6 +513,7 @@ impl HessraClientBuilder {
                 mtls_cert: "".to_string(),
                 server_ca: "".to_string(),
                 public_key: None,
+                personal_keypair: None,
             },
             protocol: Protocol::Http1,
         }
@@ -418,6 +528,7 @@ impl HessraClientBuilder {
             mtls_cert: config.mtls_cert.clone(),
             server_ca: config.server_ca.clone(),
             public_key: config.public_key.clone(),
+            personal_keypair: config.personal_keypair.clone(),
         };
         self
     }
@@ -455,6 +566,12 @@ impl HessraClientBuilder {
     /// Set the protocol to use (HTTP/1.1 or HTTP/3)
     pub fn protocol(mut self, protocol: Protocol) -> Self {
         self.protocol = protocol;
+        self
+    }
+
+    /// Set the personal keypair for service chain attestation
+    pub fn personal_keypair(mut self, keypair: impl Into<String>) -> Self {
+        self.config.personal_keypair = Some(keypair.into());
         self
     }
 
@@ -1035,6 +1152,163 @@ impl HessraClient {
             HessraClient::Http3(client) => client.config.port,
         }
     }
+
+    /// Verify a service chain token
+    ///
+    /// This method verifies a service chain token either locally or by calling the server.
+    /// It first attempts local verification if a public key and service nodes are provided.
+    /// If local verification fails or can't be performed, it falls back to remote verification.
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - The token to verify
+    /// * `resource` - The resource identifier the token is for
+    /// * `component` - Optional component name of the current node in the chain
+    /// * `service_nodes` - Optional list of service nodes in the chain
+    ///
+    /// # Returns
+    ///
+    /// A result containing the verification response or an error
+    pub async fn verify_service_chain_token(
+        &self,
+        token: String,
+        resource: String,
+        component: Option<String>,
+        service_nodes: Option<Vec<ServiceNode>>,
+    ) -> Result<String, Box<dyn Error>> {
+        // Try local verification first if we have all the necessary data
+        let public_key = match self {
+            HessraClient::Http1(client) => client.config.public_key.clone(),
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => client.config.public_key.clone(),
+        };
+
+        // If we have a public key and service nodes, try local verification
+        if let (Some(pk_str), Some(nodes)) = (public_key, service_nodes) {
+            match PublicKey::from_pem(&pk_str) {
+                Ok(public_key) => {
+                    // Convert the token string to bytes
+                    let token_bytes = match BASE64_STANDARD.decode(token.clone()) {
+                        Ok(token) => token,
+                        Err(e) => {
+                            return Err(format!("Failed to decode token from Base64: {}", e).into());
+                        }
+                    };
+
+                    // Try local verification
+                    match verify_service_chain_biscuit_local(
+                        token_bytes,
+                        public_key,
+                        "user".to_string(), // Subject is always "user" for now
+                        resource.clone(),
+                        nodes,
+                    ) {
+                        Ok(_) => return Ok("Service chain token verified locally".to_string()),
+                        Err(e) => {
+                            // If it's a token-related error, return it
+                            if e.to_string().contains("token") {
+                                return Err(
+                                    format!("Local token verification failed: {}", e).into()
+                                );
+                            }
+                            // Otherwise fall back to remote verification
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Failed to parse public key, fall back to remote verification
+                }
+            }
+        }
+
+        // Fall back to remote verification
+        let verify_request = VerifyServiceChainTokenRequest {
+            token,
+            resource,
+            component,
+        };
+
+        let response: VerifyTokenResponse = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request("verify_service_chain_token", &verify_request)
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request("verify_service_chain_token", &verify_request)
+                    .await?
+            }
+        };
+
+        Ok(response.response_msg)
+    }
+
+    /// Attenuate a token with service chain information for the current node
+    ///
+    /// This method adds the current node's attestation to a service chain token
+    /// using the node's personal keypair.
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - The token to attenuate
+    /// * `service` - The service identifier
+    /// * `node_name` - The name of the current node
+    ///
+    /// # Returns
+    ///
+    /// A result containing the attenuated token or an error
+    pub fn attenuate_service_chain_token(
+        &self,
+        token: String,
+        service: String,
+        node_name: String,
+    ) -> Result<String, Box<dyn Error>> {
+        // Get the node's personal keypair and the token's public key
+        let (personal_keypair, public_key) = match self {
+            HessraClient::Http1(client) => (
+                client.config.personal_keypair.clone(),
+                client.config.public_key.clone(),
+            ),
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => (
+                client.config.personal_keypair.clone(),
+                client.config.public_key.clone(),
+            ),
+        };
+
+        // Check if we have all the required data
+        let personal_keypair = personal_keypair.ok_or_else(|| {
+            "Personal keypair is required for service chain attestation but was not configured"
+                .to_string()
+        })?;
+
+        let public_key = public_key.ok_or_else(|| {
+            "Token public key is required for service chain attestation but was not configured"
+                .to_string()
+        })?;
+
+        // Parse the private key and token public key
+        let keypair = KeyPair::from_private_key_pem(&personal_keypair)?;
+        let token_public_key = PublicKey::from_pem(&public_key)?;
+
+        // Decode the token
+        let token_bytes = BASE64_STANDARD.decode(token)?;
+
+        // Add the service node attestation
+        let attenuated_token = add_service_node_attenuation(
+            token_bytes,
+            token_public_key,
+            &service,
+            &node_name,
+            &keypair,
+        )?;
+
+        // Encode the attenuated token
+        let encoded_token = BASE64_STANDARD.encode(attenuated_token);
+        Ok(encoded_token)
+    }
 }
 
 #[cfg(test)]
@@ -1050,6 +1324,7 @@ mod tests {
             mtls_cert: "".to_string(),
             server_ca: "".to_string(),
             public_key: None,
+            personal_keypair: None,
         };
 
         assert_eq!(config.get_base_url(), "example.com:8443");
@@ -1064,6 +1339,7 @@ mod tests {
             mtls_cert: "".to_string(),
             server_ca: "".to_string(),
             public_key: None,
+            personal_keypair: None,
         };
 
         assert_eq!(config.get_base_url(), "example.com");
