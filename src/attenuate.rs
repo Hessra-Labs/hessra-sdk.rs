@@ -25,7 +25,6 @@ pub fn add_service_node_attenuation(
     token: Vec<u8>,
     public_key: PublicKey,
     service: &str,
-    node_name: &str,
     node_key: &KeyPair,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let biscuit = Biscuit::from(&token, public_key)?;
@@ -36,7 +35,7 @@ pub fn add_service_node_attenuation(
     // Create a block for the service attestation
     let third_party_block = block!(
         r#"
-            node({service}, {node_name});
+            serice({service});
         "#
     );
 

@@ -187,7 +187,6 @@
 //!     // Function is called only if token is valid
 //! }
 //! ```
-//!
 /// # Service Chain Authorization
 ///
 /// Service chains allow for a token to pass through multiple service nodes,
@@ -198,7 +197,7 @@
 /// ## Example: Verifying a Service Chain Token
 ///
 /// ```rust
-/// use hessra_sdk::{HessraClient, Protocol, ServiceNode};
+/// use hessra_sdk::{HessraClient, Protocol, ServiceNode, ServiceChain};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create a client
@@ -214,16 +213,26 @@
 ///     .build()?;
 ///
 /// // Define the service chain nodes (order matters)
-/// let service_nodes = vec![
-///     ServiceNode {
-///         component: "auth-service".to_string(),
-///         public_key: "ed25519/1234567890abcdef".to_string(),
-///     },
-///     ServiceNode {
-///         component: "payment-service".to_string(),
-///         public_key: "ed25519/abcdef1234567890".to_string(),
-///     },
-/// ];
+/// let service_chain = ServiceChain::new()
+///     .with_node(ServiceNode::new(
+///         "auth-service",
+///         "ed25519/1234567890abcdef"
+///     ))
+///     .with_node(ServiceNode::new(
+///         "payment-service",
+///         "ed25519/abcdef1234567890"
+///     ));
+///
+/// // Alternatively, you can use the builder pattern:
+/// // let auth_node = ServiceNode::builder()
+/// //     .name("auth-service")
+/// //     .public_key("ed25519/1234567890abcdef")
+/// //     .build()?;
+/// // let payment_node = ServiceNode::builder()
+/// //     .name("payment-service")
+/// //     .public_key("ed25519/abcdef1234567890")
+/// //     .build()?;
+/// // let service_chain = ServiceChain::with_nodes(vec![auth_node, payment_node]);
 ///
 /// // Verify a service chain token - this will verify nodes up to but not including "payment-service"
 /// let token = "base64-encoded-token".to_string();
@@ -234,7 +243,7 @@
 ///     token.clone(),
 ///     resource.clone(),
 ///     component,
-///     Some(service_nodes)
+///     Some(&service_chain)
 /// ).await?;
 ///
 /// // For the last node in the chain, verify the entire chain
@@ -242,7 +251,7 @@
 ///     token,
 ///     resource,
 ///     None, // No current component means verify the entire chain
-///     Some(service_nodes)
+///     Some(&service_chain)
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -251,7 +260,7 @@
 /// ## Example: Attenuating a Service Chain Token
 ///
 /// ```rust
-/// use hessra_sdk::{HessraClient, Protocol};
+/// use hessra_sdk::{HessraClient, Protocol, ServiceNode, ServiceChain};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create a client with a personal keypair
@@ -266,6 +275,11 @@
 ///     .personal_keypair(include_str!("../certs/node1.key"))
 ///     .build()?;
 ///
+/// // Define the service chain
+/// let service_chain = ServiceChain::new()
+///     .with_node(ServiceNode::new("auth-service", "ed25519/1234567890abcdef"))
+///     .with_node(ServiceNode::new("payment-service", "ed25519/abcdef1234567890"));
+///
 /// // First, verify the token for the current component
 /// let token = "base64-encoded-token".to_string();
 /// let resource = "my-protected-resource".to_string();
@@ -276,7 +290,7 @@
 ///     token.clone(),
 ///     resource.clone(),
 ///     Some(component.clone()),
-///     None // Let the server handle verification
+///     Some(&service_chain)
 /// ).await?;
 ///
 /// // Add this component's attestation to the token
@@ -305,7 +319,7 @@ pub use config::*;
 
 // Import verification module
 mod verify;
-use crate::verify::{verify_service_chain_biscuit_local, ServiceNode};
+use crate::verify::verify_service_chain_biscuit_local;
 
 // Import attestation module for service chains
 mod attenuate;
@@ -566,6 +580,12 @@ impl HessraClientBuilder {
     /// Set the protocol to use (HTTP/1.1 or HTTP/3)
     pub fn protocol(mut self, protocol: Protocol) -> Self {
         self.protocol = protocol;
+        self
+    }
+
+    /// Set the public key for token verification (in PEM format)
+    pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
+        self.config.public_key = Some(public_key.into());
         self
     }
 
@@ -1011,6 +1031,7 @@ impl HessraClient {
     pub async fn verify_token(
         &self,
         token: String,
+        subject: Option<String>,
         resource: String,
     ) -> Result<String, Box<dyn Error>> {
         // First try to get the public key for local verification
@@ -1037,7 +1058,7 @@ impl HessraClient {
                     match verify_biscuit_local(
                         token_bytes,
                         public_key,
-                        "user".to_string(),
+                        subject.unwrap_or("user".to_string()),
                         resource.clone(),
                     ) {
                         Ok(_) => return Ok("Token verified locally".to_string()),
@@ -1156,7 +1177,7 @@ impl HessraClient {
     /// Verify a service chain token
     ///
     /// This method verifies a service chain token either locally or by calling the server.
-    /// It first attempts local verification if a public key and service nodes are provided.
+    /// It first attempts local verification if a public key and service chain are provided.
     /// If local verification fails or can't be performed, it falls back to remote verification.
     ///
     /// # Arguments
@@ -1164,7 +1185,7 @@ impl HessraClient {
     /// * `token` - The token to verify
     /// * `resource` - The resource identifier the token is for
     /// * `component` - Optional component name of the current node in the chain
-    /// * `service_nodes` - Optional list of service nodes in the chain
+    /// * `service_chain` - Optional service chain configuration
     ///
     /// # Returns
     ///
@@ -1172,9 +1193,10 @@ impl HessraClient {
     pub async fn verify_service_chain_token(
         &self,
         token: String,
+        subject: Option<String>,
         resource: String,
         component: Option<String>,
-        service_nodes: Option<Vec<ServiceNode>>,
+        service_chain: Option<&ServiceChain>,
     ) -> Result<String, Box<dyn Error>> {
         // Try local verification first if we have all the necessary data
         let public_key = match self {
@@ -1184,7 +1206,9 @@ impl HessraClient {
         };
 
         // If we have a public key and service nodes, try local verification
-        if let (Some(pk_str), Some(nodes)) = (public_key, service_nodes) {
+        if let (Some(pk_str), Some(chain)) = (public_key, service_chain) {
+            let nodes = chain.to_internal();
+
             match PublicKey::from_pem(&pk_str) {
                 Ok(public_key) => {
                     // Convert the token string to bytes
@@ -1199,7 +1223,7 @@ impl HessraClient {
                     match verify_service_chain_biscuit_local(
                         token_bytes,
                         public_key,
-                        "user".to_string(), // Subject is always "user" for now
+                        subject.unwrap_or("user".to_string()),
                         resource.clone(),
                         nodes,
                     ) {
@@ -1263,7 +1287,6 @@ impl HessraClient {
         &self,
         token: String,
         service: String,
-        node_name: String,
     ) -> Result<String, Box<dyn Error>> {
         // Get the node's personal keypair and the token's public key
         let (personal_keypair, public_key) = match self {
@@ -1297,17 +1320,228 @@ impl HessraClient {
         let token_bytes = BASE64_STANDARD.decode(token)?;
 
         // Add the service node attestation
-        let attenuated_token = add_service_node_attenuation(
-            token_bytes,
-            token_public_key,
-            &service,
-            &node_name,
-            &keypair,
-        )?;
+        let attenuated_token =
+            add_service_node_attenuation(token_bytes, token_public_key, &service, &keypair)?;
 
         // Encode the attenuated token
         let encoded_token = BASE64_STANDARD.encode(attenuated_token);
         Ok(encoded_token)
+    }
+}
+
+/// A node in a service chain
+///
+/// Represents a component in a service chain with its associated public key.
+/// Each service node has a unique name and a public key that is used to validate
+/// attestations from this node.
+///
+/// # Examples
+///
+/// ```
+/// use hessra_sdk::ServiceNode;
+///
+/// // Create a service node directly
+/// let auth_node = ServiceNode::new("auth-service", "ed25519/1234567890abcdef");
+///
+/// // Or use the builder pattern
+/// let payment_node = ServiceNode::builder()
+///     .name("payment-service")
+///     .public_key("ed25519/abcdef1234567890")
+///     .build()
+///     .expect("Failed to build service node");
+/// ```
+#[derive(Clone, Debug)]
+pub struct ServiceNode {
+    /// The name of the component
+    pub name: String,
+    /// The public key of the component in the format "algorithm/hexkey"
+    pub public_key: String,
+}
+
+/// Builder for ServiceNode
+///
+/// Provides a fluent interface for constructing a ServiceNode.
+#[derive(Default)]
+pub struct ServiceNodeBuilder {
+    name: Option<String>,
+    public_key: Option<String>,
+}
+
+impl ServiceNodeBuilder {
+    /// Create a new ServiceNodeBuilder
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the name of the service node
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Set the public key of the service node
+    ///
+    /// The key should be in the format "algorithm/hexkey", e.g. "ed25519/1234567890abcdef"
+    pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
+        self.public_key = Some(public_key.into());
+        self
+    }
+
+    /// Build the ServiceNode
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the name or public key is not set
+    pub fn build(self) -> Result<ServiceNode, Box<dyn Error>> {
+        let name = self
+            .name
+            .ok_or_else(|| "Service node name is required".to_string())?;
+        let public_key = self
+            .public_key
+            .ok_or_else(|| "Service node public key is required".to_string())?;
+
+        Ok(ServiceNode { name, public_key })
+    }
+}
+
+impl ServiceNode {
+    /// Create a new service node
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the component
+    /// * `public_key` - The public key in the format "algorithm/hexkey"
+    pub fn new(name: impl Into<String>, public_key: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            public_key: public_key.into(),
+        }
+    }
+
+    /// Create a new builder for a service node
+    pub fn builder() -> ServiceNodeBuilder {
+        ServiceNodeBuilder::new()
+    }
+
+    /// Convert to the internal ServiceNode type used by verification
+    fn to_internal(&self) -> verify::ServiceNode {
+        verify::ServiceNode {
+            component: self.name.clone(),
+            public_key: self.public_key.clone(),
+        }
+    }
+}
+
+/// A chain of service nodes
+///
+/// Represents an ordered sequence of service nodes that form a processing chain.
+/// The order of nodes in the chain is significant - it defines the expected
+/// order of processing and attestation.
+///
+/// # Examples
+///
+/// ```
+/// use hessra_sdk::{ServiceNode, ServiceChain};
+///
+/// // Create an empty chain and add nodes
+/// let mut chain = ServiceChain::new();
+/// chain.add_node(ServiceNode::new("auth", "ed25519/auth"))
+///      .add_node(ServiceNode::new("payment", "ed25519/payment"));
+///
+/// // Or use builder-style chaining
+/// let chain = ServiceChain::new()
+///     .with_node(ServiceNode::new("auth", "ed25519/auth"))
+///     .with_node(ServiceNode::new("payment", "ed25519/payment"));
+///
+/// // Create from a vector of nodes
+/// let nodes = vec![
+///     ServiceNode::new("auth", "ed25519/auth"),
+///     ServiceNode::new("payment", "ed25519/payment"),
+/// ];
+/// let chain = ServiceChain::with_nodes(nodes);
+///
+/// // Use the builder pattern
+/// let chain = ServiceChain::builder()
+///     .add_node(ServiceNode::new("auth", "ed25519/auth"))
+///     .add_node(ServiceNode::new("payment", "ed25519/payment"))
+///     .build();
+///
+/// // Access the nodes
+/// for node in chain.nodes() {
+///     println!("Node: {}, Key: {}", node.name, node.public_key);
+/// }
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct ServiceChain {
+    /// The nodes in the chain, in order
+    nodes: Vec<ServiceNode>,
+}
+
+impl ServiceChain {
+    /// Create a new empty service chain
+    pub fn new() -> Self {
+        Self { nodes: Vec::new() }
+    }
+
+    /// Create a new service chain with the given nodes
+    pub fn with_nodes(nodes: Vec<ServiceNode>) -> Self {
+        Self { nodes }
+    }
+
+    /// Create a new builder for a service chain
+    pub fn builder() -> ServiceChainBuilder {
+        ServiceChainBuilder::new()
+    }
+
+    /// Add a node to the end of the chain
+    pub fn add_node(&mut self, node: ServiceNode) -> &mut Self {
+        self.nodes.push(node);
+        self
+    }
+
+    /// Add a node to the end of the chain (builder style)
+    pub fn with_node(mut self, node: ServiceNode) -> Self {
+        self.nodes.push(node);
+        self
+    }
+
+    /// Get the nodes in the chain
+    pub fn nodes(&self) -> &[ServiceNode] {
+        &self.nodes
+    }
+
+    /// Convert to a vector of internal ServiceNode types used by verification
+    fn to_internal(&self) -> Vec<verify::ServiceNode> {
+        self.nodes.iter().map(|node| node.to_internal()).collect()
+    }
+}
+
+/// Builder for ServiceChain
+pub struct ServiceChainBuilder {
+    nodes: Vec<ServiceNode>,
+}
+
+impl Default for ServiceChainBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ServiceChainBuilder {
+    /// Create a new ServiceChainBuilder
+    pub fn new() -> Self {
+        Self { nodes: Vec::new() }
+    }
+
+    /// Add a node to the chain
+    pub fn add_node(mut self, node: ServiceNode) -> Self {
+        self.nodes.push(node);
+        self
+    }
+
+    /// Build the ServiceChain
+    pub fn build(self) -> ServiceChain {
+        ServiceChain { nodes: self.nodes }
     }
 }
 
@@ -1370,5 +1604,123 @@ mod tests {
             .expect("Failed to fetch public key");
 
         assert!(!public_key.is_empty(), "Public key should not be empty");
+    }
+
+    // Tests for ServiceNode
+
+    #[test]
+    fn test_service_node_creation() {
+        // Test direct creation
+        let node = ServiceNode::new("auth-service", "ed25519/1234567890abcdef");
+        assert_eq!(node.name, "auth-service");
+        assert_eq!(node.public_key, "ed25519/1234567890abcdef");
+
+        // Test builder pattern
+        let node = ServiceNode::builder()
+            .name("payment-service")
+            .public_key("ed25519/abcdef1234567890")
+            .build()
+            .unwrap();
+
+        assert_eq!(node.name, "payment-service");
+        assert_eq!(node.public_key, "ed25519/abcdef1234567890");
+    }
+
+    #[test]
+    fn test_service_node_builder_validation() {
+        // Missing name
+        let result = ServiceNode::builder()
+            .public_key("ed25519/1234567890abcdef")
+            .build();
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Service node name is required"
+        );
+
+        // Missing public key
+        let result = ServiceNode::builder().name("auth-service").build();
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Service node public key is required"
+        );
+    }
+
+    #[test]
+    fn test_service_node_to_internal() {
+        let node = ServiceNode::new("auth-service", "ed25519/1234567890abcdef");
+        let internal = node.to_internal();
+
+        assert_eq!(internal.component, "auth-service");
+        assert_eq!(internal.public_key, "ed25519/1234567890abcdef");
+    }
+
+    // Tests for ServiceChain
+
+    #[test]
+    fn test_service_chain_creation() {
+        // Test empty chain
+        let chain = ServiceChain::new();
+        assert_eq!(chain.nodes().len(), 0);
+
+        // Test with_nodes constructor
+        let nodes = vec![
+            ServiceNode::new("auth", "ed25519/auth"),
+            ServiceNode::new("payment", "ed25519/payment"),
+        ];
+        let chain = ServiceChain::with_nodes(nodes);
+
+        assert_eq!(chain.nodes().len(), 2);
+        assert_eq!(chain.nodes()[0].name, "auth");
+        assert_eq!(chain.nodes()[1].name, "payment");
+
+        // Test with_node builder method
+        let chain = ServiceChain::new()
+            .with_node(ServiceNode::new("auth", "ed25519/auth"))
+            .with_node(ServiceNode::new("payment", "ed25519/payment"));
+
+        assert_eq!(chain.nodes().len(), 2);
+        assert_eq!(chain.nodes()[0].name, "auth");
+        assert_eq!(chain.nodes()[1].name, "payment");
+
+        // Test add_node method
+        let mut chain = ServiceChain::new();
+        chain
+            .add_node(ServiceNode::new("auth", "ed25519/auth"))
+            .add_node(ServiceNode::new("payment", "ed25519/payment"));
+
+        assert_eq!(chain.nodes().len(), 2);
+        assert_eq!(chain.nodes()[0].name, "auth");
+        assert_eq!(chain.nodes()[1].name, "payment");
+    }
+
+    #[test]
+    fn test_service_chain_builder() {
+        let chain = ServiceChain::builder()
+            .add_node(ServiceNode::new("auth", "ed25519/auth"))
+            .add_node(ServiceNode::new("payment", "ed25519/payment"))
+            .build();
+
+        assert_eq!(chain.nodes().len(), 2);
+        assert_eq!(chain.nodes()[0].name, "auth");
+        assert_eq!(chain.nodes()[1].name, "payment");
+    }
+
+    #[test]
+    fn test_service_chain_to_internal() {
+        let chain = ServiceChain::new()
+            .with_node(ServiceNode::new("auth", "ed25519/auth"))
+            .with_node(ServiceNode::new("payment", "ed25519/payment"));
+
+        let internal = chain.to_internal();
+
+        assert_eq!(internal.len(), 2);
+        assert_eq!(internal[0].component, "auth");
+        assert_eq!(internal[0].public_key, "ed25519/auth");
+        assert_eq!(internal[1].component, "payment");
+        assert_eq!(internal[1].public_key, "ed25519/payment");
     }
 }

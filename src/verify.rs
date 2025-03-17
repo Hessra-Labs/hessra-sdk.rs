@@ -98,6 +98,8 @@ pub fn verify_service_chain_biscuit_local(
     service_nodes: Vec<ServiceNode>,
 ) -> Result<(), Box<dyn Error>> {
     let biscuit = Biscuit::from(&token, public_key)?;
+    println!("verifying service chain biscuit");
+    println!("Biscuit: {}", biscuit);
 
     let mut authz = build_base_authorizer(subject, resource.clone())?;
     for service_node in service_nodes {
@@ -110,8 +112,10 @@ pub fn verify_service_chain_biscuit_local(
             "#
         ))?;
     }
-
-    if authz.build(&biscuit)?.authorize().is_ok() {
+    println!("authorizer: {:?}", authz);
+    let mut auth_biscuit = authz.build(&biscuit)?;
+    println!("auth_biscuit: {}", auth_biscuit);
+    if auth_biscuit.authorize().is_ok() {
         Ok(())
     } else {
         Err("Authorization failed: token does not grant required access rights".into())

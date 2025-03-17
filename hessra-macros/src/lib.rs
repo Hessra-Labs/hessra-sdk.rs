@@ -300,6 +300,7 @@ pub fn authorize(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let is_async = input.sig.asyncness.is_some();
     let resource = &args.resource;
+    let subject = args.subject.is_some();
 
     // Check if the function has a dedicated client config parameter
     let has_config_param = args.config_param.is_some();

@@ -1,0 +1,99 @@
+[[service_nodes]]
+component = "edge_function"
+public_key = "ed25519/bfb72e6c584f2a57703ecab31172cea75eaa0e3558f76dfbe859ab30d0d03dad"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIFWSug8Wq2kEzhnGTyJGoCT3Hd596CiJ99hLoUXl7Bnn
+gSEAv7cubFhPKldwPsqzEXLOp16qDjVY92376FmrMNDQPa0=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "api_gateway"
+public_key = "ed25519/554490e2cd14b47271b9fa02d17e1fee191c6313a9c00d8a8eee5c22d92d8070"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIJp76FGggbJIi4QTBpH27IeBicyMay53zHETyZCxCPro
+gSEAVUSQ4s0UtHJxufoC0X4f7hkcYxOpwA2Kju5cItktgHA=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "order_service"
+public_key = "ed25519/1aebc5a6eefc569051926a6aaf55568e53edb475f2f2eb904522609391d88113"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIBGKjvJA+jpBYyKl/wWOa81fORZdQtkMHwahnevMiTd/
+gSEAGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRM=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "auth_service"
+public_key = "ed25519/e57618058b1d2e0381a9813c1405830d5ed7d603717384ef555d9cc0cfa65d83"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIBnMQ6SB/juVEWCLh/08eSiw5EXeClS4uUq1gFNpkK1I
+gSEA5XYYBYsdLgOBqYE8FAWDDV7X1gNxc4TvVV2cwM+mXYM=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "identity_service"
+public_key = "ed25519/f32d29969b8a2313083774cb6a085212eb94ffebc62ee27f4876f627abd2f651"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIOk1AF11WFZnSVvYdHC28Qa6uZv1Uu0rfaV14XdJV7vj
+gSEA8y0plpuKIxMIN3TLaghSEuuU/+vGLuJ/SHb2J6vS9lE=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "payment_service"
+public_key = "ed25519/78ef4255c4c9ab5c7186d6db4760758b06616c042a2538323ae3b058094034b6"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIAzPrr2kfWdHnkNwqEwBKokMg/IFX97w8eD5LvSdDC1W
+gSEAeO9CVcTJq1xxhtbbR2B1iwZhbAQqJTgyOuOwWAlANLY=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "notification_service"
+public_key = "ed25519/c4f4ab49c9bef58b1f2a0984b0f8d57a427003a997860af27d4677d1acff860e"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIA+B2iQt/WRua+IyBTF2da2h0cdqzGV5NRovapmPgm/F
+gSEAxPSrScm+9YsfKgmEsPjVekJwA6mXhgryfUZ30az/hg4=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "logging_service"
+public_key = "ed25519/bed936767e70fb6cdecae0e3e6acf9568a55e7cd57fb7e150bf6fa6943ea1402"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIPur5CaT8T2JadG8XJ4yKJG5s4fiLJZTELUWQV0cdrs0
+gSEAvtk2dn5w+2zeyuDj5qz5VopV581X+34VC/b6aUPqFAI=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "monitoring_service"
+public_key = "ed25519/65bc4039e3903886ac99cedca70a2428ea129b08290230486616e94763f92f98"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIDEv7SUZs4e0QbNX+J1QygRAky0SQh1wm/tjk1+8n7FL
+gSEAZbxAOeOQOIasmc7cpwokKOoSmwgpAjBIZhbpR2P5L5g=
+-----END PRIVATE KEY-----
+"""
+
+[[service_nodes]]
+component = "analytics_service"
+public_key = "ed25519/02bec818c2ceacf4fb537ad80b79308809c4511c0eb9419be4dbb35997d51e79"
+pem_keypair = """
+-----BEGIN PRIVATE KEY-----
+MFECAQEwBQYDK2VwBCIEIG0qxzvn6t5fEAr+3BroMmthkXY8MnDrpGiO9IiB+VEd
+gSEAAr7IGMLOrPT7U3rYC3kwiAnEURwOuUGb5NuzWZfVHnk=
+-----END PRIVATE KEY-----
+"""
