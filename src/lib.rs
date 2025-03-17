@@ -242,6 +242,13 @@ pub struct PublicKeyResponse {
     pub public_key: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct VerifyServiceChainTokenRequest {
+    pub token: String,
+    pub resource: String,
+    pub component: Option<String>,
+}
+
 #[cfg(feature = "http3")]
 use {
     bytes::{Buf, Bytes},
