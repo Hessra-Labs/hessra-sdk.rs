@@ -1,9 +1,9 @@
 use hessra_sdk::{HessraClient, Protocol, ServiceChain, ServiceNode};
 use std::error::Error;
 
-static BASE_URL: &str = "127.0.0.1";
-static PORT: u16 = 4433;
-
+static BASE_URL: &str = "test.hessra.net";
+static PORT: u16 = 443;
+static CA_CERT: &str = include_str!("../certs/ca-2030.pem");
 /// This example demonstrates how to use service chains to attest and verify
 /// the flow of a token through multiple services.
 ///
@@ -20,9 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let auth_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIBnMQ6SB/juVEWCLh/08eSiw5EXeClS4uUq1gFNpkK1I\ngSEA5XYYBYsdLgOBqYE8FAWDDV7X1gNxc4TvVV2cwM+mXYM=\n-----END PRIVATE KEY-----";
     let payment_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIAzPrr2kfWdHnkNwqEwBKokMg/IFX97w8eD5LvSdDC1W\ngSEAeO9CVcTJq1xxhtbbR2B1iwZhbAQqJTgyOuOwWAlANLY=\n-----END PRIVATE KEY-----";
     let order_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIBGKjvJA+jpBYyKl/wWOa81fORZdQtkMHwahnevMiTd/\ngSEAGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRM=\n-----END PRIVATE KEY-----";
-    let public_key =
-        HessraClient::fetch_public_key("127.0.0.1", Some(4433), include_str!("../certs/ca.crt"))
-            .await?;
+    let public_key = HessraClient::fetch_public_key(BASE_URL, Some(PORT), CA_CERT).await?;
 
     let auth_service_node = ServiceNode::new(
         "auth_service",
@@ -60,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
-        .server_ca(include_str!("../certs/ca.crt"))
+        .server_ca(CA_CERT)
         .build()?;
 
     // Request a token for a specific resource
@@ -78,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
-        .server_ca(include_str!("../certs/ca.crt"))
+        .server_ca(CA_CERT)
         .public_key(public_key.clone())
         .personal_keypair(auth_keypair)
         .build()?;
@@ -98,7 +96,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
-        .server_ca(include_str!("../certs/ca.crt"))
+        .server_ca(CA_CERT)
         .public_key(public_key.clone())
         .personal_keypair(payment_keypair)
         .build()?;
@@ -133,7 +131,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
-        .server_ca(include_str!("../certs/ca.crt"))
+        .server_ca(CA_CERT)
         .public_key(public_key.clone())
         .personal_keypair(order_keypair)
         .build()?;

@@ -3,6 +3,10 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
+static BASE_URL: &str = "test.hessra.net";
+static PORT: u16 = 443;
+static CA_CERT: &str = include_str!("../certs/ca-2030.pem");
+
 /// This example demonstrates different ways to fetch, store, and use the public key
 /// from the Hessra authentication service.
 ///
@@ -22,9 +26,7 @@ use std::path::Path;
 async fn main() -> Result<(), Box<dyn Error>> {
     // Example 1: Fetch the public key directly without a client
     println!("Example 1: Fetching public key directly");
-    let public_key =
-        HessraClient::fetch_public_key("127.0.0.1", Some(4433), include_str!("../certs/ca.crt"))
-            .await?;
+    let public_key = HessraClient::fetch_public_key(BASE_URL, Some(PORT), CA_CERT).await?;
     println!("Received public key: {}", public_key);
 
     // Save the public key to a file for later use
@@ -35,12 +37,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Example 2: Fetch the public key using an existing client
     println!("\nExample 2: Fetching public key using a client");
     let client = HessraClient::builder()
-        .base_url("test.hessra.net")
-        .port(443)
+        .base_url(BASE_URL)
+        .port(PORT)
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
-        .server_ca(include_str!("../certs/ca-2030.pem"))
+        .server_ca(CA_CERT)
         .build()?;
 
     let public_key_from_client = client.get_public_key().await?;
@@ -52,12 +54,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Example 3: Store the public key in the configuration
     println!("\nExample 3: Managing public key with configuration");
     let mut config = HessraConfig::new(
-        "https://test.hessra.net",
-        Some(443),
+        BASE_URL,
+        Some(PORT),
         Protocol::Http1,
         include_str!("../certs/client.crt"),
         include_str!("../certs/client.key"),
-        include_str!("../certs/ca-2030.pem"),
+        CA_CERT,
     );
 
     // Fetch and store the public key in the configuration

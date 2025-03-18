@@ -167,27 +167,6 @@
 //! # Ok(())
 //! # }
 //! ```
-//!
-//! ## Using Procedural Macros
-//!
-//! The `hessra-macros` crate provides macros for easy integration:
-//!
-//! ```rust
-//! use hessra_macros::{request_authorization, authorize};
-//! use hessra_sdk::HessraConfig;
-//!
-//! // Request authorization before executing a function
-//! #[request_authorization("my-resource", config)]
-//! async fn protected_function(config: &HessraConfig) {
-//!     // Function is called after token is obtained
-//! }
-//!
-//! // Verify token before executing a function
-//! #[authorize("my-resource")]
-//! async fn authorized_function(token: String) {
-//!     // Function is called only if token is valid
-//! }
-//! ```
 /// # Service Chain Authorization
 ///
 /// Service chains allow for a token to pass through multiple service nodes,
@@ -238,10 +217,12 @@
 /// // Verify a service chain token - this will verify nodes up to but not including "payment-service"
 /// let token = "base64-encoded-token".to_string();
 /// let resource = "my-protected-resource".to_string();
+/// let subject = "user123".to_string();
 /// let component = Some("payment-service".to_string()); // Current node in the chain
 ///
 /// let result = client.verify_service_chain_token(
 ///     token.clone(),
+///     subject.clone(),
 ///     resource.clone(),
 ///     component,
 ///     Some(&service_chain)
@@ -250,6 +231,7 @@
 /// // For the last node in the chain, verify the entire chain
 /// let result = client.verify_service_chain_token(
 ///     token,
+///     subject,
 ///     resource,
 ///     None, // No current component means verify the entire chain
 ///     Some(&service_chain)
@@ -283,12 +265,14 @@
 ///
 /// // First, verify the token for the current component
 /// let token = "base64-encoded-token".to_string();
+/// let subject = "user123".to_string();
 /// let resource = "my-protected-resource".to_string();
 /// let component = "payment-service".to_string();
 ///
 /// // Verify the token for this component
 /// client.verify_service_chain_token(
 ///     token.clone(),
+///     subject.clone(),
 ///     resource.clone(),
 ///     Some(component.clone()),
 ///     Some(&service_chain)
@@ -298,7 +282,6 @@
 /// let attenuated_token = client.attenuate_service_chain_token(
 ///     token,
 ///     resource,
-///     component
 /// )?;
 ///
 /// // Now the attenuated token can be passed to the next service in the chain
