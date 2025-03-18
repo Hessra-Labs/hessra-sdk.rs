@@ -19,7 +19,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Received token: {}", token);
 
     // Verify the token
-    let verification_result = client.verify_token(token, None, resource).await?;
+    let verification_result = client
+        .verify_token(token, "uri:urn:test:argo-cli0".to_string(), resource)
+        .await?;
     println!("Token verification result: {}", verification_result);
 
     Ok(())

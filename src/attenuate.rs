@@ -31,11 +31,12 @@ pub fn add_service_node_attenuation(
 
     // Create a third-party request
     let third_party_request = biscuit.third_party_request()?;
+    let service_name = service.to_string();
 
     // Create a block for the service attestation
     let third_party_block = block!(
         r#"
-            serice({service});
+            service({service_name});
         "#
     );
 

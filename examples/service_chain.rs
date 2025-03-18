@@ -1,6 +1,9 @@
 use hessra_sdk::{HessraClient, Protocol, ServiceChain, ServiceNode};
 use std::error::Error;
 
+static BASE_URL: &str = "127.0.0.1";
+static PORT: u16 = 4433;
+
 /// This example demonstrates how to use service chains to attest and verify
 /// the flow of a token through multiple services.
 ///
@@ -16,35 +19,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Personal keypairs for each node (in a real scenario, these would be generated securely)
     let auth_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIBnMQ6SB/juVEWCLh/08eSiw5EXeClS4uUq1gFNpkK1I\ngSEA5XYYBYsdLgOBqYE8FAWDDV7X1gNxc4TvVV2cwM+mXYM=\n-----END PRIVATE KEY-----";
     let payment_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIAzPrr2kfWdHnkNwqEwBKokMg/IFX97w8eD5LvSdDC1W\ngSEAeO9CVcTJq1xxhtbbR2B1iwZhbAQqJTgyOuOwWAlANLY=\n-----END PRIVATE KEY-----";
-    let order_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIBGKjvJA+jpBYyKl/wWOa81fORZdQtkMHwahnevMiTd/\ngSEAGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRM=-----END PRIVATE KEY-----";
+    let order_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIBGKjvJA+jpBYyKl/wWOa81fORZdQtkMHwahnevMiTd/\ngSEAGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRM=\n-----END PRIVATE KEY-----";
     let public_key =
         HessraClient::fetch_public_key("127.0.0.1", Some(4433), include_str!("../certs/ca.crt"))
             .await?;
 
+    let auth_service_node = ServiceNode::new(
+        "auth_service",
+        "ed25519/e57618058b1d2e0381a9813c1405830d5ed7d603717384ef555d9cc0cfa65d83", // derived from auth_keypair
+    );
+
+    let payment_service_node = ServiceNode::new(
+        "payment_service",
+        "ed25519/78ef4255c4c9ab5c7186d6db4760758b06616c042a2538323ae3b058094034b6", // derived from payment_keypair
+    );
+
+    let order_service_node = ServiceNode::new(
+        "order_service",
+        "ed25519/1aebc5a6eefc569051926a6aaf55568e53edb475f2f2eb904522609391d88113", // derived from order_keypair
+    );
+
     // Initialize the service chain with public keys of each node
     // Note: In a real implementation, these public keys would be extracted from the keypairs
     // and registered with the authorization server
-    let service_chain = ServiceChain::new()
-        .with_node(ServiceNode::new(
-            "auth_service",
-            "ed25519/e57618058b1d2e0381a9813c1405830d5ed7d603717384ef555d9cc0cfa65d83", // derived from auth_keypair
-        ))
-        .with_node(ServiceNode::new(
-            "payment_service",
-            "ed25519/78ef4255c4c9ab5c7186d6db4760758b06616c042a2538323ae3b058094034b6", // derived from payment_keypair
-        ))
-        .with_node(ServiceNode::new(
-            "order_service",
-            "ed25519/1aebc5a6eefc569051926a6aaf55568e53edb475f2f2eb904522609391d88113", // derived from order_keypair
-        ));
+    let full_service_chain = ServiceChain::new()
+        .with_node(auth_service_node)
+        .with_node(payment_service_node)
+        .with_node(order_service_node);
 
     println!("=== Service Chain Example ===");
-    println!("Service chain has {} nodes", service_chain.nodes().len());
+    println!(
+        "Service chain has {} nodes",
+        full_service_chain.nodes().len()
+    );
 
     // Actual client
     let client = HessraClient::builder()
-        .base_url("127.0.0.1")
-        .port(4433)
+        .base_url(BASE_URL)
+        .port(PORT)
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
@@ -61,8 +73,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a client for the auth service
     let auth_client = HessraClient::builder()
-        .base_url("127.0.0.1")
-        .port(4433)
+        .base_url(BASE_URL)
+        .port(PORT)
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
@@ -81,8 +93,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a client for the payment service
     let payment_client = HessraClient::builder()
-        .base_url("127.0.0.1")
-        .port(4433)
+        .base_url(BASE_URL)
+        .port(PORT)
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
@@ -98,10 +110,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let verification_result = payment_client
         .verify_service_chain_token(
             token_with_auth.clone(),
-            Some("uri:urn:test:argo-cli0".to_string()),
+            "uri:urn:test:argo-cli0".to_string(),
             resource.clone(),
             Some("payment_service".to_string()),
-            Some(&service_chain),
+            Some(&full_service_chain),
         )
         .await?;
     println!("Verification result: {}", verification_result);
@@ -116,8 +128,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a client for the order service
     let order_client = HessraClient::builder()
-        .base_url("127.0.0.1")
-        .port(4433)
+        .base_url(BASE_URL)
+        .port(PORT)
         .protocol(Protocol::Http1)
         .mtls_cert(include_str!("../certs/client.crt"))
         .mtls_key(include_str!("../certs/client.key"))
@@ -133,10 +145,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let verification_result = order_client
         .verify_service_chain_token(
             token_with_payment.clone(),
-            Some("uri:urn:test:argo-cli0".to_string()),
+            "uri:urn:test:argo-cli0".to_string(),
             resource.clone(),
             Some("order_service".to_string()),
-            Some(&service_chain),
+            Some(&full_service_chain),
         )
         .await?;
     println!("Verification result: {}", verification_result);
@@ -154,10 +166,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let final_verification = order_client
         .verify_service_chain_token(
             final_token,
-            Some("uri:urn:test:argo-cli0".to_string()),
+            "uri:urn:test:argo-cli0".to_string(),
             resource.clone(),
             None, // Verify the entire chain
-            Some(&service_chain),
+            Some(&full_service_chain),
         )
         .await?;
     println!("Final verification result: {}", final_verification);

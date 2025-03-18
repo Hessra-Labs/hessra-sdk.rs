@@ -15,11 +15,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Request a token for a specific resource
     let resource = "resource1".to_string();
+    let subject = "uri:urn:test:argo-cli0".to_string();
     let token = client.request_token(resource.clone()).await?;
     println!("Received token: {}", token);
 
     // Verify the token
-    let verification_result = client.verify_token(token, resource).await?;
+    let verification_result = client.verify_token(token, subject, resource).await?;
     println!("Token verification result: {}", verification_result);
 
     Ok(())

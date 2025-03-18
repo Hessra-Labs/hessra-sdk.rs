@@ -40,7 +40,8 @@
 //! let token = client.request_token(resource.clone()).await?;
 //!
 //! // Later, verify the token
-//! let verification_result = client.verify_token(token, resource).await?;
+//! let subject = "user123".to_string();
+//! let verification_result = client.verify_token(token, subject, resource).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -337,6 +338,8 @@ pub struct TokenRequest {
 pub struct VerifyTokenRequest {
     /// The authorization token to verify
     pub token: String,
+    /// The subject identifier to verify against
+    pub subject: String,
     /// The resource identifier to verify authorization against
     pub resource: String,
 }
@@ -458,7 +461,8 @@ pub struct Http3Client {
 /// let token = client.request_token("my-resource".to_string()).await?;
 ///
 /// // Verify a token
-/// let result = client.verify_token(token, "my-resource".to_string()).await?;
+/// let subject = "user123".to_string();
+/// let result = client.verify_token(token, subject, "my-resource".to_string()).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -1016,6 +1020,7 @@ impl HessraClient {
     /// # Arguments
     ///
     /// * `token` - The authorization token to verify, Base64 encoded
+    /// * `subject` - The subject identifier to verify against
     /// * `resource` - The resource identifier to verify authorization against
     ///
     /// # Returns
@@ -1031,7 +1036,7 @@ impl HessraClient {
     pub async fn verify_token(
         &self,
         token: String,
-        subject: Option<String>,
+        subject: String,
         resource: String,
     ) -> Result<String, Box<dyn Error>> {
         // First try to get the public key for local verification
@@ -1058,7 +1063,7 @@ impl HessraClient {
                     match verify_biscuit_local(
                         token_bytes,
                         public_key,
-                        subject.unwrap_or("user".to_string()),
+                        subject.clone(),
                         resource.clone(),
                     ) {
                         Ok(_) => return Ok("Token verified locally".to_string()),
@@ -1084,6 +1089,7 @@ impl HessraClient {
         // Fall back to remote verification if local verification is not possible or failed
         let verify_token_request = VerifyTokenRequest {
             token,
+            subject: subject.clone(),
             resource: resource.clone(),
         };
 
@@ -1193,7 +1199,7 @@ impl HessraClient {
     pub async fn verify_service_chain_token(
         &self,
         token: String,
-        subject: Option<String>,
+        subject: String,
         resource: String,
         component: Option<String>,
         service_chain: Option<&ServiceChain>,
@@ -1223,9 +1229,10 @@ impl HessraClient {
                     match verify_service_chain_biscuit_local(
                         token_bytes,
                         public_key,
-                        subject.unwrap_or("user".to_string()),
+                        subject,
                         resource.clone(),
                         nodes,
+                        component.clone(),
                     ) {
                         Ok(_) => return Ok("Service chain token verified locally".to_string()),
                         Err(e) => {

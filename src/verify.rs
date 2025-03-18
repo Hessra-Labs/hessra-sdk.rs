@@ -96,13 +96,17 @@ pub fn verify_service_chain_biscuit_local(
     subject: String,
     resource: String,
     service_nodes: Vec<ServiceNode>,
+    component: Option<String>,
 ) -> Result<(), Box<dyn Error>> {
     let biscuit = Biscuit::from(&token, public_key)?;
-    println!("verifying service chain biscuit");
-    println!("Biscuit: {}", biscuit);
 
     let mut authz = build_base_authorizer(subject, resource.clone())?;
     for service_node in service_nodes {
+        if let Some(ref component) = component {
+            if component == &service_node.component {
+                break;
+            }
+        }
         let service = resource.clone();
         let node_name = service_node.component;
         let node_key = biscuit_key_from_string(service_node.public_key)?;
@@ -112,9 +116,7 @@ pub fn verify_service_chain_biscuit_local(
             "#
         ))?;
     }
-    println!("authorizer: {:?}", authz);
     let mut auth_biscuit = authz.build(&biscuit)?;
-    println!("auth_biscuit: {}", auth_biscuit);
     if auth_biscuit.authorize().is_ok() {
         Ok(())
     } else {
