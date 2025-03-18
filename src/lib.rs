@@ -352,6 +352,7 @@ pub struct PublicKeyResponse {
 #[derive(Serialize, Deserialize)]
 pub struct VerifyServiceChainTokenRequest {
     pub token: String,
+    pub subject: String,
     pub resource: String,
     pub component: Option<String>,
 }
@@ -1212,7 +1213,7 @@ impl HessraClient {
                     match verify_service_chain_biscuit_local(
                         token_bytes,
                         public_key,
-                        subject,
+                        subject.clone(),
                         resource.clone(),
                         nodes,
                         component.clone(),
@@ -1238,6 +1239,7 @@ impl HessraClient {
         // Fall back to remote verification
         let verify_request = VerifyServiceChainTokenRequest {
             token,
+            subject,
             resource,
             component,
         };
