@@ -371,7 +371,6 @@ impl From<serde_json::Error> for ConfigError {
     }
 }
 
-#[cfg(feature = "toml")]
 impl From<toml::de::Error> for ConfigError {
     fn from(error: toml::de::Error) -> Self {
         ConfigError::ParseError(error.to_string())
@@ -424,7 +423,6 @@ impl HessraConfig {
     }
 
     /// Create a configuration from a TOML file
-    #[cfg(feature = "toml")]
     pub fn from_toml(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let file_content = fs::read_to_string(path)?;
         let config: HessraConfig = toml::from_str(&file_content)?;
@@ -923,7 +921,6 @@ pub fn try_load_default_config() -> Option<HessraConfig> {
         }
     }
 
-    #[cfg(feature = "toml")]
     {
         // Try to load from TOML files
         let toml_paths = [

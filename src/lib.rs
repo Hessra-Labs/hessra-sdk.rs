@@ -1342,7 +1342,7 @@ impl HessraClient {
 ///     .build()
 ///     .expect("Failed to build service node");
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServiceNode {
     /// The name of the component
     pub name: String,
@@ -1463,7 +1463,7 @@ impl ServiceNode {
 ///     println!("Node: {}, Key: {}", node.name, node.public_key);
 /// }
 /// ```
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ServiceChain {
     /// The nodes in the chain, in order
     nodes: Vec<ServiceNode>,
@@ -1483,6 +1483,119 @@ impl ServiceChain {
     /// Create a new builder for a service chain
     pub fn builder() -> ServiceChainBuilder {
         ServiceChainBuilder::new()
+    }
+
+    /// Load a service chain from a JSON string
+    ///
+    /// # Arguments
+    ///
+    /// * `json` - A JSON string containing the service chain configuration
+    ///
+    /// # Returns
+    ///
+    /// A Result containing a new ServiceChain instance or an error
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use hessra_sdk::ServiceChain;
+    ///
+    /// let json = r#"{
+    ///   "nodes": [
+    ///     {
+    ///       "name": "auth-service",
+    ///       "public_key": "ed25519/1234567890abcdef"
+    ///     },
+    ///     {
+    ///       "name": "payment-service",
+    ///       "public_key": "ed25519/abcdef1234567890"
+    ///     }
+    ///   ]
+    /// }"#;
+    ///
+    /// let chain = ServiceChain::from_json(json).expect("Failed to parse JSON");
+    /// assert_eq!(chain.nodes().len(), 2);
+    /// assert_eq!(chain.nodes()[0].name, "auth-service");
+    /// ```
+    pub fn from_json(json: &str) -> Result<Self, Box<dyn Error>> {
+        let chain: Self = serde_json::from_str(json)?;
+        Ok(chain)
+    }
+
+    /// Load a service chain from a JSON file
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to a JSON file containing the service chain configuration
+    ///
+    /// # Returns
+    ///
+    /// A Result containing a new ServiceChain instance or an error
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use hessra_sdk::ServiceChain;
+    ///
+    /// let chain = ServiceChain::from_json_file("service_chain.json").expect("Failed to load JSON file");
+    /// ```
+    pub fn from_json_file(path: impl AsRef<std::path::Path>) -> Result<Self, Box<dyn Error>> {
+        let file_content = std::fs::read_to_string(path)?;
+        Self::from_json(&file_content)
+    }
+
+    /// Load a service chain from a TOML string
+    ///
+    /// # Arguments
+    ///
+    /// * `toml_str` - A TOML string containing the service chain configuration
+    ///
+    /// # Returns
+    ///
+    /// A Result containing a new ServiceChain instance or an error
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use hessra_sdk::ServiceChain;
+    ///
+    /// let toml_str = r#"
+    /// [[nodes]]
+    /// name = "auth-service"
+    /// public_key = "ed25519/1234567890abcdef"
+    ///
+    /// [[nodes]]
+    /// name = "payment-service"
+    /// public_key = "ed25519/abcdef1234567890"
+    /// "#;
+    ///
+    /// let chain = ServiceChain::from_toml(toml_str).expect("Failed to parse TOML");
+    /// ```
+    pub fn from_toml(toml_str: &str) -> Result<Self, Box<dyn Error>> {
+        let chain: Self = toml::from_str(toml_str)?;
+        Ok(chain)
+    }
+
+    /// Load a service chain from a TOML file
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to a TOML file containing the service chain configuration
+    ///
+    /// # Returns
+    ///
+    /// A Result containing a new ServiceChain instance or an error
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use hessra_sdk::ServiceChain;
+    ///
+    /// let chain = ServiceChain::from_toml_file("service_chain.toml").expect("Failed to load TOML file");
+    /// ```
+    pub fn from_toml_file(path: impl AsRef<std::path::Path>) -> Result<Self, Box<dyn Error>> {
+        let file_content = std::fs::read_to_string(path)?;
+        Self::from_toml(&file_content)
     }
 
     /// Add a node to the end of the chain

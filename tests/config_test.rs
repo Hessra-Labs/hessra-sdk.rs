@@ -136,7 +136,6 @@ fn test_config_from_file() {
     }
 }
 
-#[cfg(feature = "toml")]
 #[test]
 fn test_config_from_toml() {
     // Create a temporary TOML file
@@ -146,9 +145,9 @@ fn test_config_from_toml() {
     let config_toml = r#"
         base_url = "toml.example.com"
         port = 7443
-        mtls_cert = "TOML CERT"
-        mtls_key = "TOML KEY"
-        server_ca = "TOML CA"
+        mtls_cert = "-----BEGIN CERTIFICATE-----\nTOML CERT\n-----END CERTIFICATE-----"
+        mtls_key = "-----BEGIN PRIVATE KEY-----\nTOML KEY\n-----END PRIVATE KEY-----"
+        server_ca = "-----BEGIN CERTIFICATE-----\nTOML CA\n-----END CERTIFICATE-----"
         protocol = "Http1"
     "#;
 
@@ -159,9 +158,18 @@ fn test_config_from_toml() {
 
     assert_eq!(config.base_url, "toml.example.com");
     assert_eq!(config.port, Some(7443));
-    assert_eq!(config.mtls_cert, "TOML CERT");
-    assert_eq!(config.mtls_key, "TOML KEY");
-    assert_eq!(config.server_ca, "TOML CA");
+    assert_eq!(
+        config.mtls_cert,
+        "-----BEGIN CERTIFICATE-----\nTOML CERT\n-----END CERTIFICATE-----"
+    );
+    assert_eq!(
+        config.mtls_key,
+        "-----BEGIN PRIVATE KEY-----\nTOML KEY\n-----END PRIVATE KEY-----"
+    );
+    assert_eq!(
+        config.server_ca,
+        "-----BEGIN CERTIFICATE-----\nTOML CA\n-----END CERTIFICATE-----"
+    );
     match config.protocol {
         Protocol::Http1 => {}
         #[cfg(feature = "http3")]

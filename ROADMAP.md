@@ -283,11 +283,11 @@ location /api {
 
 ### Phase 3: Adding and verifying attenuations 🚧
 
-- [ ] Add way to configure personal keypair
-- [ ] Add authenticated call (mTLS) to authorization service to give name and public key
-- [ ] Add unauthenticated call to retrieve non-Hessra public keys
-- [ ] Add biscuit attenuation using personal keypair
-- [ ] Add attenuated biscuit verification using Hessra public key plus the non-Hessra public keys
+- [x] Add way to configure personal keypair
+- [-] Add authenticated call (mTLS) to authorization service to give name and public key
+- [-] Add unauthenticated call to retrieve non-Hessra public keys
+- [x] Add biscuit attenuation using personal keypair
+- [x] Add attenuated biscuit verification using Hessra public key plus the non-Hessra public keys
 
 ### Phase 4: WASM Integration 🚧
 

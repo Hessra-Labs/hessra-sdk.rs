@@ -31,7 +31,7 @@ futures = { version = "0.3", optional = true }
 tokio = { version = "1.36", features = ["full"] }
 http = "1.0"
 anyhow = "1.0"
-toml = { version = "0.8", optional = true }
+toml = "0.8"
 dirs = "5.0"
 
 [dev-dependencies]
@@ -45,7 +45,6 @@ tempfile = "3.8"
 [features]
 default = []
 http3 = ["h3", "h3-quinn", "quinn", "quinn-proto", "rustls", "rustls-pemfile", "bytes", "futures"]
-toml = ["dep:toml"]
 
 [[example]]
 name = "http1_example"
