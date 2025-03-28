@@ -1,6 +1,113 @@
 # Hessra SDK
 
-The unified Rust SDK for interacting with Hessra authentication services.
+A Rust client library for interacting with Hessra authentication services.
+
+## Project Structure
+
+The Hessra SDK has been refactored into modular components:
+
+- **hessra-config**: Configuration management
+- **hessra-token**: Token verification and attestation
+- **hessra-api**: HTTP client for the Hessra service
+- **hessra-sdk**: Main SDK that pulls everything together
+
+## Examples and Tests Organization
+
+### Tests
+
+Tests should be organized as follows:
+
+1. **Component-specific tests**:
+
+   - Each component has its own tests in `<component-name>/tests/`
+   - Example: `hessra-config/tests/config_test.rs`
+
+2. **Integration tests**:
+   - Tests that verify multiple components working together should be in `hessra-sdk/tests/`
+   - Example: `hessra-sdk/tests/integration_test.rs`
+
+### Examples
+
+Examples should be organized as follows:
+
+1. **Component-specific examples**:
+
+   - Each component has its own examples in `<component-name>/examples/`
+   - Example: `hessra-config/examples/config_methods.rs`
+
+2. **SDK examples**:
+   - Examples showcasing the full SDK functionality should be in `hessra-sdk/examples/`
+   - These demonstrate how to use multiple components together
+
+## Usage
+
+### Configuration
+
+```rust
+use hessra_config::{HessraConfig, Protocol};
+
+// Create a configuration with the builder pattern
+let config = HessraConfig::builder()
+    .base_url("https://test.hessra.example.com")
+    .port(8443)
+    .protocol(Protocol::Http1)
+    .mtls_cert("-----BEGIN CERTIFICATE-----\nCERT CONTENT\n-----END CERTIFICATE-----")
+    .mtls_key("-----BEGIN PRIVATE KEY-----\nKEY CONTENT\n-----END PRIVATE KEY-----")
+    .server_ca("-----BEGIN CERTIFICATE-----\nCA CONTENT\n-----END CERTIFICATE-----")
+    .build()
+    .expect("Failed to build config");
+```
+
+### Using the SDK
+
+```rust
+use hessra_sdk::{Hessra, ServiceChain, ServiceNode};
+
+// Create an SDK instance
+let hessra = Hessra::new(config)
+    .expect("Failed to create SDK instance");
+
+// Request a token
+let token = hessra.request_token("resource_name")
+    .await
+    .expect("Failed to request token");
+
+// Verify a token
+hessra.verify_token(token, "subject", "resource")
+    .await
+    .expect("Failed to verify token");
+```
+
+## Service Chain Attestation
+
+```rust
+// Create a service chain
+let service_chain = ServiceChain::builder()
+    .add_node(ServiceNode {
+        component: "service1",
+        public_key: "ed25519/abcdef1234567890",
+    })
+    .add_node(ServiceNode {
+        component: "service2",
+        public_key: "ed25519/0987654321fedcba",
+    })
+    .build();
+
+// Verify a token with service chain attestation
+hessra.verify_service_chain_token_local(
+    token,
+    "subject",
+    "resource",
+    &service_chain,
+    None,
+).expect("Failed to verify service chain token");
+```
+
+## Feature Flags
+
+- `http3`: Enables HTTP/3 protocol support
+- `toml`: Enables configuration loading from TOML files
+- `wasm`: Enables WebAssembly support for token verification
 
 ## Overview
 
@@ -28,79 +135,6 @@ Add the Hessra SDK to your `Cargo.toml`:
 ```toml
 [dependencies]
 hessra-sdk = "0.1.0"
-```
-
-## Feature Flags
-
-- `http3`: Enables HTTP/3 protocol support
-- `toml`: Enables configuration loading from TOML files
-- `wasm`: Enables WebAssembly support for token verification
-
-## Usage Examples
-
-### Basic Token Request and Verification
-
-```rust
-use hessra_sdk::{Hessra, Protocol};
-use std::error::Error;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Create a Hessra SDK instance
-    let hessra = Hessra::builder()
-        .base_url("api.hessra.com")
-        .port(443)
-        .mtls_key(include_str!("certs/client.key"))
-        .mtls_cert(include_str!("certs/client.crt"))
-        .server_ca(include_str!("certs/ca.crt"))
-        .protocol(Protocol::Http1)
-        .build()?;
-
-    // Request a token
-    let token = hessra.request_token("my-resource").await?;
-
-    // Verify the token
-    let result = hessra.verify_token(&token, "user123", "my-resource").await?;
-    println!("Token verification result: {}", result);
-
-    Ok(())
-}
-```
-
-### Service Chain Verification
-
-```rust
-use hessra_sdk::{Hessra, ServiceChain, ServiceNode};
-
-// Define a service chain
-let service_chain = ServiceChain::builder()
-    .add_node(ServiceNode::new("auth-service", "ed25519/123456"))
-    .add_node(ServiceNode::new("payment-service", "ed25519/abcdef"))
-    .build();
-
-// Verify a service chain token
-let result = hessra.verify_service_chain_token(
-    &token,
-    "user123",
-    "my-resource",
-    Some("payment-service".to_string()),
-).await?;
-```
-
-### Loading Configuration from Files
-
-```rust
-use hessra_sdk::HessraConfig;
-
-// Load from a JSON file
-let config = HessraConfig::from_file("config.json")?;
-
-// Or use TOML with the "toml" feature enabled
-#[cfg(feature = "toml")]
-let config = HessraConfig::from_toml_file("config.toml")?;
-
-// Create a Hessra SDK instance
-let hessra = Hessra::new(config)?;
 ```
 
 ## Component Libraries

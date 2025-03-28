@@ -662,7 +662,7 @@ impl HessraConfig {
 
         // If a public key is provided, validate its format
         if let Some(public_key) = &self.public_key {
-            if !public_key.contains("-----BEGIN PUBLIC KEY-----") {
+            if !public_key.contains("-----BEGIN CERTIFICATE-----") {
                 return Err(ConfigError::InvalidCertificate(
                     "Server public key does not appear to be in PEM format".into(),
                 ));

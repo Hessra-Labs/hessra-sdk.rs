@@ -8,9 +8,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .base_url("test.hessra.net")
         .port(443)
         .protocol(Protocol::Http1)
-        .mtls_cert(include_str!("../certs/client.crt"))
-        .mtls_key(include_str!("../certs/client.key"))
-        .server_ca(include_str!("../certs/ca-2030.pem"))
+        .mtls_cert(include_str!("../../certs/client.crt"))
+        .mtls_key(include_str!("../../certs/client.key"))
+        .server_ca(include_str!("../../certs/ca-2030.pem"))
         .build()?;
 
     // Request a token for a specific resource

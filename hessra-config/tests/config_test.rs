@@ -1,4 +1,4 @@
-use hessra_sdk::{get_default_config, set_default_config, ConfigError, HessraConfig, Protocol};
+use hessra_config::{get_default_config, set_default_config, ConfigError, HessraConfig, Protocol};
 use std::env;
 use std::fs;
 
@@ -137,6 +137,7 @@ fn test_config_from_file() {
 }
 
 #[test]
+#[cfg(feature = "toml")]
 fn test_config_from_toml() {
     // Create a temporary TOML file
     let temp_dir = tempfile::tempdir().unwrap();

@@ -13,6 +13,7 @@ hessra-config = { path = "../hessra-config", version = "0.1.0" }
 hessra-api = { path = "../hessra-api", version = "0.1.0" }
 
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [features]
@@ -22,4 +23,20 @@ toml = ["hessra-config/toml"]
 wasm = ["hessra-token/wasm"]
 
 [dev-dependencies]
-tokio = { version = "1.0", features = ["full"] } 
+tokio = { version = "1.0", features = ["full"] }
+wiremock = "0.5"
+reqwest = { version = "0.12", features = ["json"] }
+serde_json = "1.0"
+
+[[example]]
+name = "service_chain"
+path = "examples/service_chain.rs"
+
+[[example]]
+name = "http1"
+path = "examples/http1_example.rs"
+
+[[example]]
+name = "http3"
+path = "examples/http3_example.rs"
+required-features = ["http3"]

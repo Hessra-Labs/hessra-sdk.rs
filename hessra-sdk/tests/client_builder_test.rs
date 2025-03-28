@@ -9,11 +9,11 @@ use test_utils::generate_test_certs;
 // Helper function to ensure we have test certificates
 async fn setup_test_certs() -> Result<(String, String, String), Box<dyn Error>> {
     // First check if we can use the existing certs from the certs directory
-    let cert_path = Path::new("certs");
+    let cert_path = Path::new("test_certs");
     if cert_path.exists() {
-        let ca_cert = fs::read_to_string("certs/ca-2030.pem")?;
-        let client_cert = fs::read_to_string("certs/client.crt")?;
-        let client_key = fs::read_to_string("certs/client.key")?;
+        let ca_cert = fs::read_to_string("test_certs/ca-2030.pem")?;
+        let client_cert = fs::read_to_string("test_certs/client.crt")?;
+        let client_key = fs::read_to_string("test_certs/client.key")?;
         return Ok((ca_cert, client_cert, client_key));
     }
 
@@ -31,7 +31,7 @@ mod tests {
         let (ca_cert, client_cert, client_key) = setup_test_certs().await?;
 
         let client = HessraClient::builder()
-            .base_url("test.example.com")
+            .base_url("test.hessra.net")
             .port(443)
             .protocol(Protocol::Http1)
             .mtls_cert(client_cert)
@@ -54,7 +54,7 @@ mod tests {
         let (ca_cert, client_cert, client_key) = setup_test_certs().await?;
 
         let client = HessraClient::builder()
-            .base_url("test.example.com")
+            .base_url("test.hessra.net")
             .port(443)
             .protocol(Protocol::Http3)
             .mtls_cert(client_cert)

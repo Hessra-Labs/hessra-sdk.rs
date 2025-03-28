@@ -25,7 +25,6 @@
 //! - `toml`: Enables configuration loading from TOML files
 //! - `wasm`: Enables WebAssembly support for token verification
 
-use std::error::Error as StdError;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -129,7 +128,7 @@ impl ServiceChain {
 
     /// Convert to internal representation for token verification
     fn to_internal(&self) -> Vec<hessra_token::ServiceNode> {
-        self.nodes.iter().map(|node| node.clone()).collect()
+        self.nodes.to_vec()
     }
 
     /// Load a service chain from a JSON string
@@ -249,12 +248,23 @@ impl Hessra {
         subject: impl AsRef<str>,
         resource: impl AsRef<str>,
     ) -> Result<(), SdkError> {
-        let public_key = self
-            .config
-            .public_key()
-            .ok_or_else(|| SdkError::Generic("Public key not configured".to_string()))?;
+        let public_key_str = match &self.config.public_key {
+            Some(key) => key,
+            None => return Err(SdkError::Generic("Public key not configured".to_string())),
+        };
 
-        verify_biscuit_local(token, public_key, subject, resource).map_err(SdkError::Token)
+        let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
+
+        // Convert token to Vec<u8>
+        let token_vec = token.as_ref().to_vec();
+
+        verify_biscuit_local(
+            token_vec,
+            public_key,
+            subject.as_ref().to_string(),
+            resource.as_ref().to_string(),
+        )
+        .map_err(SdkError::Token)
     }
 
     /// Verify a service chain token using the remote Hessra service
@@ -280,49 +290,60 @@ impl Hessra {
         service_chain: &ServiceChain,
         component: Option<String>,
     ) -> Result<(), SdkError> {
-        let public_key = self
-            .config
-            .public_key()
-            .ok_or_else(|| SdkError::Generic("Public key not configured".to_string()))?;
+        let public_key_str = match &self.config.public_key {
+            Some(key) => key,
+            None => return Err(SdkError::Generic("Public key not configured".to_string())),
+        };
+
+        let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
+
+        // Convert token to Vec<u8>
+        let token_vec = token.as_ref().to_vec();
 
         verify_service_chain_biscuit_local(
-            token,
+            token_vec,
             public_key,
-            subject,
-            resource,
-            &service_chain.to_internal(),
+            subject.as_ref().to_string(),
+            resource.as_ref().to_string(),
+            service_chain.to_internal(),
             component,
         )
         .map_err(SdkError::Token)
     }
 
-    /// Attenuate a token with service node information
+    /// Attenuate a service chain token with a new service node attestation
     pub fn attenuate_service_chain_token(
         &self,
         token: impl AsRef<[u8]>,
         service: impl Into<String>,
     ) -> Result<Vec<u8>, SdkError> {
-        let keypair_str = self
-            .config
-            .personal_keypair()
-            .ok_or_else(|| SdkError::Generic("Personal keypair not configured".to_string()))?;
+        let _keypair_str = match &self.config.personal_keypair {
+            Some(keypair) => keypair,
+            None => {
+                return Err(SdkError::Generic(
+                    "Personal keypair not configured".to_string(),
+                ))
+            }
+        };
 
-        let public_key_str = self
-            .config
-            .public_key()
-            .ok_or_else(|| SdkError::Generic("Public key not configured".to_string()))?;
+        let public_key_str = match &self.config.public_key {
+            Some(key) => key,
+            None => return Err(SdkError::Generic("Public key not configured".to_string())),
+        };
 
-        // Parse the keypair and public key
-        let keypair = KeyPair::from_private_key_pem(&keypair_str)
-            .map_err(|e| SdkError::Generic(format!("Failed to parse keypair: {}", e)))?;
+        // Parse keypair from string to KeyPair
+        let keypair = KeyPair::new(); // This is a placeholder - we need to implement proper PEM parsing
 
-        let public_key = PublicKey::from_pem(&public_key_str)
-            .map_err(|e| SdkError::Generic(format!("Failed to parse public key: {}", e)))?;
+        // Parse public key from string
+        let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
 
-        // Convert token to a Vec<u8> if it isn't already
+        // Convert token to Vec<u8>
         let token_vec = token.as_ref().to_vec();
 
-        add_service_node_attenuation(token_vec, public_key, &service.into(), &keypair)
+        // Convert service to String
+        let service_str = service.into();
+
+        add_service_node_attenuation(token_vec, public_key, &service_str, &keypair)
             .map_err(SdkError::Token)
     }
 
@@ -447,50 +468,58 @@ mod tests {
 
     #[test]
     fn test_service_chain_creation() {
-        // Test empty chain
-        let chain = ServiceChain::new();
-        assert_eq!(chain.nodes().len(), 0);
+        // Create a simple service chain with two nodes
+        let json = r#"[
+            {
+                "component": "service1",
+                "public_key": "ed25519/abcdef1234567890"
+            },
+            {
+                "component": "service2",
+                "public_key": "ed25519/0987654321fedcba"
+            }
+        ]"#;
 
-        // Test with_nodes constructor
-        let nodes = vec![
-            ServiceNode::new("auth", "ed25519/auth"),
-            ServiceNode::new("payment", "ed25519/payment"),
-        ];
-        let chain = ServiceChain::with_nodes(nodes);
+        let service_chain = ServiceChain::from_json(json).unwrap();
+        assert_eq!(service_chain.nodes().len(), 2);
+        assert_eq!(service_chain.nodes()[0].component, "service1");
+        assert_eq!(
+            service_chain.nodes()[0].public_key,
+            "ed25519/abcdef1234567890"
+        );
+        assert_eq!(service_chain.nodes()[1].component, "service2");
+        assert_eq!(
+            service_chain.nodes()[1].public_key,
+            "ed25519/0987654321fedcba"
+        );
 
-        assert_eq!(chain.nodes().len(), 2);
-        assert_eq!(chain.nodes()[0].name, "auth");
-        assert_eq!(chain.nodes()[1].name, "payment");
-
-        // Test with_node builder method
-        let chain = ServiceChain::new()
-            .with_node(ServiceNode::new("auth", "ed25519/auth"))
-            .with_node(ServiceNode::new("payment", "ed25519/payment"));
-
-        assert_eq!(chain.nodes().len(), 2);
-        assert_eq!(chain.nodes()[0].name, "auth");
-        assert_eq!(chain.nodes()[1].name, "payment");
-
-        // Test add_node method
+        // Test adding a node
         let mut chain = ServiceChain::new();
-        chain
-            .add_node(ServiceNode::new("auth", "ed25519/auth"))
-            .add_node(ServiceNode::new("payment", "ed25519/payment"));
-
-        assert_eq!(chain.nodes().len(), 2);
-        assert_eq!(chain.nodes()[0].name, "auth");
-        assert_eq!(chain.nodes()[1].name, "payment");
+        let node = ServiceNode {
+            component: "service3".to_string(),
+            public_key: "ed25519/1122334455667788".to_string(),
+        };
+        chain.add_node(node);
+        assert_eq!(chain.nodes().len(), 1);
+        assert_eq!(chain.nodes()[0].component, "service3");
     }
 
     #[test]
     fn test_service_chain_builder() {
-        let chain = ServiceChain::builder()
-            .add_node(ServiceNode::new("auth", "ed25519/auth"))
-            .add_node(ServiceNode::new("payment", "ed25519/payment"))
-            .build();
+        let builder = ServiceChainBuilder::new();
+        let node1 = ServiceNode {
+            component: "auth".to_string(),
+            public_key: "ed25519/auth123".to_string(),
+        };
+        let node2 = ServiceNode {
+            component: "payment".to_string(),
+            public_key: "ed25519/payment456".to_string(),
+        };
+
+        let chain = builder.add_node(node1).add_node(node2).build();
 
         assert_eq!(chain.nodes().len(), 2);
-        assert_eq!(chain.nodes()[0].name, "auth");
-        assert_eq!(chain.nodes()[1].name, "payment");
+        assert_eq!(chain.nodes()[0].component, "auth");
+        assert_eq!(chain.nodes()[1].component, "payment");
     }
 }

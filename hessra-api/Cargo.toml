@@ -1,6 +1,6 @@
 [package]
 name = "hessra-api"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
 description = "API client for Hessra authentication services"

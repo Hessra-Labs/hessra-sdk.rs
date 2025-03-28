@@ -138,24 +138,25 @@ pub struct Http1Client {
 impl Http1Client {
     /// Create a new HTTP/1.1 client with the given configuration
     pub fn new(config: BaseConfig) -> Result<Self, ApiError> {
-        // Parse the PEM string into certificate and private key
-        let cert = match reqwest::Identity::from_pem(
-            format!("{}\n{}", config.mtls_cert, config.mtls_key).as_bytes(),
-        ) {
-            Ok(cert) => cert,
-            Err(e) => return Err(ApiError::SslConfig(e.to_string())),
-        };
+        // First try the simple approach with rustls-tls
+        // Create identity from combined PEM certificate and key
+        let identity_str = format!("{}{}", config.mtls_cert, config.mtls_key);
+
+        let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
+            ApiError::SslConfig(format!(
+                "Failed to create identity from certificate and key: {}",
+                e
+            ))
+        })?;
 
         // Parse the CA certificate
-        let cert_pem = config.server_ca.as_bytes();
-        let cert_der = match reqwest::Certificate::from_pem(cert_pem) {
-            Ok(cert) => cert,
-            Err(e) => return Err(ApiError::SslConfig(e.to_string())),
-        };
+        let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
+            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {}", e)))?;
 
         // Build the reqwest client with mTLS configuration
         let client = reqwest::ClientBuilder::new()
-            .identity(cert)
+            .use_rustls_tls() // Explicitly use rustls TLS
+            .identity(identity)
             .add_root_certificate(cert_der)
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
