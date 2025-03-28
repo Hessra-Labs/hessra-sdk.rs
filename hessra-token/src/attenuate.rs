@@ -2,7 +2,8 @@ extern crate biscuit_auth as biscuit;
 
 use biscuit::macros::block;
 use biscuit::{Biscuit, KeyPair, PublicKey};
-use std::error::Error;
+
+use crate::error::TokenError;
 
 /// Add a service node attestation to a token
 ///
@@ -26,7 +27,7 @@ pub fn add_service_node_attenuation(
     public_key: PublicKey,
     service: &str,
     node_key: &KeyPair,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+) -> Result<Vec<u8>, TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
 
     // Create a third-party request
@@ -41,14 +42,19 @@ pub fn add_service_node_attenuation(
     );
 
     // Create the third-party block and sign it
-    let third_party_block =
-        third_party_request.create_block(&node_key.private(), third_party_block)?;
+    let third_party_block = third_party_request
+        .create_block(&node_key.private(), third_party_block)
+        .map_err(|e| TokenError::biscuit_error(e))?;
 
     // Append the third-party block to the token
-    let attenuated_biscuit = biscuit.append_third_party(node_key.public(), third_party_block)?;
+    let attenuated_biscuit = biscuit
+        .append_third_party(node_key.public(), third_party_block)
+        .map_err(|e| TokenError::biscuit_error(e))?;
 
     // Serialize the token
-    let attenuated_token = attenuated_biscuit.to_vec()?;
+    let attenuated_token = attenuated_biscuit
+        .to_vec()
+        .map_err(|e| TokenError::biscuit_error(e))?;
 
     Ok(attenuated_token)
 }

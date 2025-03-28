@@ -5,12 +5,13 @@ use biscuit::Algorithm as Alg;
 use biscuit::{AuthorizerBuilder, Biscuit, PublicKey};
 use chrono::Utc;
 use serde::Deserialize;
-use std::error::Error;
+
+use crate::error::TokenError;
 
 fn build_base_authorizer(
     subject: String,
     resource: String,
-) -> Result<AuthorizerBuilder, Box<dyn Error>> {
+) -> Result<AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
     let authz = authorizer!(
@@ -41,7 +42,7 @@ fn build_base_authorizer(
 /// # Returns
 ///
 /// * `Ok(())` - If the token is valid and grants access to the resource
-/// * `Err(Box<dyn Error>)` - If verification fails for any reason
+/// * `Err(TokenError)` - If verification fails for any reason
 ///
 /// # Errors
 ///
@@ -55,32 +56,48 @@ pub fn verify_biscuit_local(
     public_key: PublicKey,
     subject: String,
     resource: String,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
 
     let authz = build_base_authorizer(subject, resource)?;
     if authz.build(&biscuit)?.authorize().is_ok() {
         Ok(())
     } else {
-        Err("Authorization failed: token does not grant required access rights".into())
+        Err(TokenError::authorization_error(
+            "Token does not grant required access rights",
+        ))
     }
 }
 
 /// Takes a public key encoded as a string in the format "ed25519/..." or "secp256r1/..."
 /// and returns a PublicKey.
-pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, Box<dyn Error>> {
+pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
     // first split the string on the /
     let parts = key.split('/').collect::<Vec<&str>>();
+    if parts.len() != 2 {
+        return Err(TokenError::invalid_key_format(
+            "Key must be in format 'algorithm/hexkey'",
+        ));
+    }
+
     // match the algorithm
     let alg = match parts[0] {
         "ed25519" => Alg::Ed25519,
         "secp256r1" => Alg::Secp256r1,
-        _ => return Err("Invalid key format".into()),
+        _ => {
+            return Err(TokenError::invalid_key_format(
+                "Unsupported algorithm, must be ed25519 or secp256r1",
+            ))
+        }
     };
+
     // decode the key from hex
-    let key = hex::decode(parts[1]).unwrap();
+    let key = hex::decode(parts[1])?;
+
     // construct the public key based on the algorithm
-    let key = PublicKey::from_bytes(&key, alg)?;
+    let key = PublicKey::from_bytes(&key, alg)
+        .map_err(|e| TokenError::invalid_key_format(e.to_string()))?;
+
     Ok(key)
 }
 
@@ -97,7 +114,7 @@ pub fn verify_service_chain_biscuit_local(
     resource: String,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
 
     let mut authz = build_base_authorizer(subject, resource.clone())?;
@@ -120,6 +137,8 @@ pub fn verify_service_chain_biscuit_local(
     if auth_biscuit.authorize().is_ok() {
         Ok(())
     } else {
-        Err("Authorization failed: token does not grant required access rights".into())
+        Err(TokenError::authorization_error(
+            "Token does not grant required access rights",
+        ))
     }
 }
