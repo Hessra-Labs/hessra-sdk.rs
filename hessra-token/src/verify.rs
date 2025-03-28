@@ -115,7 +115,7 @@ pub fn verify_service_chain_biscuit_local(
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
-    let biscuit = Biscuit::from(&token, public_key).map_err(|e| TokenError::biscuit_error(e))?;
+    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
 
     let mut authz = build_base_authorizer(subject, resource.clone())?;
     authz.add_token(&biscuit)?;

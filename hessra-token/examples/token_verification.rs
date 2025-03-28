@@ -91,7 +91,6 @@ fn main() -> Result<(), TokenError> {
 /// Generate an example token for testing
 fn generate_example_token(keypair: Arc<KeyPair>) -> Result<String, TokenError> {
     // Create a simple test biscuit with authorization rules
-    // Create a simple test biscuit with authorization rules
     let biscuit_builder = biscuit!(
         r#"
             // Grant rights to alice for resource1

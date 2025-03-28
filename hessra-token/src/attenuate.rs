@@ -28,12 +28,12 @@ pub fn add_service_node_attenuation(
     service: &str,
     node_key: &KeyPair,
 ) -> Result<Vec<u8>, TokenError> {
-    let biscuit = Biscuit::from(&token, public_key).map_err(|e| TokenError::biscuit_error(e))?;
+    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
 
     // Create a third-party request
     let third_party_request = biscuit
         .third_party_request()
-        .map_err(|e| TokenError::biscuit_error(e))?;
+        .map_err(TokenError::biscuit_error)?;
     let service_name = service.to_string();
 
     // Create a block for the service attestation
@@ -46,17 +46,17 @@ pub fn add_service_node_attenuation(
     // Create the third-party block and sign it
     let third_party_block = third_party_request
         .create_block(&node_key.private(), third_party_block)
-        .map_err(|e| TokenError::biscuit_error(e))?;
+        .map_err(TokenError::biscuit_error)?;
 
     // Append the third-party block to the token
     let attenuated_biscuit = biscuit
         .append_third_party(node_key.public(), third_party_block)
-        .map_err(|e| TokenError::biscuit_error(e))?;
+        .map_err(TokenError::biscuit_error)?;
 
     // Serialize the token
     let attenuated_token = attenuated_biscuit
         .to_vec()
-        .map_err(|e| TokenError::biscuit_error(e))?;
+        .map_err(TokenError::biscuit_error)?;
 
     Ok(attenuated_token)
 }

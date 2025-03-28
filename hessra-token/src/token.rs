@@ -84,5 +84,5 @@ pub fn verify_service_chain_token(
 /// The parsed Biscuit token or an error
 pub fn parse_token(token_string: &str, public_key: PublicKey) -> Result<Biscuit, TokenError> {
     let token_bytes = decode_token(token_string)?;
-    Biscuit::from(&token_bytes, public_key).map_err(|e| TokenError::biscuit_error(e))
+    Biscuit::from(&token_bytes, public_key).map_err(TokenError::biscuit_error)
 }
