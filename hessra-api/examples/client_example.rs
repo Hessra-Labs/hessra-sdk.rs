@@ -3,11 +3,11 @@
 //! This example demonstrates how to create and use the Hessra API client
 //! to request and verify tokens.
 
-use hessra_api::{ApiError, HessraClient};
-use hessra_config::{HessraConfig, Protocol};
+use hessra_api::HessraClient;
+use hessra_config::HessraConfig;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     // Load configuration from environment variables
     let config = HessraConfig::from_env("HESSRA")?;
 
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             eprintln!("Error requesting token: {}", e);
-            return Err(Box::new(e));
+            return Err(e.into());
         }
     };
 
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             eprintln!("Error verifying token: {}", e);
-            return Err(Box::new(e));
+            return Err(e.into());
         }
     }
 
@@ -55,13 +55,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             eprintln!("Error retrieving public key: {}", e);
-            return Err(Box::new(e));
+            return Err(e.into());
         }
     }
 
     // Example of using the static method to fetch the public key without a client
     println!("Fetching public key without a client");
-    match HessraClient::fetch_public_key(config.base_url(), config.port(), config.server_ca()).await
+    match HessraClient::fetch_public_key(
+        config.base_url.clone(),
+        config.port,
+        config.server_ca.clone(),
+    )
+    .await
     {
         Ok(public_key) => {
             println!("Public key fetched successfully");
@@ -69,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             eprintln!("Error fetching public key: {}", e);
-            return Err(Box::new(e));
+            return Err(e.into());
         }
     }
 

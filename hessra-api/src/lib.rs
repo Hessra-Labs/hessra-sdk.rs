@@ -920,7 +920,6 @@ impl HessraClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::runtime::Runtime;
 
     // Test BaseConfig get_base_url method
     #[test]
