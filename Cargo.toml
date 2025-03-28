@@ -1,3 +1,31 @@
+[workspace]
+members = [
+    "hessra-token",
+    "hessra-config",
+    "hessra-api",
+    "hessra-sdk",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Hessra"]
+description = "Rust SDK for Hessra authentication services"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hessra/hessra-sdk.rs"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+base64 = "0.21"
+biscuit-auth = "3.1"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+chrono = "0.4"
+dirs = "5.0"
+hex = "0.4"
+thiserror = "1.0"
+
 [package]
 name = "hessra-sdk"
 version = "0.4.1"
