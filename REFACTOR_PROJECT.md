@@ -139,12 +139,23 @@ hessra-token    hessra-config    hessra-api
 | ---------------------- | ----------- | ------------------------------------------------------------------- |
 | hessra-token           | Completed   | Fully implemented with verification, attenuation, and base64 utils  |
 | hessra-config          | Completed   | Full implementation migrated from original src/config.rs with tests |
-| hessra-api             | In Progress | Basic structure created, HTTP client interface defined              |
+| hessra-api             | Completed   | Implemented HTTP client interfaces for both HTTP/1.1 and HTTP/3     |
 | hessra-sdk             | In Progress | Basic structure created, re-exports set up                          |
 | WASM support for token | Not started | Will be implemented after core functionality refactoring            |
 | C API                  | Not started | Will be implemented after basic refactoring                         |
 
 ## Notes and Decisions
+
+### API Client Implementation (2023-05-03 Update)
+
+- Completed implementation of `hessra-api` with the following components:
+  - HTTP/1.1 client with mTLS support
+  - Optional HTTP/3 client implementation behind feature flag
+  - Custom error handling with `ApiError` type
+  - API endpoint implementations for all Hessra service operations
+  - Integration with `hessra-config` for configuration management
+  - Comprehensive tests and examples
+- Next step is to focus on the unified `hessra-sdk` implementation, which will re-export and combine functionality from all three core crates.
 
 ### Token Implementation (2023-04-30 Update)
 

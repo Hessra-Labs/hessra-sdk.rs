@@ -27,7 +27,7 @@ hex = "0.4"
 thiserror = "1.0"
 
 [package]
-name = "hessra-sdk"
+name = "hessra-sdk-root"
 version = "0.4.1"
 edition = "2021"
 license = "Apache-2.0"
