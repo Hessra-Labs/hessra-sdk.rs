@@ -16,8 +16,6 @@
 //! - Validation of configuration parameters
 
 use std::env;
-use std::error::Error;
-use std::fmt;
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -399,7 +397,7 @@ impl HessraConfig {
         mtls_key: impl Into<String>,
         server_ca: impl Into<String>,
     ) -> Self {
-        let config = Self {
+        Self {
             base_url: base_url.into(),
             port,
             protocol,
@@ -408,9 +406,7 @@ impl HessraConfig {
             server_ca: server_ca.into(),
             public_key: None,
             personal_keypair: None,
-        };
-
-        config
+        }
     }
 
     /// Create a new HessraConfigBuilder
