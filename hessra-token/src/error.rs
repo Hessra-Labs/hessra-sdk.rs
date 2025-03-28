@@ -1,5 +1,4 @@
 use std::error::Error as StdError;
-use std::fmt;
 use thiserror::Error;
 
 /// Error type for hessra-token operations
@@ -53,8 +52,8 @@ impl TokenError {
     }
 }
 
-impl From<biscuit_auth::error::Error> for TokenError {
-    fn from(err: biscuit_auth::error::Error) -> Self {
+impl From<biscuit_auth::error::Token> for TokenError {
+    fn from(err: biscuit_auth::error::Token) -> Self {
         TokenError::BiscuitError(err.to_string())
     }
 }

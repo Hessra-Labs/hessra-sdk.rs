@@ -1,7 +1,7 @@
 use biscuit_auth::{Biscuit, PublicKey};
 
 use crate::error::TokenError;
-use crate::utils::{decode_token, encode_token};
+use crate::utils::decode_token;
 use crate::verify::{verify_biscuit_local, verify_service_chain_biscuit_local, ServiceNode};
 
 /// Verify a base64-encoded token string
@@ -84,5 +84,5 @@ pub fn verify_service_chain_token(
 /// The parsed Biscuit token or an error
 pub fn parse_token(token_string: &str, public_key: PublicKey) -> Result<Biscuit, TokenError> {
     let token_bytes = decode_token(token_string)?;
-    Biscuit::from(&token_bytes, public_key).map_err(|e| e.into())
+    Biscuit::from(&token_bytes, public_key).map_err(|e| TokenError::biscuit_error(e))
 }

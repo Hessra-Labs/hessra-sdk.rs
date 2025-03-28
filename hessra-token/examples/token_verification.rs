@@ -1,17 +1,17 @@
 use biscuit_auth::macros::biscuit;
 use hessra_token::{
-    biscuit_key_from_string, encode_token, verify_service_chain_token, verify_token, KeyPair,
-    PublicKey, ServiceNode, TokenError,
+    add_service_node_attenuation, biscuit_key_from_string, decode_token, encode_token,
+    verify_service_chain_token, verify_token, KeyPair, ServiceNode, TokenError,
 };
-
+use std::sync::Arc;
 fn main() -> Result<(), TokenError> {
     // Generate an example token
-    let token_base64 = generate_example_token()?;
+    let root_keypair = Arc::new(KeyPair::new());
+    let token_base64 = generate_example_token(root_keypair.clone())?;
     println!("Generated token: {}\n", token_base64);
 
     // Example 1: Basic verification
     println!("Example 1: Basic verification");
-    let root_keypair = KeyPair::new();
     verify_token(&token_base64, root_keypair.public(), "alice", "resource1")?;
     println!("✅ Basic verification successful\n");
 
@@ -30,21 +30,41 @@ fn main() -> Result<(), TokenError> {
     // Define service nodes
     let service_nodes = vec![
         ServiceNode {
-            component: "service1".to_string(),
-            public_key: service1_public_key,
+            component: "node1".to_string(),
+            public_key: service1_public_key.clone(),
         },
         ServiceNode {
-            component: "service2".to_string(),
-            public_key: service2_public_key,
+            component: "node2".to_string(),
+            public_key: service2_public_key.clone(),
         },
     ];
 
     // Generate a token with service chain
-    let chain_token = generate_service_chain_token(&service1_keypair, &service2_keypair)?;
+    let chain_token = generate_service_chain_token(
+        root_keypair.clone(),
+        service1_public_key,
+        service2_public_key,
+    )?;
+
+    // attenuate the token for node1
+    let attenuated_token = add_service_node_attenuation(
+        decode_token(&chain_token)?,
+        root_keypair.public(),
+        "resource1",
+        &service1_keypair,
+    )?;
+
+    // attenuate the token for node2
+    let attenuated_token2 = add_service_node_attenuation(
+        attenuated_token,
+        root_keypair.public(),
+        "resource1",
+        &service2_keypair,
+    )?;
 
     // Verify with service chain
     verify_service_chain_token(
-        &chain_token,
+        &encode_token(&attenuated_token2),
         root_keypair.public(),
         "alice",
         "resource1",
@@ -69,19 +89,14 @@ fn main() -> Result<(), TokenError> {
 }
 
 /// Generate an example token for testing
-fn generate_example_token() -> Result<String, TokenError> {
-    // Create a test keypair (in a real application, you would use your secret key)
-    let keypair = KeyPair::new();
-
+fn generate_example_token(keypair: Arc<KeyPair>) -> Result<String, TokenError> {
+    // Create a simple test biscuit with authorization rules
     // Create a simple test biscuit with authorization rules
     let biscuit_builder = biscuit!(
         r#"
             // Grant rights to alice for resource1
             right("alice", "resource1", "read");
             right("alice", "resource1", "write");
-            
-            // Define an expiration time (24 hours from now)
-            expiration({chrono::Utc::now().timestamp() + 86400});
         "#
     );
 
@@ -98,12 +113,10 @@ fn generate_example_token() -> Result<String, TokenError> {
 
 /// Generate a token with service chain attestations
 fn generate_service_chain_token(
-    service1_keypair: &KeyPair,
-    service2_keypair: &KeyPair,
+    root_keypair: Arc<KeyPair>,
+    service1_public_key: String,
+    service2_public_key: String,
 ) -> Result<String, TokenError> {
-    // Create a root keypair
-    let root_keypair = KeyPair::new();
-
     // Create a biscuit with service chain authorization
     let biscuit_builder = biscuit!(
         r#"
@@ -111,10 +124,12 @@ fn generate_service_chain_token(
             right("alice", "resource1", "read");
             right("alice", "resource1", "write");
             
-            // Service chain trust
-            node("resource1", "service1") trusting authority, {service1_keypair.public()};
-            node("resource1", "service2") trusting authority, {service2_keypair.public()};
-        "#
+            // Service nodes
+            node($s, "node1") <- service($s) trusting authority, {node1_public_key};
+            node($s, "node2") <- service($s) trusting authority, {node2_public_key};
+        "#,
+        node1_public_key = biscuit_key_from_string(service1_public_key)?,
+        node2_public_key = biscuit_key_from_string(service2_public_key)?,
     );
 
     // Build and serialize the token

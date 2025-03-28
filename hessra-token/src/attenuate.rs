@@ -28,10 +28,12 @@ pub fn add_service_node_attenuation(
     service: &str,
     node_key: &KeyPair,
 ) -> Result<Vec<u8>, TokenError> {
-    let biscuit = Biscuit::from(&token, public_key)?;
+    let biscuit = Biscuit::from(&token, public_key).map_err(|e| TokenError::biscuit_error(e))?;
 
     // Create a third-party request
-    let third_party_request = biscuit.third_party_request()?;
+    let third_party_request = biscuit
+        .third_party_request()
+        .map_err(|e| TokenError::biscuit_error(e))?;
     let service_name = service.to_string();
 
     // Create a block for the service attestation

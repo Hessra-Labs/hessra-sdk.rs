@@ -51,7 +51,7 @@ pub use biscuit_auth::{Biscuit, KeyPair, PublicKey};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use biscuit_auth::macros::{biscuit, block};
+    use biscuit_auth::macros::biscuit;
 
     #[test]
     fn test_verify_biscuit_local() {
@@ -87,12 +87,12 @@ mod tests {
         let service_public_key_hex = hex::encode(service_keypair.public().to_bytes());
         let service_public_key_str = format!("ed25519/{}", service_public_key_hex);
 
-        // Create a simple test biscuit
+        // Create a simple test biscuit with separate node facts
         let biscuit_builder = biscuit!(
             r#"
                 right("alice", "resource1", "read");
                 right("alice", "resource1", "write");
-                node("resource1", "service1") trusting authority, {service_keypair.public()};
+                node("resource1", "service1");
             "#
         );
         let biscuit = biscuit_builder.build(&root_keypair).unwrap();

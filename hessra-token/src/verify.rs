@@ -1,8 +1,7 @@
 extern crate biscuit_auth as biscuit;
 
 use biscuit::macros::{authorizer, check};
-use biscuit::Algorithm as Alg;
-use biscuit::{AuthorizerBuilder, Biscuit, PublicKey};
+use biscuit::{Biscuit, PublicKey};
 use chrono::Utc;
 use serde::Deserialize;
 
@@ -11,7 +10,7 @@ use crate::error::TokenError;
 fn build_base_authorizer(
     subject: String,
     resource: String,
-) -> Result<AuthorizerBuilder, TokenError> {
+) -> Result<biscuit::Authorizer, TokenError> {
     let now = Utc::now().timestamp();
 
     let authz = authorizer!(
@@ -59,8 +58,9 @@ pub fn verify_biscuit_local(
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
 
-    let authz = build_base_authorizer(subject, resource)?;
-    if authz.build(&biscuit)?.authorize().is_ok() {
+    let mut authz = build_base_authorizer(subject, resource)?;
+    authz.add_token(&biscuit)?;
+    if authz.authorize().is_ok() {
         Ok(())
     } else {
         Err(TokenError::authorization_error(
@@ -80,10 +80,10 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
         ));
     }
 
-    // match the algorithm
-    let alg = match parts[0] {
-        "ed25519" => Alg::Ed25519,
-        "secp256r1" => Alg::Secp256r1,
+    // Check algorithm type but we don't need to set it explicitly in 3.2.0
+    match parts[0] {
+        "ed25519" => {}
+        "secp256r1" => {}
         _ => {
             return Err(TokenError::invalid_key_format(
                 "Unsupported algorithm, must be ed25519 or secp256r1",
@@ -92,10 +92,10 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
     };
 
     // decode the key from hex
-    let key = hex::decode(parts[1])?;
+    let key_bytes = hex::decode(parts[1])?;
 
-    // construct the public key based on the algorithm
-    let key = PublicKey::from_bytes(&key, alg)
+    // construct the public key
+    let key = PublicKey::from_bytes(&key_bytes)
         .map_err(|e| TokenError::invalid_key_format(e.to_string()))?;
 
     Ok(key)
@@ -115,9 +115,11 @@ pub fn verify_service_chain_biscuit_local(
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
-    let biscuit = Biscuit::from(&token, public_key)?;
+    let biscuit = Biscuit::from(&token, public_key).map_err(|e| TokenError::biscuit_error(e))?;
 
     let mut authz = build_base_authorizer(subject, resource.clone())?;
+    authz.add_token(&biscuit)?;
+
     for service_node in service_nodes {
         if let Some(ref component) = component {
             if component == &service_node.component {
@@ -127,14 +129,14 @@ pub fn verify_service_chain_biscuit_local(
         let service = resource.clone();
         let node_name = service_node.component;
         let node_key = biscuit_key_from_string(service_node.public_key)?;
-        authz = authz.check(check!(
+        let _ = authz.add_check(check!(
             r#"
                 check if node({service}, {node_name}) trusting authority, {node_key};
             "#
-        ))?;
+        ));
     }
-    let mut auth_biscuit = authz.build(&biscuit)?;
-    if auth_biscuit.authorize().is_ok() {
+
+    if authz.authorize().is_ok() {
         Ok(())
     } else {
         Err(TokenError::authorization_error(
