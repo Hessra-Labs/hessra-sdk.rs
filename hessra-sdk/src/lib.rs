@@ -34,6 +34,8 @@ use thiserror::Error;
 pub use hessra_token::{
     // Token attestation
     add_service_node_attenuation,
+    decode_token,
+    encode_token,
     // Token verification
     verify_biscuit_local,
     verify_service_chain_biscuit_local,
@@ -284,7 +286,7 @@ impl Hessra {
     /// Verify a service chain token locally using cached public keys
     pub fn verify_service_chain_token_local(
         &self,
-        token: impl AsRef<[u8]>,
+        token: String,
         subject: impl AsRef<str>,
         resource: impl AsRef<str>,
         service_chain: &ServiceChain,
@@ -295,10 +297,11 @@ impl Hessra {
             None => return Err(SdkError::Generic("Public key not configured".to_string())),
         };
 
-        let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
+        let public_key = PublicKey::from_pem(public_key_str.as_str())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
 
         // Convert token to Vec<u8>
-        let token_vec = token.as_ref().to_vec();
+        let token_vec = decode_token(&token)?;
 
         verify_service_chain_biscuit_local(
             token_vec,
@@ -312,12 +315,14 @@ impl Hessra {
     }
 
     /// Attenuate a service chain token with a new service node attestation
+    /// Expects a base64 encoded token string
+    /// Returns a base64 encoded token string
     pub fn attenuate_service_chain_token(
         &self,
-        token: impl AsRef<[u8]>,
+        token: String,
         service: impl Into<String>,
-    ) -> Result<Vec<u8>, SdkError> {
-        let _keypair_str = match &self.config.personal_keypair {
+    ) -> Result<String, SdkError> {
+        let keypair_str = match &self.config.personal_keypair {
             Some(keypair) => keypair,
             None => {
                 return Err(SdkError::Generic(
@@ -332,19 +337,26 @@ impl Hessra {
         };
 
         // Parse keypair from string to KeyPair
-        let keypair = KeyPair::new(); // This is a placeholder - we need to implement proper PEM parsing
+        let keypair = KeyPair::from_private_key_pem(keypair_str.as_str())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
+        println!("Keypair: {:?}", keypair);
 
-        // Parse public key from string
-        let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
+        // Parse public key from PEM string
+        let public_key = PublicKey::from_pem(public_key_str.as_str())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
+        //let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
+        println!("Public key: {:?}", public_key);
 
         // Convert token to Vec<u8>
-        let token_vec = token.as_ref().to_vec();
+        let token_vec = decode_token(&token)?;
 
         // Convert service to String
         let service_str = service.into();
 
-        add_service_node_attenuation(token_vec, public_key, &service_str, &keypair)
-            .map_err(SdkError::Token)
+        let token_vec = add_service_node_attenuation(token_vec, public_key, &service_str, &keypair)
+            .map_err(SdkError::Token)?;
+
+        Ok(encode_token(&token_vec))
     }
 
     /// Get the public key from the Hessra service

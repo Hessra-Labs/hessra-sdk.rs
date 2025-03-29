@@ -1,9 +1,9 @@
 use hessra_sdk::{fetch_public_key, Hessra, Protocol, ServiceChain, ServiceNode};
 use std::error::Error;
 
-static BASE_URL: &str = "test.hessra.net";
-static PORT: u16 = 443;
-static CA_CERT: &str = include_str!("../../certs/ca-2030.pem");
+static BASE_URL: &str = "127.0.0.1";
+static PORT: u16 = 4433;
+static CA_CERT: &str = include_str!("../../certs/ca.crt");
 /// This example demonstrates how to use service chains to attest and verify
 /// the flow of a token through multiple services.
 ///
@@ -63,6 +63,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .mtls_key(include_str!("../../certs/client.key"))
         .server_ca(CA_CERT)
         .build()?;
+
+    println!("Client constructed successfully");
 
     // Request a token for a specific resource
     let resource = "order_service".to_string();

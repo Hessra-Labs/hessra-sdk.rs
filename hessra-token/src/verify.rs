@@ -1,7 +1,7 @@
 extern crate biscuit_auth as biscuit;
 
 use biscuit::macros::{authorizer, check};
-use biscuit::{Biscuit, PublicKey};
+use biscuit::{Algorithm, Biscuit, PublicKey};
 use chrono::Utc;
 use serde::Deserialize;
 
@@ -10,7 +10,7 @@ use crate::error::TokenError;
 fn build_base_authorizer(
     subject: String,
     resource: String,
-) -> Result<biscuit::Authorizer, TokenError> {
+) -> Result<biscuit::AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
     let authz = authorizer!(
@@ -58,9 +58,8 @@ pub fn verify_biscuit_local(
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
 
-    let mut authz = build_base_authorizer(subject, resource)?;
-    authz.add_token(&biscuit)?;
-    if authz.authorize().is_ok() {
+    let authz = build_base_authorizer(subject, resource)?;
+    if authz.build(&biscuit)?.authorize().is_ok() {
         Ok(())
     } else {
         Err(TokenError::authorization_error(
@@ -72,6 +71,7 @@ pub fn verify_biscuit_local(
 /// Takes a public key encoded as a string in the format "ed25519/..." or "secp256r1/..."
 /// and returns a PublicKey.
 pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
+    println!("Key: {:?}", key);
     // first split the string on the /
     let parts = key.split('/').collect::<Vec<&str>>();
     if parts.len() != 2 {
@@ -80,10 +80,9 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
         ));
     }
 
-    // Check algorithm type but we don't need to set it explicitly in 3.2.0
-    match parts[0] {
-        "ed25519" => {}
-        "secp256r1" => {}
+    let alg = match parts[0] {
+        "ed25519" => Algorithm::Ed25519,
+        "secp256r1" => Algorithm::Secp256r1,
         _ => {
             return Err(TokenError::invalid_key_format(
                 "Unsupported algorithm, must be ed25519 or secp256r1",
@@ -95,7 +94,7 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
     let key_bytes = hex::decode(parts[1])?;
 
     // construct the public key
-    let key = PublicKey::from_bytes(&key_bytes)
+    let key = PublicKey::from_bytes(&key_bytes, alg)
         .map_err(|e| TokenError::invalid_key_format(e.to_string()))?;
 
     Ok(key)
@@ -118,7 +117,6 @@ pub fn verify_service_chain_biscuit_local(
     let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
 
     let mut authz = build_base_authorizer(subject, resource.clone())?;
-    authz.add_token(&biscuit)?;
 
     for service_node in service_nodes {
         if let Some(ref component) = component {
@@ -129,14 +127,14 @@ pub fn verify_service_chain_biscuit_local(
         let service = resource.clone();
         let node_name = service_node.component;
         let node_key = biscuit_key_from_string(service_node.public_key)?;
-        let _ = authz.add_check(check!(
+        authz = authz.check(check!(
             r#"
                 check if node({service}, {node_name}) trusting authority, {node_key};
             "#
-        ));
+        ))?;
     }
 
-    if authz.authorize().is_ok() {
+    if authz.build(&biscuit)?.authorize().is_ok() {
         Ok(())
     } else {
         Err(TokenError::authorization_error(

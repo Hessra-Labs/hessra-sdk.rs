@@ -712,13 +712,13 @@ impl HessraClient {
         let response = match self {
             HessraClient::Http1(client) => {
                 client
-                    .send_request::<_, TokenResponse>("token", &request)
+                    .send_request::<_, TokenResponse>("request_token", &request)
                     .await?
             }
             #[cfg(feature = "http3")]
             HessraClient::Http3(client) => {
                 client
-                    .send_request::<_, TokenResponse>("token", &request)
+                    .send_request::<_, TokenResponse>("request_token", &request)
                     .await?
             }
         };
@@ -748,13 +748,13 @@ impl HessraClient {
         let response = match self {
             HessraClient::Http1(client) => {
                 client
-                    .send_request::<_, VerifyTokenResponse>("verify", &request)
+                    .send_request::<_, VerifyTokenResponse>("verify_token", &request)
                     .await?
             }
             #[cfg(feature = "http3")]
             HessraClient::Http3(client) => {
                 client
-                    .send_request::<_, VerifyTokenResponse>("verify", &request)
+                    .send_request::<_, VerifyTokenResponse>("verify_token", &request)
                     .await?
             }
         };
@@ -780,13 +780,13 @@ impl HessraClient {
         let response = match self {
             HessraClient::Http1(client) => {
                 client
-                    .send_request::<_, VerifyTokenResponse>("verify_service_chain", &request)
+                    .send_request::<_, VerifyTokenResponse>("verify_service_chain_token", &request)
                     .await?
             }
             #[cfg(feature = "http3")]
             HessraClient::Http3(client) => {
                 client
-                    .send_request::<_, VerifyTokenResponse>("verify_service_chain", &request)
+                    .send_request::<_, VerifyTokenResponse>("verify_service_chain_token", &request)
                     .await?
             }
         };

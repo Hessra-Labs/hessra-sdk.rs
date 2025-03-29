@@ -51,3 +51,10 @@ When adding new tests:
 1. For unit tests of new functionality, add them to the appropriate test module
 2. For integration tests of new endpoints, add them to `tests/integration_test.rs`
 3. If you need to mock new server behavior, update `tests/mocks/mock_server.rs`
+
+## Improvements
+
+Needed areas of improvement for the overall SDK
+
+1. Make it clear for each token/biscuit operation and key/cert operation what the expected format is and what the output format is. For example, some places expect and return a base64 encoded biscuit token where others might want a Vec<u8> representation. For keys, some things want a string representation: "ed25519/key", PEM encoded, or the raw key. Provide helpers to convert seemlessly or better yet create strict types.
+2. create SDK API such that there is a verify_token, verify_token_local, and verify_token_remote. verify_token should try to do it locally first and then resort to an API call if an authorization service is configured for use.
