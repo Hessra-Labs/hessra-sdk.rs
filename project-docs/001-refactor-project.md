@@ -64,14 +64,14 @@ hessra-token    hessra-config    hessra-api
 
 ### Phase 1: Core Refactoring
 
-#### 1. Initial Setup (Week 1)
+#### 1. Initial Setup
 
 - [x] Create new workspace with all four crates
 - [x] Define dependencies between crates
 - [x] Set up CI/CD pipelines for testing
 - [x] Move existing tests to appropriate locations
 
-#### 2. Code Migration (Weeks 2-3)
+#### 2. Code Migration
 
 - [ ] Move token verification to `hessra-token`
   - [ ] Extract verification logic
@@ -90,7 +90,7 @@ hessra-token    hessra-config    hessra-api
   - [ ] Create high-level interfaces
   - [ ] Ensure backward compatibility
 
-#### 3. API Refinement (Week 4)
+#### 3. API Refinement
 
 - [ ] Define clean interfaces between components
 - [ ] Document public APIs
@@ -146,7 +146,7 @@ hessra-token    hessra-config    hessra-api
 
 ## Notes and Decisions
 
-### API Client Implementation (2023-05-03 Update)
+### API Client Implementation
 
 - Completed implementation of `hessra-api` with the following components:
   - HTTP/1.1 client with mTLS support
@@ -157,7 +157,7 @@ hessra-token    hessra-config    hessra-api
   - Comprehensive tests and examples
 - Next step is to focus on the unified `hessra-sdk` implementation, which will re-export and combine functionality from all three core crates.
 
-### Token Implementation (2023-04-30 Update)
+### Token Implementation
 
 - Completed implementation of `hessra-token` with the following components:
   - Core token verification (`verify.rs`)
@@ -170,7 +170,7 @@ hessra-token    hessra-config    hessra-api
 - Created detailed documentation in README.md
 - Next step is to focus on `hessra-api` implementation
 
-### Project Phases (2023-04-30 Update)
+### Project Phases
 
 We've decided to separate the project into distinct phases:
 
@@ -180,7 +180,7 @@ We've decided to separate the project into distinct phases:
 
 This approach allows us to get the new architecture functioning correctly first before adding cross-platform capabilities.
 
-### Workspace Structure (2023-04-15)
+### Workspace Structure
 
 - Created a workspace with four crates:
   - `hessra-token`: Core token verification and attestation, WASM-compatible
@@ -241,7 +241,7 @@ This approach allows us to get the new architecture functioning correctly first 
    - Already set up basic re-exports
    - Need to implement ServiceChain and high-level APIs
 
-### hessra-config Implementation Notes (2023-04-28)
+### hessra-config Implementation Notes
 
 - Migrated all configuration functionality from the original src/config.rs
 - Removed references to HessraClient (now part of hessra-api)
