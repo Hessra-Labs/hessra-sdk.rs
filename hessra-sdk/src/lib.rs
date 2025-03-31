@@ -230,8 +230,29 @@ impl Hessra {
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
 
-    /// Verify a token using the remote Hessra service
+    /// Verify a token
+    ///
+    /// This function verifies a token using either the remote Hessra service or
+    /// locally using the service's public key if one is configured. This will always
+    /// prefer to verify locally if a public key is configured.
     pub async fn verify_token(
+        &self,
+        token: impl Into<String>,
+        subject: impl Into<String>,
+        resource: impl Into<String>,
+    ) -> Result<(), SdkError> {
+        if self.config.public_key.is_some() {
+            self.verify_token_local(token.into(), subject.into(), resource.into())
+        } else {
+            self.verify_token_remote(token.into(), subject.into(), resource.into())
+                .await
+                .map(|_| ())
+                .map_err(|e| SdkError::Generic(e.to_string()))
+        }
+    }
+
+    /// Verify a token using the remote Hessra service
+    pub async fn verify_token_remote(
         &self,
         token: impl Into<String>,
         subject: impl Into<String>,
@@ -269,8 +290,42 @@ impl Hessra {
         .map_err(SdkError::Token)
     }
 
-    /// Verify a service chain token using the remote Hessra service
+    /// Verify a service chain token
+    ///
+    /// This function verifies a service chain token using either the remote Hessra service or
+    /// locally using the service's public key if one is configured. This will always
+    /// prefer to verify locally if a public key is configured and a service chain is provided.
     pub async fn verify_service_chain_token(
+        &self,
+        token: impl Into<String>,
+        subject: impl Into<String>,
+        resource: impl Into<String>,
+        service_chain: Option<&ServiceChain>,
+        component: Option<String>,
+    ) -> Result<(), SdkError> {
+        match (&self.config.public_key, service_chain) {
+            (Some(_), Some(chain)) => self.verify_service_chain_token_local(
+                token.into(),
+                subject.into(),
+                resource.into(),
+                chain,
+                component,
+            ),
+            _ => self
+                .verify_service_chain_token_remote(
+                    token.into(),
+                    subject.into(),
+                    resource.into(),
+                    component,
+                )
+                .await
+                .map(|_| ())
+                .map_err(|e| SdkError::Generic(e.to_string())),
+        }
+    }
+
+    /// Verify a service chain token using the remote Hessra service
+    pub async fn verify_service_chain_token_remote(
         &self,
         token: impl Into<String>,
         subject: impl Into<String>,
