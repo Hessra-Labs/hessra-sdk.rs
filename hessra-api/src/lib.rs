@@ -41,14 +41,6 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
-
-    #[cfg(feature = "http3")]
-    #[error("HTTP/3 error: {0}")]
-    Http3(String),
-
-    #[cfg(feature = "http3")]
-    #[error("Rustls error: {0}")]
-    Rustls(#[from] rustls::Error),
 }
 
 // Request and response structures
@@ -203,223 +195,76 @@ impl Http1Client {
     }
 }
 
-#[cfg(feature = "http3")]
-static ALPN: &[u8] = b"h3";
-
 /// HTTP/3 client implementation (only available with the "http3" feature)
 #[cfg(feature = "http3")]
 pub struct Http3Client {
     /// Base configuration
     config: BaseConfig,
     /// QUIC endpoint for HTTP/3 connections
-    endpoint: quinn::Endpoint,
+    client: reqwest::Client,
 }
 
 #[cfg(feature = "http3")]
 impl Http3Client {
     /// Create a new HTTP/3 client with the given configuration
     pub fn new(config: BaseConfig) -> Result<Self, ApiError> {
-        use quinn::Endpoint;
-        use rustls::pki_types::CertificateDer;
-        use rustls::pki_types::PrivateKeyDer;
-        use rustls_pemfile::Item;
-        use std::io::Cursor;
-        use std::sync::Arc;
+        // First try the simple approach with rustls-tls
+        // Create identity from combined PEM certificate and key
+        let identity_str = format!("{}{}", config.mtls_cert, config.mtls_key);
 
-        // Parse client certificate and private key
-        let mut cert_pem = Cursor::new(config.mtls_cert.as_bytes());
-        let mut certs = Vec::new();
-        for item in rustls_pemfile::read_all(&mut cert_pem) {
-            match item {
-                Ok(Item::X509Certificate(cert)) => certs.push(CertificateDer::from(cert)),
-                _ => {}
-            }
-        }
+        let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
+            ApiError::SslConfig(format!(
+                "Failed to create identity from certificate and key: {}",
+                e
+            ))
+        })?;
 
-        if certs.is_empty() {
-            return Err(ApiError::SslConfig(
-                "Failed to parse client certificate".into(),
-            ));
-        }
+        // Parse the CA certificate
+        let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
+            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {}", e)))?;
 
-        let mut key_pem = Cursor::new(config.mtls_key.as_bytes());
-        let mut keys = Vec::new();
-        for item in rustls_pemfile::read_all(&mut key_pem) {
-            match item {
-                Ok(Item::Pkcs8Key(key)) => keys.push(PrivateKeyDer::from(key)),
-                Ok(Item::Pkcs1Key(key)) => keys.push(PrivateKeyDer::from(key)),
-                Ok(Item::Sec1Key(key)) => keys.push(PrivateKeyDer::from(key)),
-                _ => {}
-            }
-        }
+        // Build the reqwest client with mTLS configuration
+        let client = reqwest::ClientBuilder::new()
+            .use_rustls_tls() // Explicitly use rustls TLS
+            .http3_prior_knowledge()
+            .identity(identity)
+            .add_root_certificate(cert_der)
+            .build()
+            .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
-        if keys.is_empty() {
-            return Err(ApiError::SslConfig("Failed to parse private key".into()));
-        }
-
-        // Parse server CA certificate
-        let mut server_ca_pem = Cursor::new(config.server_ca.as_bytes());
-        let mut roots = rustls::RootCertStore::empty();
-        //let mut root_certs = Vec::new();
-        for item in rustls_pemfile::read_all(&mut server_ca_pem) {
-            match item {
-                Ok(Item::X509Certificate(cert)) => roots.add(CertificateDer::from(cert))?,
-                _ => {}
-            }
-        }
-
-        if roots.is_empty() {
-            return Err(ApiError::SslConfig(
-                "Failed to parse server CA certificate".into(),
-            ));
-        }
-
-        // Build client crypto config
-        let mut crypto_builder = rustls::ClientConfig::builder()
-            .with_root_certificates(Arc::new(roots))
-            .with_client_auth_cert(certs, keys[0].clone_key())
-            .map_err(|e| ApiError::SslConfig(format!("Failed to configure TLS: {}", e)))?;
-
-        crypto_builder.enable_early_data = true;
-        crypto_builder.enable_sni = true;
-        crypto_builder.alpn_protocols = vec![ALPN.into()];
-
-        // Create QUIC client config
-        let client_config = quinn::ClientConfig::new(Arc::new(
-            quinn::crypto::rustls::QuicClientConfig::try_from(crypto_builder)
-                .map_err(|e| ApiError::Http3(format!("Failed to create QUIC config: {}", e)))?,
-        ));
-        let mut endpoint = Endpoint::client("[::]:0".parse().unwrap())
-            .map_err(|e| ApiError::Http3(format!("Failed to create endpoint: {}", e)))?;
-
-        endpoint.set_default_client_config(client_config);
-
-        Ok(Self { config, endpoint })
+        Ok(Self { config, client })
     }
 
-    /// Send a request to the Hessra service using HTTP/3
+    /// Send a request to the Hessra service
     pub async fn send_request<T, R>(&self, endpoint: &str, request_body: &T) -> Result<R, ApiError>
     where
         T: Serialize,
         R: for<'de> Deserialize<'de>,
     {
-        println!("Sending request over HTTP/3");
-        use bytes::Buf;
-        use bytes::Bytes;
-        use futures::future;
-        use h3_quinn::Connection;
-        use http::{Method, Request, StatusCode};
-        use url::Url;
+        let base_url = self.config.get_base_url();
+        let url = format!("https://{}/{}", base_url, endpoint);
 
-        let base_url = Url::parse(&self.config.get_base_url())
-            .map_err(|e| ApiError::Http3(format!("Failed to parse base URL: {}", e)))?;
-        let Some(host) = base_url.host_str() else {
-            return Err(ApiError::Http3(
-                "Failed to parse base URL: no host".to_string(),
-            ));
-        };
-
-        let server_name = self.config.base_url.clone();
-        let port = self.config.port.unwrap_or(443);
-
-        println!("Looking up host: {}", host);
-        let addr = tokio::net::lookup_host((host, port))
+        let response = self
+            .client
+            .post(&url)
+            .version(http::Version::HTTP_3)
+            .json(request_body)
+            .send()
             .await
-            .map_err(|e| ApiError::Http3(format!("Failed to lookup host: {}", e)))?
-            .next()
-            .ok_or(ApiError::Http3("dns found no addresses".to_string()))?;
+            .map_err(ApiError::HttpClient)?;
 
-        // Connect to server
-        println!("Connecting to server: {}", server_name);
-        let connecting = self
-            .endpoint
-            .connect(addr, &server_name)
-            .map_err(|e| ApiError::Http3(format!("Failed to connect: {}", e)))?;
-
-        let connection = connecting
-            .await
-            .map_err(|e| ApiError::Http3(format!("Connection failed: {}", e)))?;
-
-        println!("Establishing HTTP/3 connection");
-        // Establish an HTTP/3 connection
-        let h3_conn = Connection::new(connection);
-        let (mut driver, mut send_request) = h3::client::new(h3_conn)
-            .await
-            .map_err(|e| ApiError::Http3(format!("H3 connection failed: {}", e)))?;
-
-        println!("Spawning driver to process connection events");
-        // Spawn the driver to process connection events
-        let _drive = async move {
-            future::poll_fn(|cx| driver.poll_close(cx)).await?;
-            Ok::<(), Box<dyn std::error::Error>>(())
-        };
-
-        // Create the request
-        let url = match self.config.port {
-            Some(443) => format!("https://{}/{}", host, endpoint),
-            Some(port) => format!("https://{}:{}/{}", host, port, endpoint),
-            None => format!("https://{}/{}", host, endpoint),
-        };
-        let body = serde_json::to_vec(request_body)
-            .map_err(|e| ApiError::Internal(format!("Failed to serialize request: {}", e)))?;
-
-        println!("Building request");
-        let request = Request::builder()
-            .method(Method::POST)
-            .uri(url)
-            .header("content-type", "application/json")
-            .body(())
-            .map_err(|e| ApiError::Http3(format!("Failed to build request: {}", e)))?;
-
-        println!("Sending request");
-        // Send the request
-        let mut send_stream = send_request
-            .send_request(request)
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to send request: {}", e)))?;
-
-        println!("Sending request body");
-        send_stream
-            .send_data(Bytes::from(body))
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to send request body: {}", e)))?;
-
-        send_stream
-            .finish()
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to finish request: {}", e)))?;
-
-        println!("Receiving response");
-        // Read the response
-        let response = send_stream
-            .recv_response()
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to receive response: {}", e)))?;
-
-        let status = response.status();
-
-        if status != StatusCode::OK {
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
             return Err(ApiError::InvalidResponse(format!(
-                "HTTP/3 error: {}",
-                status
+                "HTTP error: {} - {}",
+                status, error_text
             )));
         }
 
-        // Read response body
-        let mut body = Vec::new();
-        let mut recv_stream = send_stream;
-
-        while let Some(mut data) = recv_stream
-            .recv_data()
+        let result = response
+            .json::<R>()
             .await
-            .map_err(|e| ApiError::Http3(format!("Failed to receive data: {}", e)))?
-        {
-            body.extend_from_slice(data.chunk());
-            data.advance(data.remaining());
-        }
-
-        // Parse the response
-        let result = serde_json::from_slice::<R>(&body)
             .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
 
         Ok(result)
@@ -571,6 +416,7 @@ impl HessraClient {
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
         let client = reqwest::ClientBuilder::new()
+            .use_rustls_tls()
             .add_root_certificate(cert_der)
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
@@ -612,142 +458,48 @@ impl HessraClient {
         port: Option<u16>,
         server_ca: impl Into<String>,
     ) -> Result<String, ApiError> {
-        println!("Fetching public key over HTTP/3");
-        use bytes::Buf;
-        use h3_quinn::Connection;
-        use http::{Method, Request, StatusCode};
-        use quinn::Endpoint;
-        use rustls::pki_types::CertificateDer;
-        use rustls_pemfile::Item;
-        use std::io::Cursor;
-        use std::sync::Arc;
-        use url::Url;
+        let base_url = base_url.into();
+        let server_ca = server_ca.into();
 
-        let base_url = Url::parse(&base_url.into())
-            .map_err(|e| ApiError::Http3(format!("Failed to parse base URL: {}", e)))?;
-        let Some(host) = base_url.host_str() else {
-            return Err(ApiError::Http3(
-                "Failed to parse base URL: no host".to_string(),
-            ));
+        // Create a regular reqwest client (no mTLS)
+        let cert_pem = server_ca.as_bytes();
+        let cert_der = reqwest::Certificate::from_pem(cert_pem)
+            .map_err(|e| ApiError::SslConfig(e.to_string()))?;
+
+        let client = reqwest::ClientBuilder::new()
+            .use_rustls_tls()
+            .add_root_certificate(cert_der)
+            .http3_prior_knowledge()
+            .build()
+            .map_err(|e| ApiError::SslConfig(e.to_string()))?;
+
+        // Format the URL
+        let url = match port {
+            Some(port) => format!("https://{}:{}/public_key", base_url, port),
+            None => format!("https://{}/public_key", base_url),
         };
 
-        let server_ca = server_ca.into();
-        let port = port.unwrap_or(443);
-
-        // Parse server CA certificate
-        let mut server_ca_pem = Cursor::new(server_ca.as_bytes());
-        let mut roots = rustls::RootCertStore::empty();
-        for item in rustls_pemfile::read_all(&mut server_ca_pem) {
-            match item {
-                Ok(Item::X509Certificate(cert)) => roots.add(CertificateDer::from(cert))?,
-                _ => {}
-            }
-        }
-
-        if roots.is_empty() {
-            return Err(ApiError::SslConfig(
-                "Failed to parse server CA certificate".into(),
-            ));
-        }
-
-        // Build client crypto config
-        let mut crypto_builder = rustls::ClientConfig::builder()
-            .with_root_certificates(Arc::new(roots))
-            .with_no_client_auth();
-
-        crypto_builder.enable_early_data = true;
-        crypto_builder.enable_sni = true;
-        crypto_builder.alpn_protocols = vec![ALPN.into()];
-
-        // Create QUIC client config
-        let client_config = quinn::ClientConfig::new(Arc::new(
-            quinn::crypto::rustls::QuicClientConfig::try_from(crypto_builder)
-                .map_err(|e| ApiError::Http3(format!("Failed to create QUIC config: {}", e)))?,
-        ));
-        let mut endpoint = Endpoint::client("[::]:0".parse().unwrap())
-            .map_err(|e| ApiError::Http3(format!("Failed to create endpoint: {}", e)))?;
-
-        endpoint.set_default_client_config(client_config);
-
-        // Connect to server
-        let connecting = endpoint
-            .connect(
-                tokio::net::lookup_host((host, port))
-                    .await
-                    .map_err(|e| ApiError::Http3(format!("Failed to lookup host: {}", e)))?
-                    .next()
-                    .ok_or(ApiError::Http3("dns found no addresses".to_string()))?,
-                &host,
-            )
-            .map_err(|e| ApiError::Http3(format!("Failed to connect: {}", e)))?;
-
-        let connection = connecting
+        // Make the request
+        let response = client
+            .get(&url)
+            .version(http::Version::HTTP_3)
+            .send()
             .await
-            .map_err(|e| ApiError::Http3(format!("Connection failed: {}", e)))?;
+            .map_err(ApiError::HttpClient)?;
 
-        // Establish an HTTP/3 connection
-        let h3_conn = Connection::new(connection);
-        let (mut driver, mut send_request) = h3::client::new(h3_conn)
-            .await
-            .map_err(|e| ApiError::Http3(format!("H3 connection failed: {}", e)))?;
-
-        // Spawn the driver to process connection events
-        tokio::spawn(async move {
-            if let Err(e) = futures::future::poll_fn(|cx| driver.poll_close(cx)).await {
-                eprintln!("HTTP/3 driver error: {}", e);
-            }
-        });
-
-        // Create the request
-        let url = format!("https://{}:{}/public_key", host, port);
-
-        let request = Request::builder()
-            .method(Method::GET)
-            .uri(url)
-            .body(())
-            .map_err(|e| ApiError::Http3(format!("Failed to build request: {}", e)))?;
-
-        // Send the request
-        let mut send_stream = send_request
-            .send_request(request)
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to send request: {}", e)))?;
-
-        send_stream
-            .finish()
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to finish request: {}", e)))?;
-
-        // Read the response
-        let response = send_stream
-            .recv_response()
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to receive response: {}", e)))?;
-
-        let status = response.status();
-
-        if status != StatusCode::OK {
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
             return Err(ApiError::InvalidResponse(format!(
-                "HTTP/3 error: {}",
-                status
+                "HTTP error: {} - {}",
+                status, error_text
             )));
         }
 
-        // Read response body
-        let mut body = Vec::new();
-        let mut recv_stream = send_stream;
-
-        while let Some(mut data) = recv_stream
-            .recv_data()
-            .await
-            .map_err(|e| ApiError::Http3(format!("Failed to receive data: {}", e)))?
-        {
-            body.extend_from_slice(data.chunk());
-            data.advance(data.remaining());
-        }
-
         // Parse the response
-        let result = serde_json::from_slice::<PublicKeyResponse>(&body)
+        let result = response
+            .json::<PublicKeyResponse>()
+            .await
             .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
 
         Ok(result.public_key)
@@ -874,112 +626,27 @@ impl HessraClient {
             }
             #[cfg(feature = "http3")]
             HessraClient::Http3(client) => {
-                println!("Getting public key over HTTP/3");
-                use bytes::Buf;
-                use h3_quinn::Connection;
-                use http::{Method, Request, StatusCode};
-                use url::Url;
+                let base_url = client.config.get_base_url();
+                let full_url = format!("https://{}/{}", base_url, url_path);
 
-                let base_url = Url::parse(&client.config.get_base_url())
-                    .map_err(|e| ApiError::Http3(format!("Failed to parse base URL: {}", e)))?;
-                let Some(host) = base_url.host_str() else {
-                    return Err(ApiError::Http3(
-                        "Failed to parse base URL: no host".to_string(),
-                    ));
-                };
-                let server_name = host.to_string();
-                let port = client.config.port.unwrap_or(443);
-
-                println!("Connecting to server: {}", server_name);
-                // Connect to server
-                let connecting = client
-                    .endpoint
-                    .connect(
-                        tokio::net::lookup_host((host, port))
-                            .await
-                            .map_err(|e| ApiError::Http3(format!("Failed to lookup host: {}", e)))?
-                            .next()
-                            .ok_or(ApiError::Http3("dns found no addresses".to_string()))?,
-                        &server_name,
-                    )
-                    .map_err(|e| ApiError::Http3(format!("Failed to connect: {}", e)))?;
-
-                println!("Connection established");
-                let connection = connecting
+                let response = client
+                    .client
+                    .get(&full_url)
+                    .version(http::Version::HTTP_3)
+                    .send()
                     .await
-                    .map_err(|e| ApiError::Http3(format!("Connection failed: {}", e)))?;
+                    .map_err(ApiError::HttpClient)?;
 
-                println!("Establishing HTTP/3 connection");
-                // Establish an HTTP/3 connection
-                let h3_conn = Connection::new(connection);
-                let (mut driver, mut send_request) = h3::client::new(h3_conn)
-                    .await
-                    .map_err(|e| ApiError::Http3(format!("H3 connection failed: {}", e)))?;
-
-                println!("Spawning driver to process connection events");
-                // Spawn the driver to process connection events
-                tokio::spawn(async move {
-                    if let Err(e) = futures::future::poll_fn(|cx| driver.poll_close(cx)).await {
-                        eprintln!("HTTP/3 driver error: {}", e);
-                    }
-                });
-
-                // Create the request
-                let url = format!("https://{}/{}", host, url_path);
-
-                let request = Request::builder()
-                    .method(Method::GET)
-                    .uri(url)
-                    .body(())
-                    .map_err(|e| ApiError::Http3(format!("Failed to build request: {}", e)))?;
-
-                println!("Sending request");
-                // Send the request
-                let mut send_stream = send_request
-                    .send_request(request)
-                    .await
-                    .map_err(|e| ApiError::Http3(format!("Failed to send request: {}", e)))?;
-
-                println!("Sending request body");
-                send_stream
-                    .finish()
-                    .await
-                    .map_err(|e| ApiError::Http3(format!("Failed to finish request: {}", e)))?;
-
-                println!("Receiving response");
-                // Read the response
-                let response = send_stream
-                    .recv_response()
-                    .await
-                    .map_err(|e| ApiError::Http3(format!("Failed to receive response: {}", e)))?;
-
-                println!("Response received");
-                let status = response.status();
-
-                if status != StatusCode::OK {
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let error_text = response.text().await.unwrap_or_default();
                     return Err(ApiError::InvalidResponse(format!(
-                        "HTTP/3 error: {}",
-                        status
+                        "HTTP error: {} - {}",
+                        status, error_text
                     )));
                 }
 
-                println!("Reading response body");
-                // Read response body
-                let mut body = Vec::new();
-                let mut recv_stream = send_stream;
-
-                while let Some(mut data) = recv_stream
-                    .recv_data()
-                    .await
-                    .map_err(|e| ApiError::Http3(format!("Failed to receive data: {}", e)))?
-                {
-                    body.extend_from_slice(data.chunk());
-                    data.advance(data.remaining());
-                }
-
-                println!("Parsing response");
-                // Parse the response
-                serde_json::from_slice::<PublicKeyResponse>(&body).map_err(|e| {
+                response.json::<PublicKeyResponse>().await.map_err(|e| {
                     ApiError::InvalidResponse(format!("Failed to parse response: {}", e))
                 })?
             }
