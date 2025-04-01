@@ -15,22 +15,25 @@ This crate integrates functionality from these component crates:
 ### Creating a Client
 
 ```rust
-use hessra_sdk::{HessraClient, Protocol};
+use hessra_sdk::{Hessra, Protocol};
 
 // Basic client setup
-let client = HessraClient::builder()
+let client = Hessra::builder()
     .base_url("yourco.hessra.net")
     .protocol(Protocol::Http1)
     .build()?;
 
 // More complete setup with mTLS certificates
-let secure_client = HessraClient::builder()
+let mut secure_client = Hessra::builder()
     .base_url("yourco.hessra.net")
     .protocol(Protocol::Http1)
     .mtls_cert(include_str!("certs/client.crt"))
     .mtls_key(include_str!("certs/client.key"))
     .server_ca(include_str!("certs/ca.crt"))
     .build()?;
+// Finishes setting up the client by making API calls to the Hessra
+// service for its token signing public key
+secure_client.setup()?;
 
 // Loading from environment variables
 let env_client = HessraClient::from_env()?;
@@ -46,24 +49,27 @@ let file_client = HessraClient::from_file("path/to/config.json")?;
 let token = client.request_token("resource_name").await?;
 println!("Token: {}", token);
 
-// Simple token verification
+// Simple token verification. Tries locally then fallsback to service API
 let verification = client.verify_token(token.clone(), "resource_name").await?;
 println!("Valid: {}", verification.is_valid);
 
 // Local token verification (using cached public keys)
 let local_verification = client.verify_token_local(token.clone(), "resource_name")?;
 println!("Valid locally: {}", local_verification.is_valid);
-
-// Update public keys cache for local verification
-client.update_public_keys().await?;
 ```
 
-### Advanced: Service Chain Attestation
+### Advanced: Service Chain Authorization
 
 For services that need to verify tokens passed through multiple services:
 
 ```rust
 use hessra_sdk::{ServiceChain, ServiceNode};
+
+// gateway-service adds attenuation
+gateway_token = gateway_client.attenuate_service_chain_token(token, "data:read");
+
+// processing-service adds attenuation
+processing_token = processing_client.attenuate_service_chain_token(gateway_token, "data:read");
 
 // Define the service chain (order matters!)
 let service_chain = ServiceChain::builder()
@@ -78,8 +84,10 @@ let service_chain = ServiceChain::builder()
     .build();
 
 // Verify a token with the service chain
+// This token is only valid if it has visited and been attenuated by
+// the gateway-service and processing-service.
 client.verify_service_chain_token(
-    token,
+    processing_token,
     "user:123",
     "data:read",
     &service_chain,
@@ -88,7 +96,7 @@ client.verify_service_chain_token(
 
 // Local verification of service chain token
 client.verify_service_chain_token_local(
-    token,
+    processing_token,
     "user:123",
     "data:read",
     &service_chain,
@@ -116,26 +124,14 @@ fn handle_token(token: &str) -> Result<(), HessraError> {
 
 ## Feature Flags
 
-- `http3`: Enables HTTP/3 protocol support via the `hessra-api` crate
+Note: http3 support is currently unstable since it relies on reqwest's implementation which
+is also unstable. Once reqwest's http3 is stable, it will be here too.
+
+WASM support is currently a WIP.
+
 - `toml`: Enables TOML configuration file support via the `hessra-config` crate
+- `http3`: Enables HTTP/3 protocol support via the `hessra-api` crate
 - `wasm`: Enables WebAssembly support for token verification via the `hessra-token` crate
-
-## Advanced Configuration
-
-### Customizing HTTP Clients
-
-```rust
-use hessra_sdk::{HessraClient, Protocol};
-use std::time::Duration;
-
-let client = HessraClient::builder()
-    .base_url("yourco.hessra.net")
-    .protocol(Protocol::Http1)
-    .timeout(Duration::from_secs(30))
-    .retry_attempts(3)
-    .retry_backoff(Duration::from_millis(100))
-    .build()?;
-```
 
 ### Using HTTP/3
 
@@ -149,6 +145,9 @@ let client = HessraClient::builder()
     .protocol(Protocol::Http3)
     .build()?;
 ```
+
+requires building with `RUSTFLAGS='--cfg reqwest_unstable'`
+Once reqwest http3 support is stable, this won't be necessary.
 
 ## License
 

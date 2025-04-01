@@ -52,7 +52,7 @@ Add the SDK to your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-sdk = "0.5.0"
+hessra-sdk = "0.5.1"
 ```
 
 ### Feature Flags
@@ -61,14 +61,17 @@ Enable optional features based on your needs:
 
 ```toml
 [dependencies]
-hessra-sdk = { version = "0.5.0", features = ["http3", "toml", "wasm"] }
+hessra-sdk = { version = "0.5.1", features = ["http3", "toml", "wasm"] }
 ```
 
 Available features:
 
-- **http3**: Enables HTTP/3 protocol support for improved performance
+- **http3**: Enables HTTP/3 protocol support for improved performance (unstable)
 - **toml**: Enables configuration loading from TOML files
-- **wasm**: Enables WebAssembly support for token verification
+- **wasm**: Enables WebAssembly support for token verification and service configuration (currently WIP)
+
+HTTP3 requires building with `RUSTFLAGS='--cfg reqwest_unstable'`
+Once reqwest http3 support is stable, this won't be necessary.
 
 ## Configuration
 
@@ -81,32 +84,39 @@ The SDK offers multiple ways to configure the client:
 
 ## Service Chain Attestation
 
-For multi-service scenarios, you can use service chain attestation:
+For multi-service scenarios, you can use service chain attenuation:
 
 ```rust
 use hessra_sdk::{ServiceChain, ServiceNode};
 
-// Create a service chain
+// gateway-service adds attenuation
+gateway_token = gateway_client.attenuate_service_chain_token(token, "data:read");
+
+// processing-service adds attenuation
+processing_token = processing_client.attenuate_service_chain_token(gateway_token, "data:read");
+
+// Define the service chain (order matters!)
 let service_chain = ServiceChain::builder()
     .add_node(ServiceNode {
-        component: "service1",
+        component: "gateway-service",
         public_key: "ed25519/abcdef1234567890",
     })
     .add_node(ServiceNode {
-        component: "service2",
+        component: "processing-service",
         public_key: "ed25519/0987654321fedcba",
     })
     .build();
 
-// Verify a token with service chain attestation
-client.verify_service_chain_token_local(
-    token,
-    "subject",
-    "resource",
+// Verify a token with the service chain
+// This token is only valid if it has visited and been attenuated by
+// the gateway-service and processing-service.
+client.verify_service_chain_token(
+    processing_token,
+    "user:123",
+    "data:read",
     &service_chain,
     None,
-)?;
-```
+).await?;
 
 ## Examples
 
@@ -127,3 +137,4 @@ For detailed API documentation:
 ## License
 
 This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
+```
