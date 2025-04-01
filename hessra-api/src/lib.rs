@@ -13,7 +13,6 @@
 //! - Implementation of all Hessra API endpoints
 //! - Mutual TLS (mTLS) for secure client authentication
 
-use bytes::Buf;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -47,6 +46,7 @@ pub enum ApiError {
     #[error("HTTP/3 error: {0}")]
     Http3(String),
 
+    #[cfg(feature = "http3")]
     #[error("Rustls error: {0}")]
     Rustls(#[from] rustls::Error),
 }
@@ -304,6 +304,7 @@ impl Http3Client {
         R: for<'de> Deserialize<'de>,
     {
         println!("Sending request over HTTP/3");
+        use bytes::Buf;
         use bytes::Bytes;
         use futures::future;
         use h3_quinn::Connection;
@@ -612,6 +613,7 @@ impl HessraClient {
         server_ca: impl Into<String>,
     ) -> Result<String, ApiError> {
         println!("Fetching public key over HTTP/3");
+        use bytes::Buf;
         use h3_quinn::Connection;
         use http::{Method, Request, StatusCode};
         use quinn::Endpoint;
@@ -873,6 +875,7 @@ impl HessraClient {
             #[cfg(feature = "http3")]
             HessraClient::Http3(client) => {
                 println!("Getting public key over HTTP/3");
+                use bytes::Buf;
                 use h3_quinn::Connection;
                 use http::{Method, Request, StatusCode};
                 use url::Url;
