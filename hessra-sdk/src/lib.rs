@@ -222,6 +222,35 @@ impl Hessra {
         HessraBuilder::new()
     }
 
+    /// Setup the SDK with the public key
+    ///
+    /// This will fetch the public key from the Hessra service and set it in the SDK configuration.
+    /// If the public key is already set, it will be overwritten.
+    /// Requires a mutable reference to the SDK instance.
+    pub async fn setup(&mut self) -> Result<(), SdkError> {
+        match self.get_public_key().await {
+            Ok(public_key) => {
+                self.config.public_key = Some(public_key);
+                Ok(())
+            }
+            Err(e) => Err(SdkError::Generic(e.to_string())),
+        }
+    }
+
+    /// Setup the SDK with the public key and return a new instance
+    ///
+    /// This will fetch the public key from the Hessra service and set it in the SDK configuration.
+    /// If the public key is already set, it will be overwritten.
+    pub async fn with_setup(&self) -> Result<Self, SdkError> {
+        match self.get_public_key().await {
+            Ok(public_key) => {
+                let config = self.config.to_builder().public_key(public_key).build()?;
+                Ok(Self::new(config)?)
+            }
+            Err(e) => Err(SdkError::Generic(e.to_string())),
+        }
+    }
+
     /// Request a token for a resource
     pub async fn request_token(&self, resource: impl Into<String>) -> Result<String, SdkError> {
         self.client
@@ -267,7 +296,7 @@ impl Hessra {
     /// Verify a token locally using cached public keys
     pub fn verify_token_local(
         &self,
-        token: impl AsRef<[u8]>,
+        token: impl Into<String>,
         subject: impl AsRef<str>,
         resource: impl AsRef<str>,
     ) -> Result<(), SdkError> {
@@ -276,10 +305,12 @@ impl Hessra {
             None => return Err(SdkError::Generic("Public key not configured".to_string())),
         };
 
-        let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
+        //let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
+        let public_key = PublicKey::from_pem(public_key_str.as_str())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
 
         // Convert token to Vec<u8>
-        let token_vec = token.as_ref().to_vec();
+        let token_vec = decode_token(&token.into())?;
 
         verify_biscuit_local(
             token_vec,

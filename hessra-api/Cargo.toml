@@ -13,19 +13,21 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 reqwest = { workspace = true }
-tokio = { version = "1.0", features = ["rt", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
 base64 = { workspace = true }
 chrono = { workspace = true }
 
 # Optional HTTP/3 dependencies
-h3 = { version = "0.0.2", optional = true }
-h3-quinn = { version = "0.0.3", optional = true }
-quinn = { version = "0.9", optional = true }
-quinn-proto = { version = "0.9", optional = true }
-rustls = { version = "0.21", optional = true }
-rustls-pemfile = { version = "1.0", optional = true }
-bytes = { version = "1.0", optional = true }
-http = { version = "0.2", optional = true }
+h3 = { version = "0.0.7", optional = true }
+h3-quinn = { version = "0.0.9", optional = true }
+quinn = { version = "0.11", optional = true }
+quinn-proto = { version = "0.11", optional = true }
+rustls = { version = "0.23", optional = true }
+rustls-pemfile = { version = "2", optional = true }
+bytes = { version = "1", optional = true }
+http = { version = "1.3", optional = true }
+futures = { version = "0.3", optional = true }
+url = { version = "2", optional = true }
 
 [features]
 default = []
@@ -37,7 +39,10 @@ http3 = [
     "rustls", 
     "rustls-pemfile", 
     "bytes", 
-    "http"
+    "http",
+    "futures",
+    "hessra-config/http3",
+    "url"
 ] 
 
 [[example]]
