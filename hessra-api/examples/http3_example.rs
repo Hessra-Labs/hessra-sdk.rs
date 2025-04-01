@@ -8,20 +8,30 @@
 use hessra_api::HessraClient;
 use hessra_config::{HessraConfig, Protocol};
 
+static BASE_URL: &str = "test.hessra.net";
+static PORT: u16 = 443;
+static MTLS_CERT: &str = include_str!("../../certs/client.crt");
+static MTLS_KEY: &str = include_str!("../../certs/client.key");
+static SERVER_CA: &str = include_str!("../../certs/ca-2030.pem");
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    // Load configuration from environment variables
-    let mut config = HessraConfig::from_env("HESSRA")?;
-
-    // Set protocol to HTTP/3
-    config.protocol = Protocol::Http3;
+    // Create a configuration
+    let config = HessraConfig::builder()
+        .base_url(BASE_URL)
+        .port(PORT)
+        .mtls_cert(MTLS_CERT)
+        .mtls_key(MTLS_KEY)
+        .server_ca(SERVER_CA)
+        .protocol(Protocol::Http3)
+        .build()?;
 
     // Create a client using the configuration
     println!("Creating HTTP/3 client");
     let client = HessraClient::builder().from_config(&config).build()?;
 
     // Request a token for a resource
-    let resource = "example-resource".to_string();
+    let resource = "resource1".to_string();
     println!("Requesting token for resource: {}", resource);
 
     let token = match client.request_token(resource.clone()).await {
@@ -35,8 +45,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         }
     };
 
-    // Verify the token
-    let subject = "example-user".to_string();
+    // Verify the token, this will verify using the remote authorization
+    // service API since the service's public key is not known yet to the client
+    let subject = "uri:urn:test:argo-cli0".to_string();
     println!(
         "Verifying token for subject: {} and resource: {}",
         subject, resource

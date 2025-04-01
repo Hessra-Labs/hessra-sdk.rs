@@ -1,174 +1,155 @@
 # Hessra SDK
 
-A Rust client library for interacting with Hessra authentication services.
+The primary interface for interacting with Hessra authentication services.
 
-## Project Structure
+## API Reference
 
-The Hessra SDK has been refactored into modular components:
-
-- **hessra-config**: Configuration management
-- **hessra-token**: Token verification and attestation
-- **hessra-api**: HTTP client for the Hessra service
-- **hessra-sdk**: Main SDK that pulls everything together
-
-## Examples and Tests Organization
-
-### Tests
-
-Tests should be organized as follows:
-
-1. **Component-specific tests**:
-
-   - Each component has its own tests in `<component-name>/tests/`
-   - Example: `hessra-config/tests/config_test.rs`
-
-2. **Integration tests**:
-   - Tests that verify multiple components working together should be in `hessra-sdk/tests/`
-   - Example: `hessra-sdk/tests/integration_test.rs`
-
-### Examples
-
-Examples should be organized as follows:
-
-1. **Component-specific examples**:
-
-   - Each component has its own examples in `<component-name>/examples/`
-   - Example: `hessra-config/examples/config_methods.rs`
-
-2. **SDK examples**:
-   - Examples showcasing the full SDK functionality should be in `hessra-sdk/examples/`
-   - These demonstrate how to use multiple components together
-
-## Usage
-
-### Configuration
-
-```rust
-use hessra_config::{HessraConfig, Protocol};
-
-// Create a configuration with the builder pattern
-let config = HessraConfig::builder()
-    .base_url("https://test.hessra.example.com")
-    .port(8443)
-    .protocol(Protocol::Http1)
-    .mtls_cert("-----BEGIN CERTIFICATE-----\nCERT CONTENT\n-----END CERTIFICATE-----")
-    .mtls_key("-----BEGIN PRIVATE KEY-----\nKEY CONTENT\n-----END PRIVATE KEY-----")
-    .server_ca("-----BEGIN CERTIFICATE-----\nCA CONTENT\n-----END CERTIFICATE-----")
-    .build()
-    .expect("Failed to build config");
-```
-
-### Using the SDK
-
-```rust
-use hessra_sdk::{Hessra, ServiceChain, ServiceNode};
-
-// Create an SDK instance
-let hessra = Hessra::new(config)
-    .expect("Failed to create SDK instance");
-
-// Request a token
-let token = hessra.request_token("resource_name")
-    .await
-    .expect("Failed to request token");
-
-// Verify a token
-hessra.verify_token(token, "subject", "resource")
-    .await
-    .expect("Failed to verify token");
-```
-
-## Service Chain Attestation
-
-```rust
-// Create a service chain
-let service_chain = ServiceChain::builder()
-    .add_node(ServiceNode {
-        component: "service1",
-        public_key: "ed25519/abcdef1234567890",
-    })
-    .add_node(ServiceNode {
-        component: "service2",
-        public_key: "ed25519/0987654321fedcba",
-    })
-    .build();
-
-// Verify a token with service chain attestation
-hessra.verify_service_chain_token_local(
-    token,
-    "subject",
-    "resource",
-    &service_chain,
-    None,
-).expect("Failed to verify service chain token");
-```
-
-## Feature Flags
-
-- `http3`: Enables HTTP/3 protocol support
-- `toml`: Enables configuration loading from TOML files
-- `wasm`: Enables WebAssembly support for token verification
-
-## Overview
-
-This crate provides a unified interface for interacting with Hessra authentication services, combining functionality from three component crates:
+This crate integrates functionality from these component crates:
 
 - `hessra-token`: Token verification and attestation
 - `hessra-config`: Configuration management
 - `hessra-api`: HTTP client for the Hessra service
 
-The SDK enables applications to request, verify, and attest authorization tokens for protected resources using mutual TLS (mTLS) for secure client authentication.
+## Detailed Usage
 
-## Features
+### Creating a Client
 
-- **Flexible configuration**: Load configuration from various sources (environment variables, files, etc.)
-- **Protocol support**: HTTP/1.1 support with optional HTTP/3 via feature flag
-- **Mutual TLS**: Strong security with client and server certificate validation
-- **Token management**: Request and verify authorization tokens
-- **Local verification**: Retrieve and store public keys for local token verification
-- **Service chains**: Support for service chain attestation and verification
+```rust
+use hessra_sdk::{HessraClient, Protocol};
 
-## Installation
+// Basic client setup
+let client = HessraClient::builder()
+    .base_url("yourco.hessra.net")
+    .protocol(Protocol::Http1)
+    .build()?;
 
-Add the Hessra SDK to your `Cargo.toml`:
+// More complete setup with mTLS certificates
+let secure_client = HessraClient::builder()
+    .base_url("yourco.hessra.net")
+    .protocol(Protocol::Http1)
+    .mtls_cert(include_str!("certs/client.crt"))
+    .mtls_key(include_str!("certs/client.key"))
+    .server_ca(include_str!("certs/ca.crt"))
+    .build()?;
 
-```toml
-[dependencies]
-hessra-sdk = "0.1.0"
+// Loading from environment variables
+let env_client = HessraClient::from_env()?;
+
+// Loading from a configuration file
+let file_client = HessraClient::from_file("path/to/config.json")?;
 ```
 
-## Component Libraries
+### Working with Tokens
 
-This SDK integrates the following component libraries:
+```rust
+// Request a token
+let token = client.request_token("resource_name").await?;
+println!("Token: {}", token);
 
-1. **hessra-token**: Token verification library
+// Simple token verification
+let verification = client.verify_token(token.clone(), "resource_name").await?;
+println!("Valid: {}", verification.is_valid);
 
-   - Token verification and attestation
-   - No networking dependencies
-   - WASM-compatible
+// Local token verification (using cached public keys)
+let local_verification = client.verify_token_local(token.clone(), "resource_name")?;
+println!("Valid locally: {}", local_verification.is_valid);
 
-2. **hessra-config**: Configuration management
-
-   - Load from files, environment variables, etc.
-   - Configuration validation
-
-3. **hessra-api**: API client
-   - HTTP/1.1 and HTTP/3 support
-   - mTLS connection management
-
-## Documentation
-
-For detailed API documentation, run:
-
+// Update public keys cache for local verification
+client.update_public_keys().await?;
 ```
-cargo doc --open
+
+### Advanced: Service Chain Attestation
+
+For services that need to verify tokens passed through multiple services:
+
+```rust
+use hessra_sdk::{ServiceChain, ServiceNode};
+
+// Define the service chain (order matters!)
+let service_chain = ServiceChain::builder()
+    .add_node(ServiceNode {
+        component: "gateway-service",
+        public_key: "ed25519/abcdef1234567890",
+    })
+    .add_node(ServiceNode {
+        component: "processing-service",
+        public_key: "ed25519/0987654321fedcba",
+    })
+    .build();
+
+// Verify a token with the service chain
+client.verify_service_chain_token(
+    token,
+    "user:123",
+    "data:read",
+    &service_chain,
+    None,
+).await?;
+
+// Local verification of service chain token
+client.verify_service_chain_token_local(
+    token,
+    "user:123",
+    "data:read",
+    &service_chain,
+    None,
+)?;
+```
+
+### Error Handling
+
+The SDK provides a comprehensive error handling system:
+
+```rust
+use hessra_sdk::error::HessraError;
+
+fn handle_token(token: &str) -> Result<(), HessraError> {
+    match client.verify_token_local(token, "resource")? {
+        verification if verification.is_valid => {
+            println!("Token is valid!");
+            Ok(())
+        }
+        _ => Err(HessraError::InvalidToken("Invalid token".to_string())),
+    }
+}
+```
+
+## Feature Flags
+
+- `http3`: Enables HTTP/3 protocol support via the `hessra-api` crate
+- `toml`: Enables TOML configuration file support via the `hessra-config` crate
+- `wasm`: Enables WebAssembly support for token verification via the `hessra-token` crate
+
+## Advanced Configuration
+
+### Customizing HTTP Clients
+
+```rust
+use hessra_sdk::{HessraClient, Protocol};
+use std::time::Duration;
+
+let client = HessraClient::builder()
+    .base_url("yourco.hessra.net")
+    .protocol(Protocol::Http1)
+    .timeout(Duration::from_secs(30))
+    .retry_attempts(3)
+    .retry_backoff(Duration::from_millis(100))
+    .build()?;
+```
+
+### Using HTTP/3
+
+When the `http3` feature is enabled:
+
+```rust
+use hessra_sdk::{HessraClient, Protocol};
+
+let client = HessraClient::builder()
+    .base_url("yourco.hessra.net")
+    .protocol(Protocol::Http3)
+    .build()?;
 ```
 
 ## License
 
-Licensed under either of
-
-- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
+Licensed under the Apache License, Version 2.0.

@@ -1,11 +1,15 @@
 [package]
 name = "hessra-token"
 version = "0.1.0"
-edition.workspace = true
-authors.workspace = true
-description = "Token verification and attestation for Hessra SDK"
-license.workspace = true
-repository.workspace = true
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Jake Valentic <jake@hessra.net>"]
+description = "Hessra biscuit token SDK for Rust"
+repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
+documentation = "https://docs.rs/hessra-token"
+keywords = ["hessra", "authorization", "rust", "sdk", "biscuit"]
+categories = ["authentication", "api-bindings", "web-programming"]
+readme = "README.md"
 
 [dependencies]
 biscuit-auth = { workspace = true }

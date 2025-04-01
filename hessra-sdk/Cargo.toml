@@ -1,11 +1,15 @@
 [package]
 name = "hessra-sdk"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-description = "Unified SDK for Hessra authentication services"
-license.workspace = true
-repository.workspace = true
+version = "0.5.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Jake Valentic <jake@hessra.net>"]
+description = "Hessra authorization service SDK for Rust"
+repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
+documentation = "https://docs.rs/hessra-sdk"
+keywords = ["hessra", "authorization", "rust", "sdk", "biscuit"]
+categories = ["authentication", "api-bindings", "web-programming"]
+readme = "README.md"
 
 [dependencies]
 hessra-token = { path = "../hessra-token", version = "0.1.0" }
@@ -24,7 +28,7 @@ wasm = ["hessra-token/wasm"]
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["full"] }
-wiremock = "0.5"
+wiremock = "0.6"
 reqwest = { version = "0.12", features = ["json"] }
 serde_json = "1.0"
 

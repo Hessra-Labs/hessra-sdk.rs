@@ -1,19 +1,26 @@
 use hessra_sdk::{Hessra, Protocol};
 use std::error::Error;
 
+static BASE_URL: &str = "test.hessra.net";
+static PORT: u16 = 443;
+static MTLS_CERT: &str = include_str!("../../certs/client.crt");
+static MTLS_KEY: &str = include_str!("../../certs/client.key");
+static SERVER_CA: &str = include_str!("../../certs/ca-2030.pem");
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize the client with HTTP/1.1
     let mut client = Hessra::builder()
-        .base_url("test.hessra.net")
-        .port(443)
-        .protocol(Protocol::Http1)
-        .mtls_cert(include_str!("../../certs/client.crt"))
-        .mtls_key(include_str!("../../certs/client.key"))
-        .server_ca(include_str!("../../certs/ca-2030.pem"))
+        .base_url(BASE_URL)
+        .port(PORT)
+        .protocol(Protocol::Http1) // This is the default protocol, so leaving it out is also valid
+        .mtls_cert(MTLS_CERT)
+        .mtls_key(MTLS_KEY)
+        .server_ca(SERVER_CA)
         .build()?;
 
     // Setup the client with the public key
+    // This will fetch the public key from the server and set it in the client
     client.setup().await?;
 
     // Request a token for a specific resource
@@ -21,7 +28,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let token = client.request_token(resource.clone()).await?;
     println!("Received token: {}", token);
 
-    // Verify the token
+    // Verify the token, this will verify the token locally since
+    // the authorization service public key is set in the client
     match client
         .verify_token(token, "uri:urn:test:argo-cli0".to_string(), resource)
         .await

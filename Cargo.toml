@@ -6,66 +6,31 @@ members = [
     "hessra-sdk",
 ]
 
+resolver = "2"
+
 [workspace.package]
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
-authors = ["Hessra"]
+authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Rust SDK for Hessra authentication services"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 repository = "https://github.com/hessra/hessra-sdk.rs"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8"
-base64 = "0.21"
+base64 = "0.22"
 biscuit-auth = { version = "6.0.0-beta.2", features = ["pem"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 chrono = "0.4"
-dirs = "5.0"
+dirs = "6.0"
 hex = "0.4"
-thiserror = "1.0"
-
-[package]
-name = "hessra"
-version = "0.4.1"
-edition = "2021"
-license = "Apache-2.0"
-authors = ["Jake Valentic <jake@hessra.net>"]
-description = "Hessra authorization service SDK for Rust"
-repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
-documentation = "https://docs.rs/hessra-sdk"
-keywords = ["hessra", "authorization", "rust", "sdk", "biscuit"]
-categories = ["authentication", "api-bindings", "web-programming"]
-readme = "README.md"
-
-[dependencies]
-base64 = "0.22"
-biscuit-auth = { version = "6.0.0-beta.2", features = ["pem"] }
-chrono = "0.4"
-hessra-macros = "0.1.0"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1.0"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-hex = "0.4"
-rustls = { version = "0.23", optional = true }
-rustls-pemfile = { version = "2.2", optional = true }
-bytes = { version = "1", optional = true }
-futures = { version = "0.3", optional = true }
+thiserror = "2"
 tokio = { version = "1.36", features = ["full"] }
 http = "1"
-toml = "0.8"
-dirs = "5.0"
-hessra-sdk = { path = "hessra-sdk", version = "0.4.1" }
 
-[dev-dependencies]
-hyper = { version = "0.14", features = ["server", "http1", "tcp", "client"] }
-tokio-util = { version = "0.7", features = ["compat", "io"] }
-mockito = "1.2"
-wiremock = "0.5"
-futures-util = "0.3"
-tempfile = "3.8"
-
-[features]
-default = []
-http3 = ["reqwest/http3"]
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

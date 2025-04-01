@@ -1,11 +1,15 @@
 [package]
 name = "hessra-api"
 version = "0.1.0"
-edition.workspace = true
-authors.workspace = true
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Jake Valentic <jake@hessra.net>"]
 description = "API client for Hessra authentication services"
-license.workspace = true
-repository.workspace = true
+repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
+documentation = "https://docs.rs/hessra-sdk"
+keywords = ["hessra", "authorization", "rust", "sdk", "biscuit"]
+categories = ["authentication", "api-bindings", "web-programming"]
+readme = "README.md"
 
 [dependencies]
 hessra-config = { path = "../hessra-config", version = "0.1.0" }
