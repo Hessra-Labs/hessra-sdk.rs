@@ -3,6 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/hessra-sdk.svg)](https://crates.io/crates/hessra-sdk)
 [![Documentation](https://docs.rs/hessra-sdk/badge.svg)](https://docs.rs/hessra-sdk)
 [![License](https://img.shields.io/crates/l/hessra-sdk.svg)](https://github.com/hessra/hessra-sdk.rs/blob/main/LICENSE)
+[![CI Status](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jcorrv/b2734fbe9a9c147a9dfdeafcdcd6c7b7/raw/hessra-sdk-rs-ci-status.json)](https://github.com/hessra/hessra-sdk.rs/actions/workflows/ci.yml)
 
 A secure, flexible Rust SDK for the Hessra authorization service, providing mTLS-backed token request and verification capabilities.
 
@@ -14,6 +15,7 @@ This repository is organized as a Rust workspace with the following components:
 - **hessra-token**: Core token verification and attestation functionality
 - **hessra-config**: Configuration management for the SDK
 - **hessra-api**: HTTP client for communicating with Hessra services
+- **hessra-ffi**: Foreign Function Interface for other languages
 
 ## Features
 
@@ -126,6 +128,18 @@ Check the [examples directory](hessra-sdk/examples/) for complete working exampl
 - HTTP/3 client usage (requires the `http3` feature)
 - Configuration loading
 - Service chain attestation
+
+## Continuous Integration
+
+This project uses GitHub Actions for continuous integration testing:
+
+- Runs unit tests across multiple platforms (Linux, macOS) and Rust versions (stable, beta, nightly)
+- Performs code linting with rustfmt and clippy
+- Executes integration tests using examples
+- Generates and publishes code coverage reports
+- Runs security audits with cargo-audit
+- Automatically builds and deploys documentation
+- Publishes to crates.io on new version tags
 
 ## Documentation
 
