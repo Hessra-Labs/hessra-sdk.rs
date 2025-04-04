@@ -148,6 +148,28 @@ HessraResult hessra_config_from_file(
  */
 void hessra_config_free(HessraConfig config);
 
+/**
+ * @brief Set public key in the configuration
+ * @param config Configuration to set the public key in
+ * @param key Public key to set
+ * @return Result code indicating success or failure
+ */
+HessraResult hessra_config_set_public_key(
+    HessraConfig config,
+    HessraPublicKey key
+);
+
+/**
+ * @brief Get public key from the configuration
+ * @param config Configuration to get the public key from
+ * @param out_key Output parameter for the retrieved public key
+ * @return Result code indicating success or failure
+ */
+HessraResult hessra_config_get_public_key(
+    HessraConfig config,
+    HessraPublicKey* out_key
+);
+
 #ifdef __cplusplus
 }
 #endif

@@ -117,9 +117,10 @@ pub struct HessraConfig {
     #[serde(default = "default_protocol")]
     pub protocol: Protocol,
     /// The server's public key for token verification
+    /// as a PEM formatted string
     #[serde(default)]
     pub public_key: Option<String>,
-    /// The personal keypair for the user in PEM format
+    /// The personal keypair for the user as a PEM formatted string
     ///
     /// This is used for service chain attestations. When acting as a node in a service chain,
     /// this keypair is used to sign attestations that this node has processed the request.

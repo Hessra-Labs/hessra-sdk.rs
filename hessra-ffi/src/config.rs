@@ -209,3 +209,83 @@ pub unsafe extern "C" fn hessra_config_free(config: HessraConfig) {
         let _ = Box::from_raw(config.0);
     }
 }
+
+/// Set public key in the configuration
+///
+/// # Arguments
+///
+/// * `config` - Configuration to set the public key in
+/// * `key` - Public key to set
+///
+/// # Returns
+///
+/// Result code indicating success or failure
+#[no_mangle]
+pub extern "C" fn hessra_config_set_public_key(
+    config: HessraConfig,
+    key: HessraPublicKey,
+) -> HessraResult {
+    if config.0.is_null() || key.0.is_null() {
+        return HessraResult::ERROR_INVALID_PARAMETER;
+    }
+
+    // Get the public key as PEM string
+    let public_key = match key.as_ref() {
+        Some(handle) => handle.inner.to_pem(),
+        None => return HessraResult::ERROR_INVALID_KEY,
+    };
+
+    match public_key {
+        Ok(pem_string) => {
+            // Get mutable reference to configuration
+            let config_handle = unsafe { &mut *config.0 };
+
+            // Set the public key in the configuration
+            config_handle.inner.public_key = Some(pem_string);
+
+            HessraResult::SUCCESS
+        }
+        Err(_) => HessraResult::ERROR_INVALID_KEY,
+    }
+}
+
+/// Get public key from the configuration
+///
+/// # Arguments
+///
+/// * `config` - Configuration to get the public key from
+/// * `out_key` - Output parameter for the retrieved public key
+///
+/// # Returns
+///
+/// Result code indicating success or failure
+#[no_mangle]
+pub extern "C" fn hessra_config_get_public_key(
+    config: HessraConfig,
+    out_key: *mut HessraPublicKey,
+) -> HessraResult {
+    if config.0.is_null() || out_key.is_null() {
+        return HessraResult::ERROR_INVALID_PARAMETER;
+    }
+
+    // Get reference to configuration
+    let config_handle = unsafe { &*config.0 };
+
+    // Get the public key PEM string from the configuration
+    let public_key_pem = match &config_handle.inner.public_key {
+        Some(key) => key,
+        None => return HessraResult::ERROR_INVALID_KEY,
+    };
+
+    // Convert the PEM string to a PublicKey
+    match hessra_token::PublicKey::from_pem(public_key_pem) {
+        Ok(key) => {
+            let hessra_key = HessraPublicKey::from_key(key);
+            unsafe {
+                *out_key = hessra_key;
+            }
+            HessraResult::SUCCESS
+        }
+        Err(_) => HessraResult::ERROR_INVALID_KEY,
+    }
+}
