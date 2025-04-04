@@ -8,11 +8,11 @@ use crate::error::HessraResult;
 #[no_mangle]
 pub extern "C" fn hessra_token_verify(
     token_string: *const c_char,
-    public_key: HessraPublicKey,
+    public_key: *mut HessraPublicKey,
     subject: *const c_char,
     resource: *const c_char,
 ) -> HessraResult {
-    if token_string.is_null() {
+    if token_string.is_null() || public_key.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
     }
 
@@ -22,7 +22,8 @@ pub extern "C" fn hessra_token_verify(
         Err(_) => return HessraResult::ERROR_INVALID_TOKEN,
     };
 
-    let public_key = match public_key.public_key() {
+    let key_ref = unsafe { &*public_key };
+    let public_key = match key_ref.public_key() {
         Some(k) => k,
         None => return HessraResult::ERROR_INVALID_KEY,
     };
@@ -59,13 +60,13 @@ pub extern "C" fn hessra_token_verify(
 #[no_mangle]
 pub extern "C" fn hessra_token_verify_service_chain(
     token_string: *const c_char,
-    public_key: HessraPublicKey,
+    public_key: *mut HessraPublicKey,
     subject: *const c_char,
     resource: *const c_char,
     service_nodes_json: *const c_char,
     component: *const c_char,
 ) -> HessraResult {
-    if token_string.is_null() || service_nodes_json.is_null() {
+    if token_string.is_null() || public_key.is_null() || service_nodes_json.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
     }
 
@@ -75,7 +76,8 @@ pub extern "C" fn hessra_token_verify_service_chain(
         Err(_) => return HessraResult::ERROR_INVALID_TOKEN,
     };
 
-    let public_key = match public_key.public_key() {
+    let key_ref = unsafe { &*public_key };
+    let public_key = match key_ref.public_key() {
         Some(k) => k,
         None => return HessraResult::ERROR_INVALID_KEY,
     };

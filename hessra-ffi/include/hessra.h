@@ -72,7 +72,7 @@ char* hessra_error_message(HessraResult result);
  */
 HessraResult hessra_token_verify(
     const char* token_string,
-    HessraPublicKey public_key,
+    HessraPublicKey* public_key,
     const char* subject,
     const char* resource
 );
@@ -89,7 +89,7 @@ HessraResult hessra_token_verify(
  */
 HessraResult hessra_token_verify_service_chain(
     const char* token_string,
-    HessraPublicKey public_key,
+    HessraPublicKey* public_key,
     const char* subject,
     const char* resource,
     const char* service_nodes_json,
@@ -104,7 +104,7 @@ HessraResult hessra_token_verify_service_chain(
  */
 HessraResult hessra_public_key_from_string(
     const char* key_string,
-    HessraPublicKey* out_key
+    HessraPublicKey** out_key
 );
 
 /**
@@ -115,21 +115,21 @@ HessraResult hessra_public_key_from_string(
  */
 HessraResult hessra_public_key_from_file(
     const char* file_path,
-    HessraPublicKey* out_key
+    HessraPublicKey** out_key
 );
 
 /**
  * @brief Free a public key
  * @param key Public key to free
  */
-void hessra_public_key_free(HessraPublicKey key);
+void hessra_public_key_free(HessraPublicKey* key);
 
 /**
  * @brief Create a new empty configuration
  * @param out_config Output parameter for the created configuration
  * @return Result code indicating success or failure
  */
-HessraResult hessra_config_new(HessraConfig* out_config);
+HessraResult hessra_config_new(HessraConfig** out_config);
 
 /**
  * @brief Load configuration from a file
@@ -139,14 +139,14 @@ HessraResult hessra_config_new(HessraConfig* out_config);
  */
 HessraResult hessra_config_from_file(
     const char* file_path,
-    HessraConfig* out_config
+    HessraConfig** out_config
 );
 
 /**
  * @brief Free a configuration
  * @param config Configuration to free
  */
-void hessra_config_free(HessraConfig config);
+void hessra_config_free(HessraConfig* config);
 
 /**
  * @brief Set public key in the configuration
@@ -155,8 +155,8 @@ void hessra_config_free(HessraConfig config);
  * @return Result code indicating success or failure
  */
 HessraResult hessra_config_set_public_key(
-    HessraConfig config,
-    HessraPublicKey key
+    HessraConfig* config,
+    HessraPublicKey* key
 );
 
 /**
@@ -166,8 +166,8 @@ HessraResult hessra_config_set_public_key(
  * @return Result code indicating success or failure
  */
 HessraResult hessra_config_get_public_key(
-    HessraConfig config,
-    HessraPublicKey* out_key
+    HessraConfig* config,
+    HessraPublicKey** out_key
 );
 
 #ifdef __cplusplus

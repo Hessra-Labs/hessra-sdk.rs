@@ -1,0 +1,71 @@
+name: Test FFI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hessra-ffi/**"
+      - ".github/workflows/test_ffi.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "hessra-ffi/**"
+      - ".github/workflows/test_ffi.yml"
+
+jobs:
+  test:
+    name: Test FFI on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            valgrind: true
+          - os: macos-latest
+            valgrind: false
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Install Valgrind (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
+      - name: Build
+        run: cargo build --verbose --manifest-path hessra-ffi/Cargo.toml
+
+      - name: Run tests
+        run: cargo test --verbose --manifest-path hessra-ffi/Cargo.toml
+
+      - name: Run examples
+        run: |
+          # Compile the C example
+          cd hessra-ffi
+          gcc -o test examples/test.c -L../target/debug -lhessra -I./include
+
+          # Run the example
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            LD_LIBRARY_PATH=../target/debug ./test
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            DYLD_LIBRARY_PATH=../target/debug ./test
+          fi
+
+      - name: Run Valgrind memory tests (Ubuntu)
+        if: matrix.valgrind
+        run: |
+          cd hessra-ffi
+          # Compile with debug symbols
+          gcc -g -o test_debug examples/test.c -L../target/debug -lhessra -I./include
+
+          # Run with valgrind
+          valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
+            --error-exitcode=1 --trace-children=yes \
+            LD_LIBRARY_PATH=../target/debug ./test_debug

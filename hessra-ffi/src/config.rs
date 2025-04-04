@@ -74,7 +74,7 @@ impl HessraConfig {
 #[no_mangle]
 pub extern "C" fn hessra_public_key_from_string(
     key_string: *const c_char,
-    out_key: *mut HessraPublicKey,
+    out_key: *mut *mut HessraPublicKey,
 ) -> HessraResult {
     if key_string.is_null() || out_key.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
@@ -89,8 +89,9 @@ pub extern "C" fn hessra_public_key_from_string(
     match hessra_token::PublicKey::from_pem(key_str) {
         Ok(key) => {
             let hessra_key = HessraPublicKey::from_key(key);
+            let boxed_key = Box::new(hessra_key);
             unsafe {
-                *out_key = hessra_key;
+                *out_key = Box::into_raw(boxed_key);
             }
             HessraResult::SUCCESS
         }
@@ -102,7 +103,7 @@ pub extern "C" fn hessra_public_key_from_string(
 #[no_mangle]
 pub extern "C" fn hessra_public_key_from_file(
     file_path: *const c_char,
-    out_key: *mut HessraPublicKey,
+    out_key: *mut *mut HessraPublicKey,
 ) -> HessraResult {
     if file_path.is_null() || out_key.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
@@ -117,8 +118,9 @@ pub extern "C" fn hessra_public_key_from_file(
     match hessra_token::public_key_from_pem_file(path_str) {
         Ok(key) => {
             let hessra_key = HessraPublicKey::from_key(key);
+            let boxed_key = Box::new(hessra_key);
             unsafe {
-                *out_key = hessra_key;
+                *out_key = Box::into_raw(boxed_key);
             }
             HessraResult::SUCCESS
         }
@@ -134,15 +136,18 @@ pub extern "C" fn hessra_public_key_from_file(
 /// by functions like `hessra_public_key_from_string` or `hessra_public_key_from_file`.
 /// The key must not have been freed before. After this call, the key is invalid and should not be used.
 #[no_mangle]
-pub unsafe extern "C" fn hessra_public_key_free(key: HessraPublicKey) {
-    if !key.0.is_null() {
-        let _ = Box::from_raw(key.0);
+pub unsafe extern "C" fn hessra_public_key_free(key: *mut HessraPublicKey) {
+    if !key.is_null() {
+        let key_ref = Box::from_raw(key);
+        if !key_ref.0.is_null() {
+            let _ = Box::from_raw(key_ref.0);
+        }
     }
 }
 
 /// Create a new empty configuration
 #[no_mangle]
-pub extern "C" fn hessra_config_new(out_config: *mut HessraConfig) -> HessraResult {
+pub extern "C" fn hessra_config_new(out_config: *mut *mut HessraConfig) -> HessraResult {
     if out_config.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
     }
@@ -158,8 +163,9 @@ pub extern "C" fn hessra_config_new(out_config: *mut HessraConfig) -> HessraResu
     {
         Ok(config) => {
             let hessra_config = HessraConfig::from_config(config);
+            let boxed_config = Box::new(hessra_config);
             unsafe {
-                *out_config = hessra_config;
+                *out_config = Box::into_raw(boxed_config);
             }
             HessraResult::SUCCESS
         }
@@ -171,7 +177,7 @@ pub extern "C" fn hessra_config_new(out_config: *mut HessraConfig) -> HessraResu
 #[no_mangle]
 pub extern "C" fn hessra_config_from_file(
     file_path: *const c_char,
-    out_config: *mut HessraConfig,
+    out_config: *mut *mut HessraConfig,
 ) -> HessraResult {
     if file_path.is_null() || out_config.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
@@ -187,8 +193,9 @@ pub extern "C" fn hessra_config_from_file(
     match hessra_config::HessraConfig::from_file(path) {
         Ok(config) => {
             let hessra_config = HessraConfig::from_config(config);
+            let boxed_config = Box::new(hessra_config);
             unsafe {
-                *out_config = hessra_config;
+                *out_config = Box::into_raw(boxed_config);
             }
             HessraResult::SUCCESS
         }
@@ -204,9 +211,12 @@ pub extern "C" fn hessra_config_from_file(
 /// by functions like `hessra_config_new` or `hessra_config_from_file`.
 /// The config must not have been freed before. After this call, the config is invalid and should not be used.
 #[no_mangle]
-pub unsafe extern "C" fn hessra_config_free(config: HessraConfig) {
-    if !config.0.is_null() {
-        let _ = Box::from_raw(config.0);
+pub unsafe extern "C" fn hessra_config_free(config: *mut HessraConfig) {
+    if !config.is_null() {
+        let config_ref = Box::from_raw(config);
+        if !config_ref.0.is_null() {
+            let _ = Box::from_raw(config_ref.0);
+        }
     }
 }
 
@@ -222,15 +232,18 @@ pub unsafe extern "C" fn hessra_config_free(config: HessraConfig) {
 /// Result code indicating success or failure
 #[no_mangle]
 pub extern "C" fn hessra_config_set_public_key(
-    config: HessraConfig,
-    key: HessraPublicKey,
+    config: *mut HessraConfig,
+    key: *mut HessraPublicKey,
 ) -> HessraResult {
-    if config.0.is_null() || key.0.is_null() {
+    if config.is_null() || key.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
     }
 
+    let config_ref = unsafe { &mut *config };
+    let key_ref = unsafe { &*key };
+
     // Get the public key as PEM string
-    let public_key = match key.as_ref() {
+    let public_key = match key_ref.as_ref() {
         Some(handle) => handle.inner.to_pem(),
         None => return HessraResult::ERROR_INVALID_KEY,
     };
@@ -238,7 +251,10 @@ pub extern "C" fn hessra_config_set_public_key(
     match public_key {
         Ok(pem_string) => {
             // Get mutable reference to configuration
-            let config_handle = unsafe { &mut *config.0 };
+            let config_handle = match config_ref.as_mut() {
+                Some(handle) => handle,
+                None => return HessraResult::ERROR_CONFIG_INVALID,
+            };
 
             // Set the public key in the configuration
             config_handle.inner.public_key = Some(pem_string);
@@ -261,15 +277,20 @@ pub extern "C" fn hessra_config_set_public_key(
 /// Result code indicating success or failure
 #[no_mangle]
 pub extern "C" fn hessra_config_get_public_key(
-    config: HessraConfig,
-    out_key: *mut HessraPublicKey,
+    config: *mut HessraConfig,
+    out_key: *mut *mut HessraPublicKey,
 ) -> HessraResult {
-    if config.0.is_null() || out_key.is_null() {
+    if config.is_null() || out_key.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
     }
 
+    let config_ref = unsafe { &*config };
+
     // Get reference to configuration
-    let config_handle = unsafe { &*config.0 };
+    let config_handle = match config_ref.as_ref() {
+        Some(handle) => handle,
+        None => return HessraResult::ERROR_CONFIG_INVALID,
+    };
 
     // Get the public key PEM string from the configuration
     let public_key_pem = match &config_handle.inner.public_key {
@@ -281,8 +302,9 @@ pub extern "C" fn hessra_config_get_public_key(
     match hessra_token::PublicKey::from_pem(public_key_pem) {
         Ok(key) => {
             let hessra_key = HessraPublicKey::from_key(key);
+            let boxed_key = Box::new(hessra_key);
             unsafe {
-                *out_key = hessra_key;
+                *out_key = Box::into_raw(boxed_key);
             }
             HessraResult::SUCCESS
         }
