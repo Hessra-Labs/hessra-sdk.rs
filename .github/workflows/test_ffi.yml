@@ -66,6 +66,6 @@ jobs:
           gcc -g -o test_debug examples/test.c -L../target/debug -lhessra -I./include
 
           # Run with valgrind
-          valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
+          LD_LIBRARY_PATH=../target/debug valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
             --error-exitcode=1 --trace-children=yes \
-            LD_LIBRARY_PATH=../target/debug ./test_debug
+            ./test_debug
