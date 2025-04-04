@@ -40,7 +40,7 @@ mod verify;
 pub use attenuate::add_service_node_attenuation;
 pub use error::TokenError;
 pub use token::{parse_token, verify_service_chain_token, verify_token};
-pub use utils::{decode_token, encode_token};
+pub use utils::{decode_token, encode_token, public_key_from_pem_file};
 pub use verify::{
     biscuit_key_from_string, verify_biscuit_local, verify_service_chain_biscuit_local, ServiceNode,
 };

@@ -4,6 +4,7 @@ members = [
     "hessra-config",
     "hessra-api",
     "hessra-sdk",
+    "hessra-ffi",
 ]
 
 resolver = "2"
