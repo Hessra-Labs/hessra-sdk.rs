@@ -2,8 +2,8 @@
 
 [![Crates.io](https://img.shields.io/crates/v/hessra-sdk.svg)](https://crates.io/crates/hessra-sdk)
 [![Documentation](https://docs.rs/hessra-sdk/badge.svg)](https://docs.rs/hessra-sdk)
-[![License](https://img.shields.io/crates/l/hessra-sdk.svg)](https://github.com/hessra/hessra-sdk.rs/blob/main/LICENSE)
-[![CI Status](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jcorrv/b2734fbe9a9c147a9dfdeafcdcd6c7b7/raw/hessra-sdk-rs-ci-status.json)](https://github.com/hessra/hessra-sdk.rs/actions/workflows/ci.yml)
+[![License](https://img.shields.io/crates/l/hessra-sdk.svg)](https://github.com/hessra-labs/hessra-sdk.rs/blob/main/LICENSE)
+[![CI Status](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jcorrv/b2734fbe9a9c147a9dfdeafcdcd6c7b7/raw/hessra-sdk-rs-ci-status.json)](https://github.com/hessra-labs/hessra-sdk.rs/actions/workflows/ci.yml)
 
 A secure, flexible Rust SDK for the Hessra authorization service, providing mTLS-backed token request and verification capabilities.
 
