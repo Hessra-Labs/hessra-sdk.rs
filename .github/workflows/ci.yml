@@ -175,7 +175,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run http1_example.rs
-        run: cargo run --example http1_example --manifest-path hessra-sdk/Cargo.toml
+        run: cargo run --example http1 --manifest-path hessra-sdk/Cargo.toml
 
       - name: Run service_chain.rs
         run: cargo run --example service_chain --manifest-path hessra-sdk/Cargo.toml
@@ -247,6 +247,8 @@ jobs:
           cargo publish -p hessra-token
           sleep 15
           cargo publish -p hessra-config
+          sleep 15
+          cargo publish -p hessra-ffi
           sleep 15
           cargo publish -p hessra-api
           sleep 15
