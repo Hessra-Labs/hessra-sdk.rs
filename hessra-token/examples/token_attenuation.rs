@@ -72,9 +72,9 @@ fn generate_example_token() -> Result<(String, KeyPair), TokenError> {
     // Build and serialize the token
     let biscuit = biscuit_builder
         .build(&keypair)
-        .map_err(|e| TokenError::biscuit_error(e))?;
+        .map_err(TokenError::biscuit_error)?;
 
-    let token_bytes = biscuit.to_vec().map_err(|e| TokenError::biscuit_error(e))?;
+    let token_bytes = biscuit.to_vec().map_err(TokenError::biscuit_error)?;
 
     // Encode to base64 for transmission
     Ok((encode_token(&token_bytes), keypair))

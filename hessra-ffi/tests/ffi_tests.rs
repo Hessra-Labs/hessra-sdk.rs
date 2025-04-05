@@ -47,7 +47,7 @@ fn test_c_example_compiles_and_runs() {
     #[cfg(target_os = "windows")]
     let lib_env = "PATH";
 
-    let run_output = std::process::Command::new(&format!("{}/test_example", debug_dir))
+    let run_output = std::process::Command::new(format!("{}/test_example", debug_dir))
         .env(lib_env, &debug_dir)
         .output()
         .expect("Failed to run C example");

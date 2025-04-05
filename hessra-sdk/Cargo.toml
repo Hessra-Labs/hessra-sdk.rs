@@ -19,11 +19,12 @@ hessra-api = { path = "../hessra-api", version = "0.1.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+toml = { version = "0.8", optional = true }
 
 [features]
 default = []
 http3 = ["hessra-api/http3"]
-toml = ["hessra-config/toml"]
+toml = ["hessra-config/toml", "dep:toml"]
 wasm = ["hessra-token/wasm"]
 
 [dev-dependencies]

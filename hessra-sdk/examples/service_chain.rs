@@ -111,14 +111,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Verifying token has attestation from auth-service");
 
     // We specify this node's name so the verification only checks nodes up to payment-service
-    let verification_result = payment_client.verify_service_chain_token_local(
+    payment_client.verify_service_chain_token_local(
         token_with_auth.clone(),
         "uri:urn:test:argo-cli0",
         resource.clone(),
         &full_service_chain,
         Some("payment_service".to_string()),
     )?;
-    println!("Verification result: {:?}", verification_result);
+    println!("Verification result: {:?}", ());
 
     // Add payment service attestation to the token
     println!("Adding payment_service attestation to token");
@@ -144,14 +144,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Verifying token has attestations from auth-service and payment-service");
 
     // As the last service in the chain, we specify our name to verify all previous nodes
-    let verification_result = order_client.verify_service_chain_token_local(
+    order_client.verify_service_chain_token_local(
         token_with_payment.clone(),
         "uri:urn:test:argo-cli0",
         resource.clone(),
         &full_service_chain,
         Some("order_service".to_string()),
     )?;
-    println!("Verification result: {:?}", verification_result);
+    println!("Verification result: {:?}", ());
 
     // Add order service attestation (though no service will need to verify this)
     println!("Adding order-service attestation to token");
@@ -163,14 +163,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Verifying the complete chain");
 
     // To verify the entire chain, we don't specify a component name (or use None)
-    let final_verification = order_client.verify_service_chain_token_local(
+    order_client.verify_service_chain_token_local(
         final_token,
         "uri:urn:test:argo-cli0",
         resource.clone(),
         &full_service_chain,
         None, // Verify the entire chain
     )?;
-    println!("Final verification result: {:?}", final_verification);
+    println!("Final verification result: {:?}", ());
 
     println!("\nService chain attestation example completed successfully!");
 
