@@ -12,8 +12,8 @@ name = "hessra"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-hessra-token = { path = "../hessra-token" }
-hessra-config = { path = "../hessra-config" }
+hessra-token = { path = "../hessra-token", version = "0.1.1" }
+hessra-config = { path = "../hessra-config", version = "0.1.1" }
 libc = "0.2"
 thiserror = { workspace = true }
 serde = { workspace = true }
