@@ -54,7 +54,7 @@ Add the SDK to your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-sdk = "0.5.1"
+hessra-sdk = "0.5.2"
 ```
 
 ### Feature Flags
@@ -63,7 +63,7 @@ Enable optional features based on your needs:
 
 ```toml
 [dependencies]
-hessra-sdk = { version = "0.5.1", features = ["http3", "toml", "wasm"] }
+hessra-sdk = { version = "0.5.2", features = ["http3", "toml", "wasm"] }
 ```
 
 Available features:
