@@ -4,11 +4,13 @@ set -e
 # Directory of this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Root directory of the project
-PROJECT_ROOT="$SCRIPT_DIR/.."
+PROJECT_ROOT="$SCRIPT_DIR/../.."
+# Root directory of the hessra-ffi crate
+HESSRA_FFI_ROOT="$PROJECT_ROOT/hessra-ffi"
 # Example code path
-EXAMPLE_PATH="$PROJECT_ROOT/examples/test.c"
+EXAMPLE_PATH="$HESSRA_FFI_ROOT/examples/test.c"
 # Include directory
-INCLUDE_DIR="$PROJECT_ROOT/include"
+INCLUDE_DIR="$HESSRA_FFI_ROOT"
 
 # Build the library in debug mode for better Valgrind results
 echo "Building library in debug mode..."
@@ -30,12 +32,12 @@ if [ "$OS" == "Darwin" ]; then
     # macOS
     LIB_PATH="$PROJECT_ROOT/target/debug"
     LIB_ENV="DYLD_LIBRARY_PATH"
-    LIB_NAME="libhessra.dylib"
+    LIB_NAME="libhessra_ffi.dylib"
 elif [ "$OS" == "Linux" ]; then
     # Linux
     LIB_PATH="$PROJECT_ROOT/target/debug"
     LIB_ENV="LD_LIBRARY_PATH"
-    LIB_NAME="libhessra.so"
+    LIB_NAME="libhessra_ffi.so"
 else
     # Windows or other
     echo "Unsupported platform: $OS"
@@ -44,11 +46,17 @@ fi
 
 # Build the test executable
 echo "Building test executable..."
-gcc -o "$PROJECT_ROOT/test_debug" "$EXAMPLE_PATH" -L"$LIB_PATH" -lhessra -I"$INCLUDE_DIR"
+gcc -o "$PROJECT_ROOT/test_debug" "$EXAMPLE_PATH" -L"$LIB_PATH" -lhessra_ffi -I"$INCLUDE_DIR"
 
 # Run the functional test
 echo "Running functional test..."
-$LIB_ENV="$LIB_PATH" "$PROJECT_ROOT/test_debug"
+echo "DEBUG: OS=$OS"
+echo "DEBUG: LIB_ENV=$LIB_ENV"
+echo "DEBUG: LIB_PATH=$LIB_PATH"
+echo "DEBUG: PROJECT_ROOT=$PROJECT_ROOT"
+echo "DEBUG: EXECUTABLE=$PROJECT_ROOT/test_debug"
+ls -l "$PROJECT_ROOT/test_debug" # Add this to check existence and permissions
+env $LIB_ENV="$LIB_PATH" "$PROJECT_ROOT/test_debug"
 FUNCTIONAL_TEST_RESULT=$?
 
 # Run the memory tests with Valgrind if available

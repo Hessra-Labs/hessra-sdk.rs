@@ -26,9 +26,9 @@ fn test_c_example_compiles_and_runs() {
             &format!("{}/examples/test.c", manifest_dir),
             "-L",
             &debug_dir,
-            "-lhessra",
+            "-lhessra_ffi",
             "-I",
-            &format!("{}/include", manifest_dir),
+            &manifest_dir,
         ])
         .output()
         .expect("Failed to compile C example");

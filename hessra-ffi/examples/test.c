@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "hessra.h"
+#include "hessra_ffi.h"
 
 // Sample PEM public key for testing
 const char* SAMPLE_PEM_KEY = 
@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
     
     // Initialize the library
     result = hessra_init();
-    if (result != HESSRA_SUCCESS) {
+    if (result != SUCCESS) {
         char* error_message = hessra_error_message(result);
         fprintf(stderr, "Failed to initialize Hessra: %s\n", error_message);
         hessra_string_free(error_message);
@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
     // Create a configuration
     HessraConfig* config = NULL;
     result = hessra_config_new(&config);
-    if (result != HESSRA_SUCCESS) {
+    if (result != SUCCESS) {
         char* error_message = hessra_error_message(result);
         fprintf(stderr, "Failed to create configuration: %s\n", error_message);
         hessra_string_free(error_message);
@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     // Create a public key from string
     HessraPublicKey* public_key = NULL;
     result = hessra_public_key_from_string(SAMPLE_PEM_KEY, &public_key);
-    if (result != HESSRA_SUCCESS) {
+    if (result != SUCCESS) {
         char* error_message = hessra_error_message(result);
         fprintf(stderr, "Failed to create public key: %s\n", error_message);
         hessra_string_free(error_message);
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
     
     // Set the public key in the configuration
     result = hessra_config_set_public_key(config, public_key);
-    if (result != HESSRA_SUCCESS) {
+    if (result != SUCCESS) {
         char* error_message = hessra_error_message(result);
         fprintf(stderr, "Failed to set public key in configuration: %s\n", error_message);
         hessra_string_free(error_message);
@@ -64,7 +64,7 @@ int main(int argc, char** argv) {
     // Get the public key from the configuration
     HessraPublicKey* retrieved_key = NULL;
     result = hessra_config_get_public_key(config, &retrieved_key);
-    if (result != HESSRA_SUCCESS) {
+    if (result != SUCCESS) {
         char* error_message = hessra_error_message(result);
         fprintf(stderr, "Failed to get public key from configuration: %s\n", error_message);
         hessra_string_free(error_message);
@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
     // Note: This will likely fail with the sample data but demonstrates the API
     printf("Attempting to verify token...\n");
     result = hessra_token_verify(SAMPLE_TOKEN, retrieved_key, "subject1", "resource1");
-    if (result != HESSRA_SUCCESS) {
+    if (result != SUCCESS) {
         char* error_message = hessra_error_message(result);
         printf("Token verification result: %s (expected in this example)\n", error_message);
         hessra_string_free(error_message);

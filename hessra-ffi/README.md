@@ -23,7 +23,7 @@ This crate provides C-compatible bindings for the core functionality of the Hess
 cargo build --release
 ```
 
-The resulting library will be in `target/release/libhessra.so` (Linux), `target/release/libhessra.dylib` (macOS), or `target/release/hessra.dll` (Windows).
+The resulting library will be in `target/release/libhessra_ffi.so` (Linux), `target/release/libhessra_ffi.dylib` (macOS), or `target/release/hessra_ffi.dll` (Windows).
 
 ### As a Static Library
 
@@ -31,21 +31,21 @@ The resulting library will be in `target/release/libhessra.so` (Linux), `target/
 cargo build --release
 ```
 
-The resulting library will be in `target/release/libhessra.a` (Unix) or `target/release/hessra.lib` (Windows).
+The resulting library will be in `target/release/libhessra_ffi.a` (Unix) or `target/release/hessra_ffi.lib` (Windows).
 
 ## Using in C Projects
 
-Include the `hessra.h` header file in your project and link against the dynamic or static library.
+Include the `hessra_ffi.h` header file in your project and link against the dynamic or static library.
 
 ### Basic Usage
 
 ```c
-#include "hessra.h"
+#include "hessra_ffi.h"
 
 int main() {
     // Initialize the library
     HessraResult result = hessra_init();
-    if (result != HESSRA_SUCCESS) {
+    if (result != SUCCESS) {
         // Handle error
         return 1;
     }
@@ -65,13 +65,13 @@ int main() {
 // Load a public key from a file
 HessraPublicKey* public_key = NULL;
 result = hessra_public_key_from_file("path/to/public_key.pem", &public_key);
-if (result != HESSRA_SUCCESS) {
+if (result != SUCCESS) {
     // Handle error
 }
 
 // Verify a token
 result = hessra_token_verify(token_string, public_key, "subject", "resource");
-if (result != HESSRA_SUCCESS) {
+if (result != SUCCESS) {
     char* error_message = hessra_error_message(result);
     printf("Verification failed: %s\n", error_message);
     hessra_string_free(error_message);
@@ -87,20 +87,20 @@ hessra_public_key_free(public_key);
 // Create a new configuration
 HessraConfig* config = NULL;
 result = hessra_config_new(&config);
-if (result != HESSRA_SUCCESS) {
+if (result != SUCCESS) {
     // Handle error
 }
 
 // Set a public key in the configuration
 result = hessra_config_set_public_key(config, public_key);
-if (result != HESSRA_SUCCESS) {
+if (result != SUCCESS) {
     // Handle error
 }
 
 // Get a public key from the configuration
 HessraPublicKey* retrieved_key = NULL;
 result = hessra_config_get_public_key(config, &retrieved_key);
-if (result != HESSRA_SUCCESS) {
+if (result != SUCCESS) {
     // Handle error
 }
 
@@ -127,7 +127,7 @@ To build and run the example:
 cargo build --release
 
 # Build the example (Unix-like systems)
-gcc -o test examples/test.c -L./target/release -lhessra -I./include
+gcc -o test examples/test.c -L./target/release -lhessra_ffi -I./include
 
 # Run the example (Linux)
 LD_LIBRARY_PATH=./target/release ./test
@@ -149,7 +149,7 @@ To run the memory safety tests:
 ```sh
 # Build the example in debug mode
 cargo build
-gcc -o test_debug examples/test.c -L./target/debug -lhessra -I./include
+gcc -o test_debug examples/test.c -L./target/debug -lhessra_ffi -I./include
 
 # Run with Valgrind
 valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
