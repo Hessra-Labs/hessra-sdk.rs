@@ -49,7 +49,7 @@ jobs:
         run: |
           # Compile the C example
           cd hessra-ffi
-          gcc -o test examples/test.c -L../target/debug -lhessra -I./include
+          gcc -o test examples/test.c -L../target/debug -lhessra_ffi -I./
 
           # Run the example
           if [ "$RUNNER_OS" == "Linux" ]; then
@@ -63,7 +63,7 @@ jobs:
         run: |
           cd hessra-ffi
           # Compile with debug symbols
-          gcc -g -o test_debug examples/test.c -L../target/debug -lhessra -I./include
+          gcc -g -o test_debug examples/test.c -L../target/debug -lhessra_ffi -I./
 
           # Run with valgrind
           LD_LIBRARY_PATH=../target/debug valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
