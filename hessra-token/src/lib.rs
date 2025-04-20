@@ -52,6 +52,8 @@ pub use biscuit_auth::{Biscuit, KeyPair, PublicKey};
 mod tests {
     use super::*;
     use biscuit_auth::macros::biscuit;
+    use serde_json::Value;
+    use std::fs;
 
     #[test]
     fn test_verify_biscuit_local() {
@@ -197,5 +199,142 @@ mod tests {
         // Test with invalid subject
         let result = verify_token(&token_string, keypair.public(), "bob", "resource1");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_token_verification_from_json() {
+        // Load the test tokens from JSON
+        let json_data =
+            fs::read_to_string("tests/test_tokens.json").expect("Failed to read test_tokens.json");
+        let tokens: Value =
+            serde_json::from_str(&json_data).expect("Failed to parse test_tokens.json");
+
+        // Load the public key
+        let public_key = public_key_from_pem_file("tests/hessra_key.pem")
+            .expect("Failed to load test public key");
+
+        // Test each token
+        for token_value in tokens["tokens"].as_array().unwrap() {
+            let name = token_value["name"].as_str().unwrap();
+            let token_string = token_value["token"].as_str().unwrap();
+            let metadata = &token_value["metadata"];
+
+            // Get values from metadata
+            let subject = metadata["subject"].as_str().unwrap();
+            let resource = metadata["resource"].as_str().unwrap();
+            let expected_result = metadata["expected_result"].as_bool().unwrap();
+            let description = metadata["description"].as_str().unwrap_or("No description");
+
+            println!("Testing token '{}': {}", name, description);
+
+            // Verify the token
+            let result = parse_token(token_string, public_key).and_then(|biscuit| {
+                // Print the token blocks for debugging
+                println!("Token blocks: {}", biscuit.print());
+
+                if metadata["type"].as_str().unwrap() == "singleton" {
+                    verify_token(token_string, public_key, subject, resource)
+                } else {
+                    // Create test service nodes
+                    let service_nodes = vec![
+                        ServiceNode {
+                            component: "auth_service".to_string(),
+                            public_key: "ed25519/0123456789abcdef0123456789abcdef".to_string(),
+                        },
+                        ServiceNode {
+                            component: "payment_service".to_string(),
+                            public_key: "ed25519/fedcba9876543210fedcba9876543210".to_string(),
+                        },
+                    ];
+
+                    verify_service_chain_token(
+                        token_string,
+                        public_key,
+                        subject,
+                        resource,
+                        service_nodes,
+                        None,
+                    )
+                }
+            });
+
+            // Check if the result matches expectations
+            let verification_succeeded = result.is_ok();
+            assert_eq!(
+                verification_succeeded, expected_result,
+                "Token '{}' verification resulted in {}, expected: {} - {}",
+                name, verification_succeeded, expected_result, description
+            );
+
+            println!(
+                "✓ Token '{}' - Verification: {}",
+                name,
+                if verification_succeeded == expected_result {
+                    "PASSED"
+                } else {
+                    "FAILED"
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn test_service_chain_tokens_from_json() {
+        // Load the test tokens from JSON
+        let json_data =
+            fs::read_to_string("tests/test_tokens.json").expect("Failed to read test_tokens.json");
+        let tokens: Value =
+            serde_json::from_str(&json_data).expect("Failed to parse test_tokens.json");
+
+        // Load the public key
+        let public_key = public_key_from_pem_file("tests/hessra_key.pem")
+            .expect("Failed to load test public key");
+
+        // Find the service chain token (order_service)
+        if let Some(tokens_array) = tokens["tokens"].as_array() {
+            if let Some(order_service_token) = tokens_array
+                .iter()
+                .find(|t| t["name"].as_str().unwrap() == "argo-cli1_access_order_service")
+            {
+                let token_string = order_service_token["token"].as_str().unwrap();
+                let subject = order_service_token["metadata"]["subject"].as_str().unwrap();
+                let resource = order_service_token["metadata"]["resource"]
+                    .as_str()
+                    .unwrap();
+                let expected_result = order_service_token["metadata"]["expected_result"]
+                    .as_bool()
+                    .unwrap();
+
+                // Create test service nodes
+                let service_nodes = vec![
+                    ServiceNode {
+                        component: "auth_service".to_string(),
+                        public_key: "ed25519/0123456789abcdef0123456789abcdef".to_string(),
+                    },
+                    ServiceNode {
+                        component: "payment_service".to_string(),
+                        public_key: "ed25519/fedcba9876543210fedcba9876543210".to_string(),
+                    },
+                ];
+
+                // Test the token with service chain verification
+                let result = verify_service_chain_token(
+                    token_string,
+                    public_key,
+                    subject,
+                    resource,
+                    service_nodes,
+                    None,
+                );
+
+                let res = result.is_err();
+                println!("res: {}", res);
+                println!("expected_result: {}", expected_result);
+
+                // The test should fail because service attestations haven't been added
+                assert_eq!(result.is_err(), !expected_result,
+                    "Service chain verification should have failed as specified in the token metadata");
+            }
+        }
     }
 }

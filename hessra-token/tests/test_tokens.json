@@ -1,0 +1,59 @@
+{
+  "tokens": [
+    {
+      "name": "argo-cli0_access_resource1",
+      "token": "EugBCnUKFnVyaTp1cm46dGVzdDphcmdvLWNsaTAKCXJlc291cmNlMRgDIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYATImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQur3mnxIKBBoCCAASJAgAEiDZV/8/1NUIn8vCODfJ0d9BCjO6hRo/2LDh0A0YkzE10hpHMEUCIQCdkWDtjZqYjW9rELtDwT7atnLp4oaywNMKIo5Ws1xigAIgONiLoF9DsiGecTrBashpNTjfPxwrupsXt1tNr30qID4oASIiCiDIsSnY/vgk9GinD1/MXtouNJKX1fMZ0o4fNj1HwcLdtQ==",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "resource1",
+        "type": "singleton",
+        "description": "Invalid token for argo-cli1 to access resource1. This token was created for a different subject (argo-cli0).",
+        "expected_result": false
+      }
+    },
+    {
+      "name": "argo-cli1_access_resource2",
+      "token": "EugBCnUKFnVyaTp1cm46dGVzdDphcmdvLWNsaTEKCXJlc291cmNlMhgDIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYATImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQ9LvmnxIKBBoCCAASJAgAEiBTctyBklvhJqeZY+n8mFIvY0FylGsrJ5hCLN19naK8cBpHMEUCID2yZiGYW4OElIuvcxi33Hf2b6myZp7H0JpF7Mwocb9MAiEAuJn1dHynd73JZmMmIJOJHZofP359PduxpteUizibcK0oASIiCiDCy7LdAdolnfR7/x0LdxrzNB5B22Gu7Gx2EncgNhBX5Q==",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "resource2",
+        "type": "singleton",
+        "description": "Valid token for argo-cli1 to access resource2",
+        "expected_result": true
+      }
+    },
+    {
+      "name": "argo-cli1_access_resource3",
+      "token": "EugBCnUKFnVyaTp1cm46dGVzdDphcmdvLWNsaTEKCXJlc291cmNlMxgDIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYATImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQlrzmnxIKBBoCCAASJAgAEiA2fMYjgM2Q7TvGyhKnnkEUSoVyDjDMhViJq5B8BYgBbRpHMEUCIQCW5NaF1kRnjIqgaZYxvlPBxYxi193IaPV0PzNWvbX3KwIgDuKH4or+njpygYOckSp6iAN7u15iJxpDBtE55xHJVBYoASIiCiB0KvTpKzWHn6/tY7eBScxs7yFzLH2N0/15BVbhetbpFQ==",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "resource3",
+        "type": "singleton",
+        "description": "Valid token for argo-cli1 to access resource3",
+        "expected_result": true
+      }
+    },
+    {
+      "name": "argo-cli1_access_resource4",
+      "token": "Er4CCsoBChZ1cmk6dXJuOnRlc3Q6YXJnby1jbGkxCglyZXNvdXJjZTQKAXMKDWVkZ2VfZnVuY3Rpb24YBCISChAIBBIDGIAIEgMYgQgSAhgAIhIKEAgEEgMYgAgSAxiBCBICGAEqGwoMCBgSAwiCCBIDGIMIEgcIDBIDCIIIIgIQADImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQpbzmnxIKBBoCCABCJAgAEiCcPo8Q4Oju7x2whpFaFaWQ59g4aDhBcZtecN2rIRW4JhIkCAASIE27XXd3Sye+rF8S7aJWCNEgPyPNY0cM977kTRfZdQleGkcwRQIhAOFQhly77wobr4AyCrjBx0uIsshB+NJ1Qxx1lOCRFU4lAiAWAMHZWzMLELxbHmosv1gCj73Xo4jWjMue+eqMeTgAWSgBIiIKIDlcJqY3w0GGfHnIpqdbcJywALgzsKXsrOG7p1nnTrlZ",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "resource4",
+        "type": "singleton",
+        "description": "Valid token for argo-cli1 to access resource4. This is a service chain token but we are acting as the first node in the chain.",
+        "expected_result": true
+      }
+    },
+    {
+      "name": "argo-cli1_access_order_service",
+      "token": "EtgDCuQCChZ1cmk6dXJuOnRlc3Q6YXJnby1jbGkxCg1vcmRlcl9zZXJ2aWNlCgFzCgxhdXRoX3NlcnZpY2UKD3BheW1lbnRfc2VydmljZRgEIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYASobCgwIGBIDCIIIEgMYgwgSBwgMEgMIgggiAhAAKhsKDAgYEgMIgggSAxiECBIHCAwSAwiCCCICEAEqGwoMCBgSAwiCCBIDGIEIEgcIDBIDCIIIIgIQAjImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQmL3mnxIKBBoCCABCJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6Zdg0IkCAASIHjvQlXEyatccYbW20dgdYsGYWwEKiU4MjrjsFgJQDS2QiQIABIgGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRMSJAgAEiD6t7nHUSOWlNwhFPMv1vDwVfU/RuKRzJwJqDY3f1mt1hpHMEUCIQCNSLSn9gT/ganxv/zAyPZSpwxFlrSEF92atdn5gJZTHQIgBydvkFrWrR3Yck+dFX7XBS3gHb7NLxBuk+B3G/CZeHcoASIiCiBYXl/bnUHVmA5j+NoWJ5bhwanmqTbQjR9/THASG8XthQ==",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "order_service",
+        "type": "service_chain",
+        "description": "Invalid token for argo-cli1 to access order-service. This token requires 3rd party service chain blocks that haven't been added.",
+        "expected_result": false
+      }
+    }
+  ]
+}
