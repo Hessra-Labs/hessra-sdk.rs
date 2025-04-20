@@ -1,6 +1,6 @@
 [package]
 name = "hessra-ffi"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Jake Valentic <jake@hessra.net>"]
 description = "C FFI bindings for Hessra token verification and configuration"
@@ -12,7 +12,7 @@ name = "hessra_ffi"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-hessra-token = { path = "../hessra-token", version = "0.1.1" }
+hessra-token = { path = "../hessra-token", version = "0.1.2" }
 hessra-config = { path = "../hessra-config", version = "0.1.1" }
 libc = "0.2"
 thiserror = { workspace = true }
