@@ -1,0 +1,75 @@
+{
+  "tokens": [
+    {
+      "name": "order_service_authority_token",
+      "token": "EtgDCuQCChZ1cmk6dXJuOnRlc3Q6YXJnby1jbGkxCg1vcmRlcl9zZXJ2aWNlCgFzCgxhdXRoX3NlcnZpY2UKD3BheW1lbnRfc2VydmljZRgEIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYASobCgwIGBIDCIIIEgMYgwgSBwgMEgMIgggiAhAAKhsKDAgYEgMIgggSAxiECBIHCAwSAwiCCCICEAEqGwoMCBgSAwiCCBIDGIEIEgcIDBIDCIIIIgIQAjImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQ6I32nxIKBBoCCABCJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6Zdg0IkCAASIHjvQlXEyatccYbW20dgdYsGYWwEKiU4MjrjsFgJQDS2QiQIABIgGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRMSJAgAEiDW8Uj3Tu9N0Z0wC5OwPBwhjzxEQftCz1knQS/E1sIpkhpHMEUCIEsRzjbTnVTbSCYfIrVUSduXqqrjStFgLOGYrsZeI3YWAiEAn5MZE1FXgSXslykTdOXHUiBsMP1jOKobFBVIs2XmZSIoASIiCiATr6A94N41ZVvTXlsIogouIo3tK0RuBM5aJxjD26rIFg==",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "order_service",
+        "type": "singleton",
+        "description": "Initial service chain token valid as a singleton at the first node of the chain.",
+        "service_nodes": []
+      }
+    },
+    {
+      "name": "order_service_node_1_token",
+      "token": "EtgDCuQCChZ1cmk6dXJuOnRlc3Q6YXJnby1jbGkxCg1vcmRlcl9zZXJ2aWNlCgFzCgxhdXRoX3NlcnZpY2UKD3BheW1lbnRfc2VydmljZRgEIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYASobCgwIGBIDCIIIEgMYgwgSBwgMEgMIgggiAhAAKhsKDAgYEgMIgggSAxiECBIHCAwSAwiCCCICEAEqGwoMCBgSAwiCCBIDGIEIEgcIDBIDCIIIIgIQAjImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQ6I32nxIKBBoCCABCJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6Zdg0IkCAASIHjvQlXEyatccYbW20dgdYsGYWwEKiU4MjrjsFgJQDS2QiQIABIgGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRMSJAgAEiDW8Uj3Tu9N0Z0wC5OwPBwhjzxEQftCz1knQS/E1sIpkhpHMEUCIEsRzjbTnVTbSCYfIrVUSduXqqrjStFgLOGYrsZeI3YWAiEAn5MZE1FXgSXslykTdOXHUiBsMP1jOKobFBVIs2XmZSIoARryAQocCg1vcmRlcl9zZXJ2aWNlGAUiCQoHCAwSAxiACBIkCAASIK/wIdbxAoJ1XnLNUOyO5S20vgOPOiI/k/pavE8CU2qdGkBL4YXoJ0yFrRHuONSKh/Ru47FudXEmBDDU8ofHDRkX0SoJa2nk1QyyDtnPi1qzHV5JHDZU3dBzW5b2Nr/Y1roMImgKQLzkyr3ckbmCzUwE7UmYHb9rw9PHTshE7YV4ypkF6hXQY3PO/rOnbMPnPHuWCFdBMIFgxiZg+kuS6Csh/EIzoAQSJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6ZdgygBIiIKIIIk/xWe4fGXdwSOXdANKUi/rNkEdBD7yC5RiaXhvLHi",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "order_service",
+        "type": "service_chain",
+        "description": "Service chain token for order_service attenuated by the first node of the chain: auth_service",
+        "service_nodes": [
+          {
+            "component": "auth_service",
+            "public_key": "ed25519/e57618058b1d2e0381a9813c1405830d5ed7d603717384ef555d9cc0cfa65d83"
+          }
+        ]
+      }
+    },
+    {
+      "name": "order_service_node_2_token",
+      "token": "EtgDCuQCChZ1cmk6dXJuOnRlc3Q6YXJnby1jbGkxCg1vcmRlcl9zZXJ2aWNlCgFzCgxhdXRoX3NlcnZpY2UKD3BheW1lbnRfc2VydmljZRgEIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYASobCgwIGBIDCIIIEgMYgwgSBwgMEgMIgggiAhAAKhsKDAgYEgMIgggSAxiECBIHCAwSAwiCCCICEAEqGwoMCBgSAwiCCBIDGIEIEgcIDBIDCIIIIgIQAjImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQ6I32nxIKBBoCCABCJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6Zdg0IkCAASIHjvQlXEyatccYbW20dgdYsGYWwEKiU4MjrjsFgJQDS2QiQIABIgGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRMSJAgAEiDW8Uj3Tu9N0Z0wC5OwPBwhjzxEQftCz1knQS/E1sIpkhpHMEUCIEsRzjbTnVTbSCYfIrVUSduXqqrjStFgLOGYrsZeI3YWAiEAn5MZE1FXgSXslykTdOXHUiBsMP1jOKobFBVIs2XmZSIoARryAQocCg1vcmRlcl9zZXJ2aWNlGAUiCQoHCAwSAxiACBIkCAASIK/wIdbxAoJ1XnLNUOyO5S20vgOPOiI/k/pavE8CU2qdGkBL4YXoJ0yFrRHuONSKh/Ru47FudXEmBDDU8ofHDRkX0SoJa2nk1QyyDtnPi1qzHV5JHDZU3dBzW5b2Nr/Y1roMImgKQLzkyr3ckbmCzUwE7UmYHb9rw9PHTshE7YV4ypkF6hXQY3PO/rOnbMPnPHuWCFdBMIFgxiZg+kuS6Csh/EIzoAQSJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6ZdgygBGvIBChwKDW9yZGVyX3NlcnZpY2UYBSIJCgcIDBIDGIAIEiQIABIgLLELHP29dHw6u0l302Olh5k+Ydlf9WxkxFSzowJoOB0aQIlNjyKdv5+Yur+BfzpQ2hOSdu9MGfsORcq4RaN7P6UE6o3UfbVuLB1iXocBN6fKJ2gZV2MNcAgUAuFa8UfayQkiaApAphrKlxWwEFicT5fDJFRewv7Ivyd2Qn0FHTFGFcypRDf6b/843bijdQHACevTvUPVmTyOxA+cFn/Ev0NmXA7TAhIkCAASIHjvQlXEyatccYbW20dgdYsGYWwEKiU4MjrjsFgJQDS2KAEiIgogDsIpbRHAwQX71YnTBlK9ei8ED1oz2lU9ZRcZmrckR2M=",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "order_service",
+        "type": "service_chain",
+        "description": "Service chain token for order_service attenuated by the second node of the chain: payment_service",
+        "service_nodes": [
+          {
+            "component": "auth_service",
+            "public_key": "ed25519/e57618058b1d2e0381a9813c1405830d5ed7d603717384ef555d9cc0cfa65d83"
+          },
+          {
+            "component": "payment_service",
+            "public_key": "ed25519/78ef4255c4c9ab5c7186d6db4760758b06616c042a2538323ae3b058094034b6"
+          }
+        ]
+      }
+    },
+    {
+      "name": "order_service_node_3_token",
+      "token": "EtgDCuQCChZ1cmk6dXJuOnRlc3Q6YXJnby1jbGkxCg1vcmRlcl9zZXJ2aWNlCgFzCgxhdXRoX3NlcnZpY2UKD3BheW1lbnRfc2VydmljZRgEIhIKEAgEEgMYgAgSAxiBCBICGAAiEgoQCAQSAxiACBIDGIEIEgIYASobCgwIGBIDCIIIEgMYgwgSBwgMEgMIgggiAhAAKhsKDAgYEgMIgggSAxiECBIHCAwSAwiCCCICEAEqGwoMCBgSAwiCCBIDGIEIEgcIDBIDCIIIIgIQAjImCiQKAggbEgYIBRICCAUaFgoECgIIBQoICgYQ6I32nxIKBBoCCABCJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6Zdg0IkCAASIHjvQlXEyatccYbW20dgdYsGYWwEKiU4MjrjsFgJQDS2QiQIABIgGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRMSJAgAEiDW8Uj3Tu9N0Z0wC5OwPBwhjzxEQftCz1knQS/E1sIpkhpHMEUCIEsRzjbTnVTbSCYfIrVUSduXqqrjStFgLOGYrsZeI3YWAiEAn5MZE1FXgSXslykTdOXHUiBsMP1jOKobFBVIs2XmZSIoARryAQocCg1vcmRlcl9zZXJ2aWNlGAUiCQoHCAwSAxiACBIkCAASIK/wIdbxAoJ1XnLNUOyO5S20vgOPOiI/k/pavE8CU2qdGkBL4YXoJ0yFrRHuONSKh/Ru47FudXEmBDDU8ofHDRkX0SoJa2nk1QyyDtnPi1qzHV5JHDZU3dBzW5b2Nr/Y1roMImgKQLzkyr3ckbmCzUwE7UmYHb9rw9PHTshE7YV4ypkF6hXQY3PO/rOnbMPnPHuWCFdBMIFgxiZg+kuS6Csh/EIzoAQSJAgAEiDldhgFix0uA4GpgTwUBYMNXtfWA3FzhO9VXZzAz6ZdgygBGvIBChwKDW9yZGVyX3NlcnZpY2UYBSIJCgcIDBIDGIAIEiQIABIgLLELHP29dHw6u0l302Olh5k+Ydlf9WxkxFSzowJoOB0aQIlNjyKdv5+Yur+BfzpQ2hOSdu9MGfsORcq4RaN7P6UE6o3UfbVuLB1iXocBN6fKJ2gZV2MNcAgUAuFa8UfayQkiaApAphrKlxWwEFicT5fDJFRewv7Ivyd2Qn0FHTFGFcypRDf6b/843bijdQHACevTvUPVmTyOxA+cFn/Ev0NmXA7TAhIkCAASIHjvQlXEyatccYbW20dgdYsGYWwEKiU4MjrjsFgJQDS2KAEa8gEKHAoNb3JkZXJfc2VydmljZRgFIgkKBwgMEgMYgAgSJAgAEiBWo8hS30ACLAkavwQY4BdDRhI895SFpOuQHYvN8fGt+xpA21yQSK/6gHfOggNcygRoURvh1fFxL8VdMsvhpVq1Rj7KXG6rlp76iyn4cWOgmE2HbWWXYro/xPiIyYypbLaVCSJoCkBf2qQXi52zCbVM9RZdatjGZfvX5WbrvgerzZm1kYqwgvJaI8lYKUTvqYhzEIffOT0KUaBonSeyJx2UFmrW4uYJEiQIABIgGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRMoASIiCiCbtGEhFUCCRhXwUllhWqL8wCy4kdrmIFJ+cudwXFaCcA==",
+      "metadata": {
+        "subject": "uri:urn:test:argo-cli1",
+        "resource": "order_service",
+        "type": "service_chain",
+        "description": "Service chain token for order_service attenuated by the third node of the chain: order_service. Token is ready for final destination.",
+        "service_nodes": [
+          {
+            "component": "auth_service",
+            "public_key": "ed25519/e57618058b1d2e0381a9813c1405830d5ed7d603717384ef555d9cc0cfa65d83"
+          },
+          {
+            "component": "payment_service",
+            "public_key": "ed25519/78ef4255c4c9ab5c7186d6db4760758b06616c042a2538323ae3b058094034b6"
+          },
+          {
+            "component": "order_service",
+            "public_key": "ed25519/1aebc5a6eefc569051926a6aaf55568e53edb475f2f2eb904522609391d88113"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -327,14 +327,158 @@ mod tests {
                     None,
                 );
 
-                let res = result.is_err();
-                println!("res: {}", res);
-                println!("expected_result: {}", expected_result);
-
                 // The test should fail because service attestations haven't been added
-                assert_eq!(result.is_err(), !expected_result,
-                    "Service chain verification should have failed as specified in the token metadata");
+                assert_eq!(
+                    result.is_ok(),
+                    expected_result,
+                    "Service chain verification for '{}' resulted in {}, expected: {}",
+                    order_service_token["name"].as_str().unwrap(),
+                    result.is_ok(),
+                    expected_result
+                );
             }
         }
+    }
+
+    #[test]
+    fn test_service_chain_lifecycle() {
+        // Load test data from service_chain_tokens.json
+        let json_data = fs::read_to_string("tests/service_chain_tokens.json")
+            .expect("Failed to read service_chain_tokens.json");
+        let tokens: Value =
+            serde_json::from_str(&json_data).expect("Failed to parse service_chain_tokens.json");
+
+        // Extract tokens for each stage
+        let initial_token = tokens["tokens"][0]["token"].as_str().unwrap();
+        let token_after_auth = tokens["tokens"][1]["token"].as_str().unwrap();
+        let token_after_payment = tokens["tokens"][2]["token"].as_str().unwrap();
+        let final_token = tokens["tokens"][3]["token"].as_str().unwrap();
+
+        // Get service details
+        let subject = "uri:urn:test:argo-cli1";
+        let resource = "order_service";
+
+        // Load the public key from the PEM file
+        let root_public_key = public_key_from_pem_file("tests/hessra_key.pem")
+            .expect("Failed to load test public key");
+
+        // Parse the public keys from the JSON
+        let auth_service_pk_str = tokens["tokens"][1]["metadata"]["service_nodes"][0]["public_key"]
+            .as_str()
+            .unwrap();
+        let payment_service_pk_str = tokens["tokens"][2]["metadata"]["service_nodes"][1]
+            ["public_key"]
+            .as_str()
+            .unwrap();
+        let order_service_pk_str = tokens["tokens"][3]["metadata"]["service_nodes"][2]
+            ["public_key"]
+            .as_str()
+            .unwrap();
+
+        // For this test we'll just skip token generation since we're using pre-made tokens
+        // and focus on the verification of the service chain tokens
+
+        // Step 1: Verify initial token as a regular token
+        let result = verify_token(initial_token, root_public_key, subject, resource);
+        assert!(result.is_ok(), "Initial token verification failed");
+
+        // Step 2: Payment Service verifies token with auth service attestation
+        let service_nodes_for_payment = vec![ServiceNode {
+            component: "auth_service".to_string(),
+            public_key: auth_service_pk_str.to_string(),
+        }];
+
+        let result = verify_service_chain_token(
+            token_after_auth,
+            root_public_key,
+            subject,
+            resource,
+            service_nodes_for_payment.clone(),
+            None,
+        );
+        assert!(
+            result.is_ok(),
+            "Token with auth attestation verification failed"
+        );
+
+        // Step 3: Order Service verifies token with auth and payment attestations
+        let service_nodes_for_order = vec![
+            ServiceNode {
+                component: "auth_service".to_string(),
+                public_key: auth_service_pk_str.to_string(),
+            },
+            ServiceNode {
+                component: "payment_service".to_string(),
+                public_key: payment_service_pk_str.to_string(),
+            },
+        ];
+
+        let result = verify_service_chain_token(
+            token_after_payment,
+            root_public_key,
+            subject,
+            resource,
+            service_nodes_for_order.clone(),
+            None,
+        );
+        assert!(
+            result.is_ok(),
+            "Token with payment attestation verification failed"
+        );
+
+        // Step 4: Final verification of the complete service chain token
+        let service_nodes_complete = vec![
+            ServiceNode {
+                component: "auth_service".to_string(),
+                public_key: auth_service_pk_str.to_string(),
+            },
+            ServiceNode {
+                component: "payment_service".to_string(),
+                public_key: payment_service_pk_str.to_string(),
+            },
+            ServiceNode {
+                component: "order_service".to_string(),
+                public_key: order_service_pk_str.to_string(),
+            },
+        ];
+
+        let result = verify_service_chain_token(
+            final_token,
+            root_public_key,
+            subject,
+            resource,
+            service_nodes_complete.clone(),
+            None,
+        );
+
+        // Print more details if verification fails
+        if result.is_err() {
+            println!("Error details: {:?}", result);
+
+            // Parse the token to check its blocks
+            let decoded_final = decode_token(final_token).unwrap();
+            if let Ok(biscuit) = Biscuit::from(&decoded_final, root_public_key) {
+                println!("Token blocks: {}", biscuit.print());
+            } else {
+                println!("Failed to parse token");
+            }
+        }
+
+        assert!(result.is_ok(), "Final token verification failed");
+
+        // Verify that token not attenuated by the full chain fails authorization against the full chain
+        let result = verify_service_chain_token(
+            token_after_auth,
+            root_public_key,
+            subject,
+            resource,
+            service_nodes_complete,
+            None,
+        );
+        // This should fail because we're missing attestations from payment and order service
+        assert!(
+            result.is_err(),
+            "Incomplete service chain should be rejected"
+        );
     }
 }
