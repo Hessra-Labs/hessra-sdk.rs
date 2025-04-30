@@ -1,6 +1,0 @@
-comment = 'hessra_authz:  Created by pgrx'
-default_version = '@CARGO_VERSION@'
-module_pathname = '$libdir/hessra_authz'
-relocatable = false
-superuser = true
-trusted = false
