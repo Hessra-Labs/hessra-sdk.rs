@@ -2,11 +2,283 @@ use pgrx::prelude::*;
 
 ::pgrx::pg_module_magic!();
 
+/// Extension version
 #[pg_extern]
 fn info_hessra_authz() -> &'static str {
     "hessra_authz extension loaded"
 }
 
+/// Schema setup
+/// This function is automatically called when the extension is created
+#[pg_schema]
+mod schema {
+    use pgrx::prelude::*;
+
+    // Create tables during extension load
+    #[pg_guard]
+    pub extern "C-unwind" fn _PG_init() {
+        let create_tables_sql = r#"
+        -- Create table for storing the public key
+        CREATE TABLE IF NOT EXISTS hessra_public_keys (
+            id SERIAL PRIMARY KEY,
+            key_name TEXT UNIQUE NOT NULL,
+            public_key TEXT NOT NULL,
+            is_default BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- Create table for storing service chains
+        CREATE TABLE IF NOT EXISTS hessra_service_chains (
+            id SERIAL PRIMARY KEY,
+            service_name TEXT UNIQUE NOT NULL,
+            service_nodes JSONB NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        "#;
+
+        Spi::run(create_tables_sql).unwrap();
+    }
+}
+
+// Helper function to escape single quotes in SQL strings
+fn sql_escape(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
+// Public key management
+#[pg_extern]
+fn add_public_key(key_name: &str, public_key: &str, is_default: bool) -> Result<i32, String> {
+    // First validate the public key format
+    match biscuit_auth::PublicKey::from_pem(public_key) {
+        Ok(_) => (),
+        Err(e) => return Err(format!("Invalid public key format: {}", e)),
+    }
+
+    // If setting as default, unset any existing defaults
+    if is_default {
+        let update_sql = "UPDATE hessra_public_keys SET is_default = FALSE WHERE is_default = TRUE";
+        Spi::run(update_sql).map_err(|e| format!("Failed to update existing keys: {}", e))?;
+    }
+
+    // Insert the new key and return the ID
+    let insert_sql = format!(
+        "INSERT INTO hessra_public_keys (key_name, public_key, is_default) 
+         VALUES ('{}', '{}', {}) 
+         RETURNING id",
+        sql_escape(key_name),
+        sql_escape(public_key),
+        if is_default { "TRUE" } else { "FALSE" }
+    );
+
+    let result =
+        Spi::get_one::<i32>(&insert_sql).map_err(|e| format!("Failed to insert key: {}", e))?;
+
+    match result {
+        Some(id) => Ok(id),
+        None => Err("No ID returned from insert".to_string()),
+    }
+}
+
+#[pg_extern]
+fn update_public_key(key_name: &str, public_key: &str, is_default: bool) -> Result<bool, String> {
+    // First validate the public key format
+    match biscuit_auth::PublicKey::from_pem(public_key) {
+        Ok(_) => (),
+        Err(e) => return Err(format!("Invalid public key format: {}", e)),
+    }
+
+    // If setting as default, unset any existing defaults
+    if is_default {
+        let update_sql = "UPDATE hessra_public_keys SET is_default = FALSE WHERE is_default = TRUE";
+        Spi::run(update_sql).map_err(|e| format!("Failed to update existing keys: {}", e))?;
+    }
+
+    // Update the key
+    let update_sql = format!(
+        "UPDATE hessra_public_keys 
+         SET public_key = '{}', is_default = {} 
+         WHERE key_name = '{}'",
+        sql_escape(public_key),
+        if is_default { "TRUE" } else { "FALSE" },
+        sql_escape(key_name)
+    );
+
+    // Check if any rows were updated by selecting the record after update
+    let check_sql = format!(
+        "SELECT COUNT(*) FROM hessra_public_keys WHERE key_name = '{}'",
+        sql_escape(key_name)
+    );
+
+    Spi::run(&update_sql).map_err(|e| format!("Failed to update key: {}", e))?;
+
+    let count = Spi::get_one::<i64>(&check_sql)
+        .map_err(|e| format!("Failed to check update result: {}", e))?
+        .unwrap_or(0);
+
+    Ok(count > 0)
+}
+
+#[pg_extern]
+fn delete_public_key(key_name: &str) -> Result<bool, String> {
+    // First check if the key exists
+    let check_sql = format!(
+        "SELECT COUNT(*) FROM hessra_public_keys WHERE key_name = '{}'",
+        sql_escape(key_name)
+    );
+
+    let count_before = Spi::get_one::<i64>(&check_sql)
+        .map_err(|e| format!("Failed to check key existence: {}", e))?
+        .unwrap_or(0);
+
+    if count_before == 0 {
+        return Ok(false);
+    }
+
+    // Delete the key
+    let delete_sql = format!(
+        "DELETE FROM hessra_public_keys WHERE key_name = '{}'",
+        sql_escape(key_name)
+    );
+
+    Spi::run(&delete_sql).map_err(|e| format!("Failed to delete key: {}", e))?;
+
+    Ok(true)
+}
+
+#[pg_extern]
+fn get_public_key(key_name: Option<&str>) -> Result<String, String> {
+    let select_sql = match key_name {
+        Some(name) => format!(
+            "SELECT public_key FROM hessra_public_keys WHERE key_name = '{}'",
+            sql_escape(name)
+        ),
+        None => {
+            "SELECT public_key FROM hessra_public_keys WHERE is_default = TRUE LIMIT 1".to_string()
+        }
+    };
+
+    let result =
+        Spi::get_one::<String>(&select_sql).map_err(|e| format!("Database error: {}", e))?;
+
+    match result {
+        Some(key) => Ok(key),
+        None => Err(match key_name {
+            Some(name) => format!("No public key found with name: {}", name),
+            None => "No default public key found".to_string(),
+        }),
+    }
+}
+
+// Service chain management
+#[pg_extern]
+fn add_service_chain(service_name: &str, service_nodes: &str) -> Result<i32, String> {
+    // Validate the service_nodes JSON
+    match serde_json::from_str::<Vec<hessra_token::ServiceNode>>(service_nodes) {
+        Ok(_) => (),
+        Err(e) => return Err(format!("Invalid service nodes JSON: {}", e)),
+    }
+
+    let insert_sql = format!(
+        "INSERT INTO hessra_service_chains (service_name, service_nodes) 
+         VALUES ('{}', '{}'::jsonb) 
+         RETURNING id",
+        sql_escape(service_name),
+        sql_escape(service_nodes)
+    );
+
+    let result = Spi::get_one::<i32>(&insert_sql)
+        .map_err(|e| format!("Failed to insert service chain: {}", e))?;
+
+    match result {
+        Some(id) => Ok(id),
+        None => Err("No ID returned from insert".to_string()),
+    }
+}
+
+#[pg_extern]
+fn update_service_chain(service_name: &str, service_nodes: &str) -> Result<bool, String> {
+    // Validate the service_nodes JSON
+    match serde_json::from_str::<Vec<hessra_token::ServiceNode>>(service_nodes) {
+        Ok(_) => (),
+        Err(e) => return Err(format!("Invalid service nodes JSON: {}", e)),
+    }
+
+    // Check if the service chain exists
+    let check_sql = format!(
+        "SELECT COUNT(*) FROM hessra_service_chains WHERE service_name = '{}'",
+        sql_escape(service_name)
+    );
+
+    let count_before = Spi::get_one::<i64>(&check_sql)
+        .map_err(|e| format!("Failed to check service chain existence: {}", e))?
+        .unwrap_or(0);
+
+    if count_before == 0 {
+        return Ok(false);
+    }
+
+    // Update the service chain
+    let update_sql = format!(
+        "UPDATE hessra_service_chains 
+         SET service_nodes = '{}'::jsonb, updated_at = NOW() 
+         WHERE service_name = '{}'",
+        sql_escape(service_nodes),
+        sql_escape(service_name)
+    );
+
+    Spi::run(&update_sql).map_err(|e| format!("Failed to update service chain: {}", e))?;
+
+    Ok(true)
+}
+
+#[pg_extern]
+fn delete_service_chain(service_name: &str) -> Result<bool, String> {
+    // First check if the service chain exists
+    let check_sql = format!(
+        "SELECT COUNT(*) FROM hessra_service_chains WHERE service_name = '{}'",
+        sql_escape(service_name)
+    );
+
+    let count_before = Spi::get_one::<i64>(&check_sql)
+        .map_err(|e| format!("Failed to check service chain existence: {}", e))?
+        .unwrap_or(0);
+
+    if count_before == 0 {
+        return Ok(false);
+    }
+
+    // Delete the service chain
+    let delete_sql = format!(
+        "DELETE FROM hessra_service_chains WHERE service_name = '{}'",
+        sql_escape(service_name)
+    );
+
+    Spi::run(&delete_sql).map_err(|e| format!("Failed to delete service chain: {}", e))?;
+
+    Ok(true)
+}
+
+#[pg_extern]
+fn get_service_chain(service_name: &str) -> Result<String, String> {
+    let select_sql = format!(
+        "SELECT service_nodes::text FROM hessra_service_chains WHERE service_name = '{}'",
+        sql_escape(service_name)
+    );
+
+    let result =
+        Spi::get_one::<String>(&select_sql).map_err(|e| format!("Database error: {}", e))?;
+
+    match result {
+        Some(nodes) => Ok(nodes),
+        None => Err(format!(
+            "No service chain found with name: {}",
+            service_name
+        )),
+    }
+}
+
+// Token verification functions
 #[pg_extern]
 fn verify_token(
     token: &str,
@@ -39,6 +311,49 @@ fn verify_service_chain_token(
         service_nodes,
         component,
     )
+}
+
+// Convenience token verification functions using stored configs
+#[pg_extern]
+fn verify_token_with_stored_key(
+    token: &str,
+    key_name: Option<&str>,
+    subject: &str,
+    resource: &str,
+) -> Result<(), String> {
+    // Get the public key from the database
+    let public_key = get_public_key(key_name)?;
+
+    // Call the original verify_token function
+    verify_token(token, &public_key, subject, resource)
+        .map_err(|e| format!("Token verification failed: {}", e))
+}
+
+#[pg_extern]
+fn verify_service_chain_token_with_stored_config(
+    token: &str,
+    key_name: Option<&str>,
+    subject: &str,
+    resource: &str,
+    service_name: &str,
+    component: Option<&str>,
+) -> Result<(), String> {
+    // Get the public key from the database
+    let public_key = get_public_key(key_name)?;
+
+    // Get the service chain from the database
+    let service_nodes = get_service_chain(service_name)?;
+
+    // Call the original verify_service_chain_token function
+    verify_service_chain_token(
+        token,
+        &public_key,
+        subject,
+        resource,
+        &service_nodes,
+        component,
+    )
+    .map_err(|e| format!("Service chain token verification failed: {}", e))
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -126,6 +441,76 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[pg_test]
+    fn test_public_key_management() {
+        // Test key to use
+        let test_key = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA8v7JR/nUJ2J0wD2/hVNH9U9mz4xv7BiKWUHGob5I3Zo=\n-----END PUBLIC KEY-----";
+
+        // Add a key
+        let id =
+            crate::add_public_key("test_key", test_key, true).expect("Failed to add public key");
+        assert!(id > 0, "Key ID should be positive");
+
+        // Get the key by name
+        let key = crate::get_public_key(Some("test_key")).expect("Failed to get key by name");
+        assert_eq!(key, test_key, "Retrieved key should match original");
+
+        // Get the default key
+        let default_key = crate::get_public_key(None).expect("Failed to get default key");
+        assert_eq!(default_key, test_key, "Default key should match test key");
+
+        // Update the key
+        let updated =
+            crate::update_public_key("test_key", test_key, false).expect("Failed to update key");
+        assert!(updated, "Update should return true");
+
+        // Delete the key
+        let deleted = crate::delete_public_key("test_key").expect("Failed to delete key");
+        assert!(deleted, "Delete should return true");
+
+        // Verify key no longer exists
+        let result = crate::get_public_key(Some("test_key"));
+        assert!(result.is_err(), "Key should no longer exist");
+    }
+
+    #[pg_test]
+    fn test_service_chain_management() {
+        // Test service chain
+        let test_chain = r#"[
+            {
+                "component": "test_service",
+                "public_key": "ed25519/0123456789abcdef0123456789abcdef"
+            }
+        ]"#;
+
+        // Add a service chain
+        let id = crate::add_service_chain("test_service", test_chain)
+            .expect("Failed to add service chain");
+        assert!(id > 0, "Chain ID should be positive");
+
+        // Get the service chain
+        let chain = crate::get_service_chain("test_service").expect("Failed to get service chain");
+
+        // The retrieved JSON might be formatted differently, so we parse and compare
+        let original: serde_json::Value = serde_json::from_str(test_chain).unwrap();
+        let retrieved: serde_json::Value = serde_json::from_str(&chain).unwrap();
+        assert_eq!(original, retrieved, "Retrieved chain should match original");
+
+        // Update the chain
+        let updated = crate::update_service_chain("test_service", test_chain)
+            .expect("Failed to update service chain");
+        assert!(updated, "Update should return true");
+
+        // Delete the chain
+        let deleted =
+            crate::delete_service_chain("test_service").expect("Failed to delete service chain");
+        assert!(deleted, "Delete should return true");
+
+        // Verify chain no longer exists
+        let result = crate::get_service_chain("test_service");
+        assert!(result.is_err(), "Service chain should no longer exist");
     }
 }
 
