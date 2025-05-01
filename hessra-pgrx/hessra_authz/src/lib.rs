@@ -2,19 +2,22 @@ use pgrx::prelude::*;
 
 ::pgrx::pg_module_magic!();
 
-/// Extension version
+/// Returns the extension version information
+///
+/// This function can be used to verify the extension is properly loaded.
 #[pg_extern]
 fn info_hessra_authz() -> &'static str {
     "hessra_authz extension loaded"
 }
 
-/// Schema setup
-/// This function is automatically called when the extension is created
+/// Schema setup module
+///
+/// Contains the initialization code that runs when the extension is created
 #[pg_schema]
 mod schema {
     use pgrx::prelude::*;
 
-    // Create tables during extension load
+    // Create required tables during extension load
     #[pg_guard]
     pub extern "C-unwind" fn _PG_init() {
         let create_tables_sql = r#"
@@ -41,12 +44,24 @@ mod schema {
     }
 }
 
-// Helper function to escape single quotes in SQL strings
+/// Helper function to escape single quotes in SQL strings to prevent SQL injection
 fn sql_escape(s: &str) -> String {
     s.replace('\'', "''")
 }
 
-// Public key management
+//-----------------------------------------------------------------------------
+// Public Key Management Functions
+//-----------------------------------------------------------------------------
+
+/// Adds a new public key to the database
+///
+/// # Arguments
+/// * `key_name` - A unique name for the public key
+/// * `public_key` - The PEM-encoded public key
+/// * `is_default` - Whether this key should be the default key for verification
+///
+/// # Returns
+/// * The ID of the newly created key or an error message
 #[pg_extern]
 fn add_public_key(key_name: &str, public_key: &str, is_default: bool) -> Result<i32, String> {
     // First validate the public key format
@@ -80,6 +95,15 @@ fn add_public_key(key_name: &str, public_key: &str, is_default: bool) -> Result<
     }
 }
 
+/// Updates an existing public key in the database
+///
+/// # Arguments
+/// * `key_name` - The name of the key to update
+/// * `public_key` - The new PEM-encoded public key
+/// * `is_default` - Whether this key should be the default key for verification
+///
+/// # Returns
+/// * `true` if the key was updated, `false` if the key was not found
 #[pg_extern]
 fn update_public_key(key_name: &str, public_key: &str, is_default: bool) -> Result<bool, String> {
     // First validate the public key format
@@ -119,6 +143,13 @@ fn update_public_key(key_name: &str, public_key: &str, is_default: bool) -> Resu
     Ok(count > 0)
 }
 
+/// Deletes a public key from the database
+///
+/// # Arguments
+/// * `key_name` - The name of the key to delete
+///
+/// # Returns
+/// * `true` if the key was deleted, `false` if the key was not found
 #[pg_extern]
 fn delete_public_key(key_name: &str) -> Result<bool, String> {
     // First check if the key exists
@@ -146,6 +177,13 @@ fn delete_public_key(key_name: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Retrieves a public key from the database
+///
+/// # Arguments
+/// * `key_name` - Optional name of the key to retrieve. If None, the default key is returned.
+///
+/// # Returns
+/// * The PEM-encoded public key or an error if no key is found
 #[pg_extern]
 fn get_public_key(key_name: Option<&str>) -> Result<String, String> {
     let select_sql = match key_name {
@@ -170,7 +208,18 @@ fn get_public_key(key_name: Option<&str>) -> Result<String, String> {
     }
 }
 
-// Service chain management
+//-----------------------------------------------------------------------------
+// Service Chain Management Functions
+//-----------------------------------------------------------------------------
+
+/// Adds a new service chain to the database
+///
+/// # Arguments
+/// * `service_name` - A unique name for the service chain
+/// * `service_nodes` - JSON array of service nodes with component names and public keys
+///
+/// # Returns
+/// * The ID of the newly created service chain or an error message
 #[pg_extern]
 fn add_service_chain(service_name: &str, service_nodes: &str) -> Result<i32, String> {
     // Validate the service_nodes JSON
@@ -196,6 +245,14 @@ fn add_service_chain(service_name: &str, service_nodes: &str) -> Result<i32, Str
     }
 }
 
+/// Updates an existing service chain in the database
+///
+/// # Arguments
+/// * `service_name` - The name of the service chain to update
+/// * `service_nodes` - JSON array of service nodes with component names and public keys
+///
+/// # Returns
+/// * `true` if the service chain was updated, `false` if it was not found
 #[pg_extern]
 fn update_service_chain(service_name: &str, service_nodes: &str) -> Result<bool, String> {
     // Validate the service_nodes JSON
@@ -232,6 +289,13 @@ fn update_service_chain(service_name: &str, service_nodes: &str) -> Result<bool,
     Ok(true)
 }
 
+/// Deletes a service chain from the database
+///
+/// # Arguments
+/// * `service_name` - The name of the service chain to delete
+///
+/// # Returns
+/// * `true` if the service chain was deleted, `false` if it was not found
 #[pg_extern]
 fn delete_service_chain(service_name: &str) -> Result<bool, String> {
     // First check if the service chain exists
@@ -259,6 +323,13 @@ fn delete_service_chain(service_name: &str) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Retrieves a service chain from the database
+///
+/// # Arguments
+/// * `service_name` - The name of the service chain to retrieve
+///
+/// # Returns
+/// * The JSON representation of the service chain or an error if not found
 #[pg_extern]
 fn get_service_chain(service_name: &str) -> Result<String, String> {
     let select_sql = format!(
@@ -278,7 +349,20 @@ fn get_service_chain(service_name: &str) -> Result<String, String> {
     }
 }
 
-// Token verification functions
+//-----------------------------------------------------------------------------
+// Token Verification Functions
+//-----------------------------------------------------------------------------
+
+/// Verifies a token against a public key for access to a resource
+///
+/// # Arguments
+/// * `token` - The biscuit token to verify
+/// * `public_key` - The PEM-encoded public key to use for verification
+/// * `subject` - The subject (user) attempting to access the resource
+/// * `resource` - The resource being accessed
+///
+/// # Returns
+/// * Ok(()) if verification succeeds, or an error describing why it failed
 #[pg_extern]
 fn verify_token(
     token: &str,
@@ -290,6 +374,18 @@ fn verify_token(
     hessra_token::verify_token(token, public_key, subject, resource)
 }
 
+/// Verifies a token in a service chain context
+///
+/// # Arguments
+/// * `token` - The biscuit token to verify
+/// * `public_key` - The PEM-encoded public key to use for verification
+/// * `subject` - The subject (user) attempting to access the resource
+/// * `resource` - The resource being accessed
+/// * `service_nodes` - JSON array of service nodes in the chain
+/// * `component` - Optional component name; if specified, verifies the chain up to and including this component
+///
+/// # Returns
+/// * Ok(()) if verification succeeds, or an error describing why it failed
 #[pg_extern]
 fn verify_service_chain_token(
     token: &str,
@@ -313,7 +409,20 @@ fn verify_service_chain_token(
     )
 }
 
-// Convenience token verification functions using stored configs
+//-----------------------------------------------------------------------------
+// Convenience Functions Using Stored Configurations
+//-----------------------------------------------------------------------------
+
+/// Verifies a token using a stored public key
+///
+/// # Arguments
+/// * `token` - The biscuit token to verify
+/// * `key_name` - Optional name of the key to use (uses default if None)
+/// * `subject` - The subject (user) attempting to access the resource
+/// * `resource` - The resource being accessed
+///
+/// # Returns
+/// * Ok(()) if verification succeeds, or an error describing why it failed
 #[pg_extern]
 fn verify_token_with_stored_key(
     token: &str,
@@ -329,6 +438,18 @@ fn verify_token_with_stored_key(
         .map_err(|e| format!("Token verification failed: {}", e))
 }
 
+/// Verifies a token in a service chain context using stored configurations
+///
+/// # Arguments
+/// * `token` - The biscuit token to verify
+/// * `key_name` - Optional name of the key to use (uses default if None)
+/// * `subject` - The subject (user) attempting to access the resource
+/// * `resource` - The resource being accessed
+/// * `service_name` - Name of the service chain to use for verification
+/// * `component` - Optional component name; if specified, verifies the chain up to and including this component
+///
+/// # Returns
+/// * Ok(()) if verification succeeds, or an error describing why it failed
 #[pg_extern]
 fn verify_service_chain_token_with_stored_config(
     token: &str,
@@ -355,6 +476,10 @@ fn verify_service_chain_token_with_stored_config(
     )
     .map_err(|e| format!("Service chain token verification failed: {}", e))
 }
+
+//-----------------------------------------------------------------------------
+// Test Modules
+//-----------------------------------------------------------------------------
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
