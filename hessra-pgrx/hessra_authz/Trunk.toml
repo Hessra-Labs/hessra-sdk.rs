@@ -1,0 +1,13 @@
+[extension]
+name = "hessra_authz"
+repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
+license = "Apache-2.0"
+description = "Postgres Authorization with Local Biscuit Verification — by Hessra"
+homepage = "https://hessra.net"
+documentation = "https://github.com/Hessra-Labs/hessra-sdk.rs/tree/main/hessra-pgrx/hessra_authz"
+categories = ["security"]
+version = "0.1.0"
+
+[build]
+postgres_version = "15"
+platform = "linux/amd64"

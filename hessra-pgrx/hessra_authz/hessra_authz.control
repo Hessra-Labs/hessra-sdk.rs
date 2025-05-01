@@ -1,4 +1,4 @@
-comment = 'hessra_authz:  Created by pgrx'
+comment = 'Postgres Authorization with Local Biscuit Verification — by Hessra'
 default_version = '@CARGO_VERSION@'
 module_pathname = '$libdir/hessra_authz'
 relocatable = false
