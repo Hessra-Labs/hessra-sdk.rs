@@ -121,8 +121,9 @@ jobs:
             target
           key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run tests for all crates
-        run: cargo test --all
+      - name: Run tests for non-PGRX crates
+        run: |
+          cargo test --workspace --exclude hessra_authz
 
       - name: Run tests for individual crates
         run: |
@@ -130,6 +131,42 @@ jobs:
           cargo test -p hessra-config
           cargo test -p hessra-api
           cargo test -p hessra-sdk
+
+  pgrx-test:
+    name: Test PGRX crates
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-pgrx-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-14 postgresql-server-dev-14
+
+      - name: Install cargo-pgrx
+        run: cargo install cargo-pgrx --version 0.14.1 --locked
+
+      - name: Initialize PGRX
+        run: |
+          cargo pgrx init --pg14 /usr/bin/pg_config
+
+      - name: Test PGRX crates
+        run: |
+          cd hessra-pgrx/hessra_authz
+          cargo pgrx test pg14
 
   coverage:
     name: Code Coverage
@@ -147,7 +184,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Generate code coverage
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --workspace --exclude hessra_authz --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -194,7 +231,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Build documentation
-        run: cargo doc --no-deps --workspace
+        run: cargo doc --no-deps --workspace --exclude hessra_authz
 
       - name: Create index page that redirects to hessra_sdk
         if: github.ref == 'refs/heads/main'
