@@ -74,17 +74,17 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install PostgreSQL
+      - name: Install pgrx required packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-14 postgresql-server-dev-14
+          sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache pkg-config clang
 
       - name: Install cargo-pgrx
         run: cargo install cargo-pgrx --version 0.14.1 --locked
 
       - name: Initialize PGRX
         run: |
-          cargo pgrx init --pg14 /usr/bin/pg_config
+          cargo pgrx init
 
       - name: Check formatting
         run: cargo fmt --all -- --check
