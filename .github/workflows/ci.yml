@@ -24,6 +24,11 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  # Choose a specific PostgreSQL version for pgrx
+  PGRX_PG_SYS_FEATURE: pg15
+
 jobs:
   badge:
     name: Generate Status Badge
@@ -74,10 +79,10 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install pgrx required packages
+      - name: Install pgrx dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache pkg-config clang
+          sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
 
       - name: Install cargo-pgrx
         run: cargo install cargo-pgrx --version 0.14.1 --locked
@@ -90,7 +95,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: RUSTFLAGS='--cfg reqwest_unstable' cargo clippy --all-targets --all-features -- -D warnings
+        run: RUSTFLAGS='--cfg reqwest_unstable' cargo clippy --all-features --no-default-features --features "${PGRX_PG_SYS_FEATURE}" -- -D warnings
 
   security-audit:
     name: Security Audit
@@ -148,6 +153,8 @@ jobs:
     name: Test PGRX crates
     runs-on: ubuntu-latest
     needs: [lint]
+    env:
+      PGRX_PG_SYS_FEATURE: pg15
     steps:
       - uses: actions/checkout@v4
 
@@ -163,22 +170,22 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-pgrx-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install PostgreSQL
+      - name: Install pgrx dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-14 postgresql-server-dev-14
+          sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
 
       - name: Install cargo-pgrx
         run: cargo install cargo-pgrx --version 0.14.1 --locked
 
       - name: Initialize PGRX
         run: |
-          cargo pgrx init --pg14 /usr/bin/pg_config
+          cargo pgrx init --pg15 download
 
       - name: Test PGRX crates
         run: |
           cd hessra-pgrx/hessra_authz
-          cargo pgrx test pg14
+          cargo pgrx test pg15
 
   coverage:
     name: Code Coverage
@@ -232,18 +239,32 @@ jobs:
   docs:
     name: Build Documentation
     runs-on: ubuntu-latest
+    env:
+      PGRX_PG_SYS_FEATURE: pg15
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install pgrx dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
+
+      - name: Install cargo-pgrx
+        run: cargo install cargo-pgrx --version 0.14.1 --locked
+
+      - name: Initialize PGRX
+        run: |
+          cargo pgrx init --pg15 download
+
       - name: Setup Pages
         if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
 
       - name: Build documentation
-        run: cargo doc --no-deps --workspace --exclude hessra_authz
+        run: cargo doc --no-deps --workspace --no-default-features --features "${PGRX_PG_SYS_FEATURE}"
 
       - name: Create index page that redirects to hessra_sdk
         if: github.ref == 'refs/heads/main'
