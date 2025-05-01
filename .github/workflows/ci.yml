@@ -84,7 +84,7 @@ jobs:
 
       - name: Initialize PGRX
         run: |
-          cargo pgrx init
+          cargo pgrx init --pg15 download
 
       - name: Check formatting
         run: cargo fmt --all -- --check
