@@ -24,10 +24,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install pg-trunk
         run: cargo install pg-trunk
@@ -37,7 +34,7 @@ jobs:
         run: trunk build --version ${{ github.event.inputs.version || '0.1.0' }} --pg-version ${{ matrix.pg-version }}
 
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: extension-package
           path: hessra-pgrx/hessra_authz/.trunk/hessra_authz-*.tar.gz
