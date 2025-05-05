@@ -2,6 +2,14 @@
 name = "hessra_authz"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+authors = ["Jake Valentic <jake@hessra.net>"]
+description = "Postgres Authorization with Local Biscuit Verification — by Hessra"
+repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
+documentation = "https://github.com/Hessra-Labs/hessra-sdk.rs/tree/main/hessra-pgrx/hessra_authz"
+keywords = ["hessra", "authorization", "rust", "sdk", "biscuit", "postgres"]
+categories = ["security"]
+readme = "README.md"
 
 [lib]
 crate-type = ["cdylib", "lib"]
