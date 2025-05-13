@@ -33,12 +33,14 @@
 
 mod attenuate;
 mod error;
+mod mint;
 mod token;
 mod utils;
 mod verify;
 
 pub use attenuate::add_service_node_attenuation;
 pub use error::TokenError;
+pub use mint::{create_biscuit, create_service_chain_biscuit, TokenTimeConfig};
 pub use token::{parse_token, verify_service_chain_token, verify_token};
 pub use utils::{decode_token, encode_token, public_key_from_pem_file};
 pub use verify::{

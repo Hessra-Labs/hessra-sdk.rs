@@ -118,9 +118,14 @@ pub fn verify_service_chain_biscuit_local(
 
     let mut authz = build_base_authorizer(subject, resource.clone())?;
 
+    let mut component_found = false;
+    if component.is_none() {
+        component_found = true;
+    }
     for service_node in service_nodes {
         if let Some(ref component) = component {
             if component == &service_node.component {
+                component_found = true;
                 break;
             }
         }
@@ -132,6 +137,15 @@ pub fn verify_service_chain_biscuit_local(
                 check if node({service}, {node_name}) trusting authority, {node_key};
             "#
         ))?;
+    }
+
+    if let Some(ref component) = component {
+        if !component_found {
+            return Err(TokenError::authorization_error(format!(
+                "Token does not grant required access rights. missing {}",
+                component.clone()
+            )));
+        }
     }
 
     if authz.build(&biscuit)?.authorize().is_ok() {
