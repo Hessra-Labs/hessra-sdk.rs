@@ -16,7 +16,7 @@
 //! ## Usage
 //!
 //! ```no_run
-//! use hessra_token::{create_biscuit, verify_token, biscuit_key_from_string, TokenTimeConfig, KeyPair};
+//! use hessra_token::{create_biscuit, verify_token_local, biscuit_key_from_string, TokenTimeConfig, KeyPair, encode_token};
 //!
 //! fn main() -> Result<(), hessra_token::TokenError> {
 //!     // Create a new token
@@ -26,12 +26,12 @@
 //!         "resource456".to_string(),
 //!         keypair,
 //!         TokenTimeConfig::default(),
-//!     )?;
+//!     ).map_err(|e| hessra_token::TokenError::generic(e.to_string()))?;
 //!     
 //!     // Verify the token
-//!     let token_string = base64::encode(&token);
+//!     let token_string = encode_token(&token);
 //!     let public_key = biscuit_key_from_string("ed25519/01234567890abcdef".to_string())?;
-//!     verify_token(&token_string, public_key, "user123", "resource456")?;
+//!     verify_token_local(&token_string, public_key, "user123", "resource456")?;
 //!     
 //!     println!("Token creation and verification successful!");
 //!     Ok(())
