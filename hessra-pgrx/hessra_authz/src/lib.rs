@@ -371,7 +371,7 @@ fn verify_token(
     resource: &str,
 ) -> Result<(), hessra_token::TokenError> {
     let public_key = biscuit_auth::PublicKey::from_pem(public_key).unwrap();
-    hessra_token::verify_token(token, public_key, subject, resource)
+    hessra_token::verify_token_local(token, public_key, subject, resource)
 }
 
 /// Verifies a token in a service chain context
@@ -399,7 +399,7 @@ fn verify_service_chain_token(
     let service_nodes: Vec<hessra_token::ServiceNode> =
         serde_json::from_str(service_nodes).unwrap();
     let component = component.map(|s| s.to_string());
-    hessra_token::verify_service_chain_token(
+    hessra_token::verify_service_chain_token_local(
         token,
         public_key,
         subject,
