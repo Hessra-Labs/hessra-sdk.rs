@@ -85,7 +85,7 @@ jobs:
           sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
 
       - name: Install cargo-pgrx
-        run: cargo install cargo-pgrx --version 0.13.1 --locked
+        run: cargo install cargo-pgrx --version 0.14.3 --locked
 
       - name: Initialize PGRX
         run: |
@@ -178,7 +178,7 @@ jobs:
           sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
 
       - name: Install cargo-pgrx
-        run: cargo install cargo-pgrx --version 0.13.1 --locked
+        run: cargo install cargo-pgrx --version 0.14.3 --locked
 
       - name: Initialize PGRX
         run: |
@@ -252,7 +252,7 @@ jobs:
           sudo apt-get install -y build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
 
       - name: Install cargo-pgrx
-        run: cargo install cargo-pgrx --version 0.13.1 --locked
+        run: cargo install cargo-pgrx --version 0.14.3 --locked
 
       - name: Initialize PGRX
         run: |
