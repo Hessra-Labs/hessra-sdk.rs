@@ -26,6 +26,21 @@ fn build_base_authorizer(
     Ok(authz)
 }
 
+fn verify_raw_biscuit(
+    biscuit: Biscuit,
+    subject: String,
+    resource: String,
+) -> Result<(), TokenError> {
+    let authz = build_base_authorizer(subject, resource)?;
+    if authz.build(&biscuit)?.authorize().is_ok() {
+        Ok(())
+    } else {
+        Err(TokenError::authorization_error(
+            "Token does not grant required access rights",
+        ))
+    }
+}
+
 /// Verifies a Biscuit authorization token locally without contacting the authorization server.
 ///
 /// This function performs local verification of a Biscuit token using the provided public key.
@@ -57,15 +72,41 @@ pub fn verify_biscuit_local(
     resource: String,
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
+    verify_raw_biscuit(biscuit, subject, resource)
+}
 
-    let authz = build_base_authorizer(subject, resource)?;
-    if authz.build(&biscuit)?.authorize().is_ok() {
-        Ok(())
-    } else {
-        Err(TokenError::authorization_error(
-            "Token does not grant required access rights",
-        ))
-    }
+/// Verifies a Biscuit authorization token locally without contacting the authorization server.
+///
+/// This function performs local verification of a Biscuit token using the provided public key.
+/// It validates that the token grants access to the specified resource for the given subject.
+///
+/// # Arguments
+///
+/// * `token` - The base64-encoded Biscuit token string
+/// * `public_key` - The public key used to verify the token signature
+/// * `subject` - The subject (user) identifier to verify authorization for
+/// * `resource` - The resource identifier to verify authorization against
+///
+/// # Returns
+///
+/// * `Ok(())` - If the token is valid and grants access to the resource
+/// * `Err(TokenError)` - If verification fails for any reason
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The token is malformed or cannot be parsed
+/// - The token signature is invalid
+/// - The token does not grant the required access rights
+/// - The token has expired or other authorization checks fail
+pub fn verify_token_local(
+    token: &str,
+    public_key: PublicKey,
+    subject: &str,
+    resource: &str,
+) -> Result<(), TokenError> {
+    let biscuit = Biscuit::from_base64(token, public_key)?;
+    verify_raw_biscuit(biscuit, subject.to_string(), resource.to_string())
 }
 
 /// Takes a public key encoded as a string in the format "ed25519/..." or "secp256r1/..."
@@ -106,16 +147,13 @@ pub struct ServiceNode {
     pub public_key: String,
 }
 
-pub fn verify_service_chain_biscuit_local(
-    token: Vec<u8>,
-    public_key: PublicKey,
+fn verify_raw_service_chain_biscuit(
+    biscuit: Biscuit,
     subject: String,
     resource: String,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
-    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
-
     let mut authz = build_base_authorizer(subject, resource.clone())?;
 
     let mut component_found = false;
@@ -155,4 +193,34 @@ pub fn verify_service_chain_biscuit_local(
             "Token does not grant required access rights",
         ))
     }
+}
+
+pub fn verify_service_chain_biscuit_local(
+    token: Vec<u8>,
+    public_key: PublicKey,
+    subject: String,
+    resource: String,
+    service_nodes: Vec<ServiceNode>,
+    component: Option<String>,
+) -> Result<(), TokenError> {
+    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
+    verify_raw_service_chain_biscuit(biscuit, subject, resource, service_nodes, component)
+}
+
+pub fn verify_service_chain_token_local(
+    token: &str,
+    public_key: PublicKey,
+    subject: &str,
+    resource: &str,
+    service_nodes: Vec<ServiceNode>,
+    component: Option<String>,
+) -> Result<(), TokenError> {
+    let biscuit = Biscuit::from_base64(token, public_key).map_err(TokenError::biscuit_error)?;
+    verify_raw_service_chain_biscuit(
+        biscuit,
+        subject.to_string(),
+        resource.to_string(),
+        service_nodes,
+        component,
+    )
 }

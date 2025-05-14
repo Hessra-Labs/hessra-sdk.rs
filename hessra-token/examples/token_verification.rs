@@ -1,7 +1,7 @@
 use biscuit_auth::macros::biscuit;
 use hessra_token::{
     add_service_node_attenuation, biscuit_key_from_string, decode_token, encode_token,
-    verify_service_chain_token, verify_token, KeyPair, ServiceNode, TokenError,
+    verify_service_chain_token_local, verify_token_local, KeyPair, ServiceNode, TokenError,
 };
 use std::sync::Arc;
 fn main() -> Result<(), TokenError> {
@@ -12,7 +12,7 @@ fn main() -> Result<(), TokenError> {
 
     // Example 1: Basic verification
     println!("Example 1: Basic verification");
-    verify_token(&token_base64, root_keypair.public(), "alice", "resource1")?;
+    verify_token_local(&token_base64, root_keypair.public(), "alice", "resource1")?;
     println!("✅ Basic verification successful\n");
 
     // Example 2: Service chain verification
@@ -63,7 +63,7 @@ fn main() -> Result<(), TokenError> {
     )?;
 
     // Verify with service chain
-    verify_service_chain_token(
+    verify_service_chain_token_local(
         &encode_token(&attenuated_token2),
         root_keypair.public(),
         "alice",
@@ -82,7 +82,7 @@ fn main() -> Result<(), TokenError> {
     let parsed_pk = biscuit_key_from_string(pk_str)?;
 
     // Verify with parsed key
-    verify_token(&token_base64, parsed_pk, "alice", "resource1")?;
+    verify_token_local(&token_base64, parsed_pk, "alice", "resource1")?;
     println!("✅ Verification with key from string successful");
 
     Ok(())

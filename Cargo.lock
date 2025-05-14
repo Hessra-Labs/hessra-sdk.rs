@@ -913,6 +913,7 @@ dependencies = [
  "chrono",
  "hex",
  "js-sys",
+ "rand_core 0.9.3",
  "serde",
  "serde_json",
  "thiserror 2.0.12",

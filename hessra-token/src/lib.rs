@@ -2,12 +2,13 @@
 //!
 //! Core verification library for Hessra authentication tokens.
 //!
-//! This crate provides functionality for verifying and attenuating biscuit tokens
+//! This crate provides functionality for creating, verifying and attenuating biscuit tokens
 //! used in the Hessra authentication system. It is designed to be WASM-compatible
 //! and has no networking dependencies.
 //!
 //! ## Features
 //!
+//! - Token creation: Create new tokens with configurable time settings
 //! - Token verification: Verify tokens without contacting the authorization server
 //! - Token attestation: Add service node attestations to tokens
 //! - WASM compatibility: Can be compiled to WebAssembly for use in browsers
@@ -15,18 +16,24 @@
 //! ## Usage
 //!
 //! ```no_run
-//! use hessra_token::{verify_token, biscuit_key_from_string};
+//! use hessra_token::{create_biscuit, verify_token, biscuit_key_from_string, TokenTimeConfig, KeyPair};
 //!
 //! fn main() -> Result<(), hessra_token::TokenError> {
-//!     let token_base64 = "YOUR_TOKEN_STRING";
-//!     
-//!     // Parse public key from string format
-//!     let public_key = biscuit_key_from_string("ed25519/01234567890abcdef".to_string())?;
+//!     // Create a new token
+//!     let keypair = KeyPair::new();
+//!     let token = create_biscuit(
+//!         "user123".to_string(),
+//!         "resource456".to_string(),
+//!         keypair,
+//!         TokenTimeConfig::default(),
+//!     )?;
 //!     
 //!     // Verify the token
-//!     verify_token(token_base64, public_key, "user123", "resource456")?;
+//!     let token_string = base64::encode(&token);
+//!     let public_key = biscuit_key_from_string("ed25519/01234567890abcdef".to_string())?;
+//!     verify_token(&token_string, public_key, "user123", "resource456")?;
 //!     
-//!     println!("Token verification successful!");
+//!     println!("Token creation and verification successful!");
 //!     Ok(())
 //! }
 //! ```
@@ -34,18 +41,20 @@
 mod attenuate;
 mod error;
 mod mint;
-mod token;
 mod utils;
 mod verify;
 
 pub use attenuate::add_service_node_attenuation;
 pub use error::TokenError;
-pub use mint::{create_biscuit, create_service_chain_biscuit, TokenTimeConfig};
-pub use token::{parse_token, verify_service_chain_token, verify_token};
-pub use utils::{decode_token, encode_token, public_key_from_pem_file};
+pub use mint::{
+    create_biscuit, create_service_chain_biscuit, create_service_chain_token,
+    create_service_chain_token_with_time, create_token, create_token_with_time, TokenTimeConfig,
+};
+pub use utils::{decode_token, encode_token, parse_token, public_key_from_pem_file};
 pub use verify::{
     biscuit_key_from_string, verify_biscuit_local, verify_service_chain_biscuit_local, ServiceNode,
 };
+pub use verify::{verify_service_chain_token_local, verify_token_local};
 
 // Re-export biscuit types that are needed for public API
 pub use biscuit_auth::{Biscuit, KeyPair, PublicKey};
@@ -195,11 +204,11 @@ mod tests {
         let token_string = encode_token(&token_bytes);
 
         // Test verify_token
-        let result = verify_token(&token_string, keypair.public(), "alice", "resource1");
+        let result = verify_token_local(&token_string, keypair.public(), "alice", "resource1");
         assert!(result.is_ok());
 
         // Test with invalid subject
-        let result = verify_token(&token_string, keypair.public(), "bob", "resource1");
+        let result = verify_token_local(&token_string, keypair.public(), "bob", "resource1");
         assert!(result.is_err());
     }
 
@@ -235,7 +244,7 @@ mod tests {
                 println!("Token blocks: {}", biscuit.print());
 
                 if metadata["type"].as_str().unwrap() == "singleton" {
-                    verify_token(token_string, public_key, subject, resource)
+                    verify_token_local(token_string, public_key, subject, resource)
                 } else {
                     // Create test service nodes
                     let service_nodes = vec![
@@ -249,7 +258,7 @@ mod tests {
                         },
                     ];
 
-                    verify_service_chain_token(
+                    verify_service_chain_token_local(
                         token_string,
                         public_key,
                         subject,
@@ -320,7 +329,7 @@ mod tests {
                 ];
 
                 // Test the token with service chain verification
-                let result = verify_service_chain_token(
+                let result = verify_service_chain_token_local(
                     token_string,
                     public_key,
                     subject,
@@ -381,7 +390,7 @@ mod tests {
         // and focus on the verification of the service chain tokens
 
         // Step 1: Verify initial token as a regular token
-        let result = verify_token(initial_token, root_public_key, subject, resource);
+        let result = verify_token_local(initial_token, root_public_key, subject, resource);
         assert!(result.is_ok(), "Initial token verification failed");
 
         // Step 2: Payment Service verifies token with auth service attestation
@@ -390,7 +399,7 @@ mod tests {
             public_key: auth_service_pk_str.to_string(),
         }];
 
-        let result = verify_service_chain_token(
+        let result = verify_service_chain_token_local(
             token_after_auth,
             root_public_key,
             subject,
@@ -415,7 +424,7 @@ mod tests {
             },
         ];
 
-        let result = verify_service_chain_token(
+        let result = verify_service_chain_token_local(
             token_after_payment,
             root_public_key,
             subject,
@@ -444,7 +453,7 @@ mod tests {
             },
         ];
 
-        let result = verify_service_chain_token(
+        let result = verify_service_chain_token_local(
             final_token,
             root_public_key,
             subject,
@@ -469,7 +478,7 @@ mod tests {
         assert!(result.is_ok(), "Final token verification failed");
 
         // Verify that token not attenuated by the full chain fails authorization against the full chain
-        let result = verify_service_chain_token(
+        let result = verify_service_chain_token_local(
             token_after_auth,
             root_public_key,
             subject,

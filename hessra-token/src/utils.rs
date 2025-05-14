@@ -1,11 +1,11 @@
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{engine::general_purpose::URL_SAFE, Engine};
 use std::fs::read_to_string;
 
 use crate::error::TokenError;
 
-pub use biscuit_auth::PublicKey;
+pub use biscuit_auth::{Biscuit, PublicKey};
 
-/// Encode binary token data to base64 string
+/// Encode binary token data to URL-safe base64 string
 ///
 /// # Arguments
 ///
@@ -13,22 +13,22 @@ pub use biscuit_auth::PublicKey;
 ///
 /// # Returns
 ///
-/// Base64 encoded token string
+/// URL-safe base64 encoded token string
 pub fn encode_token(token_bytes: &[u8]) -> String {
-    STANDARD.encode(token_bytes)
+    URL_SAFE.encode(token_bytes)
 }
 
-/// Decode a base64 encoded token string to binary
+/// Decode a URL-safe base64 encoded token string to binary
 ///
 /// # Arguments
 ///
-/// * `token_string` - Base64 encoded token string
+/// * `token_string` - URL-safe base64 encoded token string
 ///
 /// # Returns
 ///
 /// Binary token data or TokenError if decoding fails
 pub fn decode_token(token_string: &str) -> Result<Vec<u8>, TokenError> {
-    STANDARD
+    URL_SAFE
         .decode(token_string)
         .map_err(|e| TokenError::generic(format!("Failed to decode base64 token: {}", e)))
 }
@@ -39,4 +39,20 @@ pub fn public_key_from_pem_file(path: &str) -> Result<PublicKey, TokenError> {
     let key = PublicKey::from_pem(&key_string)
         .map_err(|e| TokenError::generic(format!("Failed to parse PEM: {}", e)))?;
     Ok(key)
+}
+
+/// Extracts and parses a Biscuit token from a URL-safe base64 string
+///
+/// This is useful when you need to inspect the token contents directly
+///
+/// # Arguments
+///
+/// * `token_string` - URL-safe base64 encoded token string
+/// * `public_key` - The public key used to verify the token signature
+///
+/// # Returns
+///
+/// The parsed Biscuit token or an error
+pub fn parse_token(token_string: &str, public_key: PublicKey) -> Result<Biscuit, TokenError> {
+    Biscuit::from_base64(token_string, public_key).map_err(TokenError::biscuit_error)
 }

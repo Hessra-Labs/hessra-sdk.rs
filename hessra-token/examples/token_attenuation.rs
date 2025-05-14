@@ -1,6 +1,7 @@
 use biscuit_auth::macros::biscuit;
 use hessra_token::{
-    add_service_node_attenuation, decode_token, encode_token, verify_token, KeyPair, TokenError,
+    add_service_node_attenuation, decode_token, encode_token, verify_token_local, KeyPair,
+    TokenError,
 };
 
 fn main() -> Result<(), TokenError> {
@@ -29,7 +30,7 @@ fn main() -> Result<(), TokenError> {
 
     // 4. Verify the attenuated token still works
     println!("Verifying attenuated token...");
-    verify_token(
+    verify_token_local(
         &attenuated_token_base64,
         root_keypair.public(),
         "alice",
@@ -44,7 +45,7 @@ fn main() -> Result<(), TokenError> {
 
     // 6. Verify the chain token
     println!("\nVerifying token with attenuation chain...");
-    verify_token(
+    verify_token_local(
         &token_with_chain,
         root_keypair.public(),
         "alice",

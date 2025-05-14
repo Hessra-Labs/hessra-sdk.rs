@@ -50,7 +50,7 @@ pub extern "C" fn hessra_token_verify(
     let subject_ref = subject_str.unwrap_or("");
     let resource_ref = resource_str.unwrap_or("");
 
-    match hessra_token::verify_token(token_str, *public_key, subject_ref, resource_ref) {
+    match hessra_token::verify_token_local(token_str, *public_key, subject_ref, resource_ref) {
         Ok(_) => HessraResult::SUCCESS,
         Err(err) => err.into(),
     }
@@ -124,7 +124,7 @@ pub extern "C" fn hessra_token_verify_service_chain(
     let subject_ref = subject_str.unwrap_or("");
     let resource_ref = resource_str.unwrap_or("");
 
-    match hessra_token::verify_service_chain_token(
+    match hessra_token::verify_service_chain_token_local(
         token_str,
         *public_key,
         subject_ref,
