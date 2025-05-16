@@ -252,9 +252,13 @@ impl Hessra {
     }
 
     /// Request a token for a resource
-    pub async fn request_token(&self, resource: impl Into<String>) -> Result<String, SdkError> {
+    pub async fn request_token(
+        &self,
+        resource: impl Into<String>,
+        operation: impl Into<String>,
+    ) -> Result<String, SdkError> {
         self.client
-            .request_token(resource.into())
+            .request_token(resource.into(), operation.into())
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
@@ -269,14 +273,25 @@ impl Hessra {
         token: impl Into<String>,
         subject: impl Into<String>,
         resource: impl Into<String>,
+        operation: impl Into<String>,
     ) -> Result<(), SdkError> {
         if self.config.public_key.is_some() {
-            self.verify_token_local(token.into(), subject.into(), resource.into())
+            self.verify_token_local(
+                token.into(),
+                subject.into(),
+                resource.into(),
+                operation.into(),
+            )
         } else {
-            self.verify_token_remote(token.into(), subject.into(), resource.into())
-                .await
-                .map(|_| ())
-                .map_err(|e| SdkError::Generic(e.to_string()))
+            self.verify_token_remote(
+                token.into(),
+                subject.into(),
+                resource.into(),
+                operation.into(),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|e| SdkError::Generic(e.to_string()))
         }
     }
 
@@ -286,9 +301,15 @@ impl Hessra {
         token: impl Into<String>,
         subject: impl Into<String>,
         resource: impl Into<String>,
+        operation: impl Into<String>,
     ) -> Result<String, SdkError> {
         self.client
-            .verify_token(token.into(), subject.into(), resource.into())
+            .verify_token(
+                token.into(),
+                subject.into(),
+                resource.into(),
+                operation.into(),
+            )
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
@@ -299,13 +320,13 @@ impl Hessra {
         token: impl Into<String>,
         subject: impl AsRef<str>,
         resource: impl AsRef<str>,
+        operation: impl AsRef<str>,
     ) -> Result<(), SdkError> {
         let public_key_str = match &self.config.public_key {
             Some(key) => key,
             None => return Err(SdkError::Generic("Public key not configured".to_string())),
         };
 
-        //let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
         let public_key = PublicKey::from_pem(public_key_str.as_str())
             .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
 
@@ -317,6 +338,7 @@ impl Hessra {
             public_key,
             subject.as_ref().to_string(),
             resource.as_ref().to_string(),
+            operation.as_ref().to_string(),
         )
         .map_err(SdkError::Token)
     }
@@ -331,6 +353,7 @@ impl Hessra {
         token: impl Into<String>,
         subject: impl Into<String>,
         resource: impl Into<String>,
+        operation: impl Into<String>,
         service_chain: Option<&ServiceChain>,
         component: Option<String>,
     ) -> Result<(), SdkError> {
@@ -339,6 +362,7 @@ impl Hessra {
                 token.into(),
                 subject.into(),
                 resource.into(),
+                operation.into(),
                 chain,
                 component,
             ),
@@ -375,6 +399,7 @@ impl Hessra {
         token: String,
         subject: impl AsRef<str>,
         resource: impl AsRef<str>,
+        operation: impl AsRef<str>,
         service_chain: &ServiceChain,
         component: Option<String>,
     ) -> Result<(), SdkError> {
@@ -394,6 +419,7 @@ impl Hessra {
             public_key,
             subject.as_ref().to_string(),
             resource.as_ref().to_string(),
+            operation.as_ref().to_string(),
             service_chain.to_internal(),
             component,
         )

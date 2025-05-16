@@ -10,6 +10,7 @@ use crate::error::TokenError;
 fn build_base_authorizer(
     subject: String,
     resource: String,
+    operation: String,
 ) -> Result<biscuit::AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
@@ -18,8 +19,7 @@ fn build_base_authorizer(
             time({now});
             resource({resource});
             subject({subject});
-            operation("read");
-            operation("write");
+            operation({operation});
             allow if subject($sub), resource($res), operation($op), right($sub, $res, $op);
         "#
     );
@@ -30,8 +30,9 @@ fn verify_raw_biscuit(
     biscuit: Biscuit,
     subject: String,
     resource: String,
+    operation: String,
 ) -> Result<(), TokenError> {
-    let authz = build_base_authorizer(subject, resource)?;
+    let authz = build_base_authorizer(subject, resource, operation)?;
     if authz.build(&biscuit)?.authorize().is_ok() {
         Ok(())
     } else {
@@ -52,6 +53,7 @@ fn verify_raw_biscuit(
 /// * `public_key` - The public key used to verify the token signature
 /// * `subject` - The subject (user) identifier to verify authorization for
 /// * `resource` - The resource identifier to verify authorization against
+/// * `operation` - The operation to verify authorization for
 ///
 /// # Returns
 ///
@@ -70,9 +72,10 @@ pub fn verify_biscuit_local(
     public_key: PublicKey,
     subject: String,
     resource: String,
+    operation: String,
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
-    verify_raw_biscuit(biscuit, subject, resource)
+    verify_raw_biscuit(biscuit, subject, resource, operation)
 }
 
 /// Verifies a Biscuit authorization token locally without contacting the authorization server.
@@ -86,6 +89,7 @@ pub fn verify_biscuit_local(
 /// * `public_key` - The public key used to verify the token signature
 /// * `subject` - The subject (user) identifier to verify authorization for
 /// * `resource` - The resource identifier to verify authorization against
+/// * `operation` - The operation to verify authorization for
 ///
 /// # Returns
 ///
@@ -104,9 +108,15 @@ pub fn verify_token_local(
     public_key: PublicKey,
     subject: &str,
     resource: &str,
+    operation: &str,
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from_base64(token, public_key)?;
-    verify_raw_biscuit(biscuit, subject.to_string(), resource.to_string())
+    verify_raw_biscuit(
+        biscuit,
+        subject.to_string(),
+        resource.to_string(),
+        operation.to_string(),
+    )
 }
 
 /// Takes a public key encoded as a string in the format "ed25519/..." or "secp256r1/..."
@@ -151,10 +161,11 @@ fn verify_raw_service_chain_biscuit(
     biscuit: Biscuit,
     subject: String,
     resource: String,
+    operation: String,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
-    let mut authz = build_base_authorizer(subject, resource.clone())?;
+    let mut authz = build_base_authorizer(subject, resource.clone(), operation)?;
 
     let mut component_found = false;
     if component.is_none() {
@@ -200,11 +211,19 @@ pub fn verify_service_chain_biscuit_local(
     public_key: PublicKey,
     subject: String,
     resource: String,
+    operation: String,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
-    verify_raw_service_chain_biscuit(biscuit, subject, resource, service_nodes, component)
+    verify_raw_service_chain_biscuit(
+        biscuit,
+        subject,
+        resource,
+        operation,
+        service_nodes,
+        component,
+    )
 }
 
 pub fn verify_service_chain_token_local(
@@ -212,6 +231,7 @@ pub fn verify_service_chain_token_local(
     public_key: PublicKey,
     subject: &str,
     resource: &str,
+    operation: &str,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
@@ -220,6 +240,7 @@ pub fn verify_service_chain_token_local(
         biscuit,
         subject.to_string(),
         resource.to_string(),
+        operation.to_string(),
         service_nodes,
         component,
     )

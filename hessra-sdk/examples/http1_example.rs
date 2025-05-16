@@ -25,13 +25,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Request a token for a specific resource
     let resource = "resource1".to_string();
-    let token = client.request_token(resource.clone()).await?;
+    let token = client
+        .request_token(resource.clone(), "read".to_string())
+        .await?;
     println!("Received token: {}", token);
 
     // Verify the token, this will verify the token locally since
     // the authorization service public key is set in the client
     match client
-        .verify_token(token, "uri:urn:test:argo-cli0".to_string(), resource)
+        .verify_token(
+            token,
+            "uri:urn:test:argo-cli0".to_string(),
+            resource,
+            "read".to_string(),
+        )
         .await
     {
         Ok(_) => println!("Token verified successfully"),

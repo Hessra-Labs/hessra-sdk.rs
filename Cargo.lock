@@ -849,7 +849,7 @@ checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
 name = "hessra-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -876,7 +876,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-ffi"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "cbindgen",
  "hessra-config",
@@ -890,7 +890,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-sdk"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "hessra-api",
  "hessra-config",
@@ -906,7 +906,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-token"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "biscuit-auth",

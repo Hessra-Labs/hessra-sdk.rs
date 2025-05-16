@@ -144,7 +144,8 @@ char *hessra_error_message(enum HessraResult result);
 enum HessraResult hessra_token_verify(const char *token_string,
                                       struct HessraPublicKey *public_key,
                                       const char *subject,
-                                      const char *resource);
+                                      const char *resource,
+                                      const char *operation);
 
 /**
  * Parse a token from a string with service chain validation
@@ -153,5 +154,6 @@ enum HessraResult hessra_token_verify_service_chain(const char *token_string,
                                                     struct HessraPublicKey *public_key,
                                                     const char *subject,
                                                     const char *resource,
+                                                    const char *operation,
                                                     const char *service_nodes_json,
                                                     const char *component);

@@ -24,6 +24,7 @@
 //!     let token = create_biscuit(
 //!         "user123".to_string(),
 //!         "resource456".to_string(),
+//!         "read".to_string(),
 //!         keypair,
 //!         TokenTimeConfig::default(),
 //!     ).map_err(|e| hessra_token::TokenError::generic(e.to_string()))?;
@@ -31,7 +32,7 @@
 //!     // Verify the token
 //!     let token_string = encode_token(&token);
 //!     let public_key = biscuit_key_from_string("ed25519/01234567890abcdef".to_string())?;
-//!     verify_token_local(&token_string, public_key, "user123", "resource456")?;
+//!     verify_token_local(&token_string, public_key, "user123", "resource456", "read")?;
 //!     
 //!     println!("Token creation and verification successful!");
 //!     Ok(())
@@ -76,7 +77,6 @@ mod tests {
         let biscuit_builder = biscuit!(
             r#"
                 right("alice", "resource1", "read");
-                right("alice", "resource1", "write");
             "#
         );
         let biscuit = biscuit_builder.build(&keypair).unwrap();
@@ -88,6 +88,7 @@ mod tests {
             public_key,
             "alice".to_string(),
             "resource1".to_string(),
+            "read".to_string(),
         );
         assert!(result.is_ok());
     }
@@ -103,7 +104,6 @@ mod tests {
         // Create a simple test biscuit with separate node facts
         let biscuit_builder = biscuit!(
             r#"
-                right("alice", "resource1", "read");
                 right("alice", "resource1", "write");
                 node("resource1", "service1");
             "#
@@ -123,6 +123,7 @@ mod tests {
             root_keypair.public(),
             "alice".to_string(),
             "resource1".to_string(),
+            "write".to_string(),
             service_nodes,
             None,
         );
@@ -160,6 +161,7 @@ mod tests {
             root_keypair.public(),
             "alice".to_string(),
             "resource1".to_string(),
+            "read".to_string(),
         );
         assert!(result.is_ok());
     }
@@ -204,11 +206,18 @@ mod tests {
         let token_string = encode_token(&token_bytes);
 
         // Test verify_token
-        let result = verify_token_local(&token_string, keypair.public(), "alice", "resource1");
+        let result = verify_token_local(
+            &token_string,
+            keypair.public(),
+            "alice",
+            "resource1",
+            "read",
+        );
         assert!(result.is_ok());
 
         // Test with invalid subject
-        let result = verify_token_local(&token_string, keypair.public(), "bob", "resource1");
+        let result =
+            verify_token_local(&token_string, keypair.public(), "bob", "resource1", "read");
         assert!(result.is_err());
     }
 
@@ -244,7 +253,7 @@ mod tests {
                 println!("Token blocks: {}", biscuit.print());
 
                 if metadata["type"].as_str().unwrap() == "singleton" {
-                    verify_token_local(token_string, public_key, subject, resource)
+                    verify_token_local(token_string, public_key, subject, resource, "read")
                 } else {
                     // Create test service nodes
                     let service_nodes = vec![
@@ -263,6 +272,7 @@ mod tests {
                         public_key,
                         subject,
                         resource,
+                        "read",
                         service_nodes,
                         None,
                     )
@@ -334,6 +344,7 @@ mod tests {
                     public_key,
                     subject,
                     resource,
+                    "read",
                     service_nodes,
                     None,
                 );
@@ -390,7 +401,7 @@ mod tests {
         // and focus on the verification of the service chain tokens
 
         // Step 1: Verify initial token as a regular token
-        let result = verify_token_local(initial_token, root_public_key, subject, resource);
+        let result = verify_token_local(initial_token, root_public_key, subject, resource, "read");
         assert!(result.is_ok(), "Initial token verification failed");
 
         // Step 2: Payment Service verifies token with auth service attestation
@@ -404,6 +415,7 @@ mod tests {
             root_public_key,
             subject,
             resource,
+            "read",
             service_nodes_for_payment.clone(),
             None,
         );
@@ -429,6 +441,7 @@ mod tests {
             root_public_key,
             subject,
             resource,
+            "read",
             service_nodes_for_order.clone(),
             None,
         );
@@ -458,6 +471,7 @@ mod tests {
             root_public_key,
             subject,
             resource,
+            "read",
             service_nodes_complete.clone(),
             None,
         );
@@ -483,6 +497,7 @@ mod tests {
             root_public_key,
             subject,
             resource,
+            "read",
             service_nodes_complete,
             None,
         );

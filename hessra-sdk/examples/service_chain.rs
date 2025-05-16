@@ -69,7 +69,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Request a token for a specific resource
     let resource = "order_service".to_string();
-    let token = client.request_token(resource.clone()).await?;
+    let token = client
+        .request_token(resource.clone(), "read".to_string())
+        .await?;
     println!("Received token: {}", token);
 
     // --- AUTH SERVICE ---
@@ -115,6 +117,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         token_with_auth.clone(),
         "uri:urn:test:argo-cli0",
         resource.clone(),
+        "read".to_string(),
         &full_service_chain,
         Some("payment_service".to_string()),
     )?;
@@ -148,6 +151,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         token_with_payment.clone(),
         "uri:urn:test:argo-cli0",
         resource.clone(),
+        "read".to_string(),
         &full_service_chain,
         Some("order_service".to_string()),
     )?;
@@ -167,6 +171,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         final_token,
         "uri:urn:test:argo-cli0",
         resource.clone(),
+        "read".to_string(),
         &full_service_chain,
         None, // Verify the entire chain
     )?;

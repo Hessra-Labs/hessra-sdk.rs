@@ -8,7 +8,7 @@ and has no networking dependencies.
 
 ## Features
 
-- **Token creation**: Create new tokens with configurable time settings
+- **Token creation**: Create new tokens with configurable time settings and operations
 - **Token verification**: Verify tokens without contacting the authorization server
 - **Token attestation**: Add service node attestations to tokens
 - **WASM compatibility**: Can be compiled to WebAssembly for use in browsers (via the `wasm` feature)
@@ -28,6 +28,7 @@ fn main() -> Result<(), hessra_token::TokenError> {
     let token = create_biscuit(
         "user123".to_string(),
         "resource456".to_string(),
+        "read".to_string(),
         keypair,
         TokenTimeConfig::default(),
     )?;
@@ -41,6 +42,7 @@ fn main() -> Result<(), hessra_token::TokenError> {
     let custom_token = create_biscuit(
         "user123".to_string(),
         "resource456".to_string(),
+        "read".to_string(),
         keypair,
         custom_time,
     )?;
@@ -74,6 +76,7 @@ fn main() -> Result<(), hessra_token::TokenError> {
     let token = create_service_chain_biscuit(
         "user123".to_string(),
         "resource456".to_string(),
+        "read".to_string(),
         keypair,
         &service_nodes,
     )?;
@@ -96,7 +99,7 @@ fn main() -> Result<(), hessra_token::TokenError> {
     let public_key = biscuit_key_from_string("ed25519/01234567890abcdef".to_string())?;
 
     // Verify the token
-    verify_token(token_base64, public_key, "user123", "resource456")?;
+    verify_token(token_base64, public_key, "user123", "resource456", "read")?;
 
     println!("Token verification successful!");
     Ok(())
@@ -118,11 +121,11 @@ fn main() -> Result<(), hessra_token::TokenError> {
     let service_nodes = vec![
         ServiceNode {
             component: "service1".to_string(),
-            public_key: "ed25519/service1key".to_string(),
+            public_key: "ed25519/service1pubkey".to_string(),
         },
         ServiceNode {
             component: "service2".to_string(),
-            public_key: "ed25519/service2key".to_string(),
+            public_key: "ed25519/service2pubkey".to_string(),
         },
     ];
 
@@ -132,6 +135,7 @@ fn main() -> Result<(), hessra_token::TokenError> {
         public_key,
         "user123",
         "resource456",
+        "write",
         service_nodes,
         None, // Verify full chain, or specify a component to verify up to
     )?;
@@ -180,10 +184,69 @@ To compile with WebAssembly support, enable the `wasm` feature:
 
 ```toml
 [dependencies]
-hessra-token = { version = "0.1.1", features = ["wasm"] }
+hessra-token = { version = "0.3", features = ["wasm"] }
 ```
 
 ## Lower-level API
+
+If you need more control, lower-level functions are also available:
+
+- `verify_biscuit_local` - Directly verify binary token data
+- `verify_service_chain_biscuit_local` - Verify binary token data with service chain
+- `parse_token` - Parse a URL-safe base64 token string into a Biscuit for inspection
+- `decode_token` - Convert URL-safe base64 encoded token to binary data
+- `encode_token` - Convert binary token data to URL-safe base64 string
+
+## Development
+
+This crate is part of the Hessra SDK refactoring project. It provides the token functionality
+that was previously part of the monolithic SDK.
+
+## Token Operations
+
+The library supports specifying operations when creating and verifying tokens. Common operations include:
+
+- `read`: Read access to a resource
+- `write`: Write access to a resource
+- `delete`: Delete access to a resource
+- `admin`: Administrative access to a resource
+
+You can define your own operations as needed for your application.
+
+## Service Chain Tokens
+
+For service chain tokens, you can specify operations in the same way:
+
+```rust
+use hessra_token::{create_service_chain_token, verify_service_chain_token_local, ServiceNode};
+
+let nodes = vec![
+    ServiceNode {
+        component: "auth_service".to_string(),
+        public_key: "ed25519/...".to_string(),
+    }
+];
+
+let token = create_service_chain_token(
+    "user123".to_string(),
+    "resource456".to_string(),
+    "read".to_string(),
+    keypair,
+    &nodes,
+)?;
+
+verify_service_chain_token_local(
+    &token,
+    public_key,
+    "user123",
+    "resource456",
+    "read",
+    nodes,
+    None,
+)?;
+```
+
+## Low-Level Functions
 
 If you need more control, lower-level functions are also available:
 

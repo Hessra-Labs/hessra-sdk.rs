@@ -156,10 +156,6 @@ valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
     --trace-children=yes LD_LIBRARY_PATH=./target/debug ./test_debug
 ```
 
-## PostgreSQL Plugin
-
-This FFI library is designed to be used in the Hessra PostgreSQL plugin for row-level security based on Hessra tokens. See the PostgreSQL plugin repository for more information.
-
 ## License
 
 Apache License 2.0

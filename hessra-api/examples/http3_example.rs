@@ -34,7 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let resource = "resource1".to_string();
     println!("Requesting token for resource: {}", resource);
 
-    let token = match client.request_token(resource.clone()).await {
+    let token = match client
+        .request_token(resource.clone(), "read".to_string())
+        .await
+    {
         Ok(token) => {
             println!("Token received successfully");
             token
@@ -53,7 +56,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         subject, resource
     );
 
-    match client.verify_token(token, subject, resource).await {
+    match client
+        .verify_token(token, subject, resource, "read".to_string())
+        .await
+    {
         Ok(response) => {
             println!("Token verification successful: {}", response);
         }

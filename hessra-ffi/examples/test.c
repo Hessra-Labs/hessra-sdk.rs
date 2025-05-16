@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
     // Verify a token
     // Note: This will likely fail with the sample data but demonstrates the API
     printf("Attempting to verify token...\n");
-    result = hessra_token_verify(SAMPLE_TOKEN, retrieved_key, "subject1", "resource1");
+    result = hessra_token_verify(SAMPLE_TOKEN, retrieved_key, "subject1", "resource1", "read");
     if (result != SUCCESS) {
         char* error_message = hessra_error_message(result);
         printf("Token verification result: %s (expected in this example)\n", error_message);

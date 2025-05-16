@@ -353,13 +353,14 @@ fn get_service_chain(service_name: &str) -> Result<String, String> {
 // Token Verification Functions
 //-----------------------------------------------------------------------------
 
-/// Verifies a token against a public key for access to a resource
+/// Verifies a token
 ///
 /// # Arguments
 /// * `token` - The biscuit token to verify
 /// * `public_key` - The PEM-encoded public key to use for verification
 /// * `subject` - The subject (user) attempting to access the resource
 /// * `resource` - The resource being accessed
+/// * `operation` - The operation being performed
 ///
 /// # Returns
 /// * Ok(()) if verification succeeds, or an error describing why it failed
@@ -369,9 +370,10 @@ fn verify_token(
     public_key: &str,
     subject: &str,
     resource: &str,
+    operation: &str,
 ) -> Result<(), hessra_token::TokenError> {
     let public_key = biscuit_auth::PublicKey::from_pem(public_key).unwrap();
-    hessra_token::verify_token_local(token, public_key, subject, resource)
+    hessra_token::verify_token_local(token, public_key, subject, resource, operation)
 }
 
 /// Verifies a token in a service chain context
@@ -381,6 +383,7 @@ fn verify_token(
 /// * `public_key` - The PEM-encoded public key to use for verification
 /// * `subject` - The subject (user) attempting to access the resource
 /// * `resource` - The resource being accessed
+/// * `operation` - The operation being performed
 /// * `service_nodes` - JSON array of service nodes in the chain
 /// * `component` - Optional component name; if specified, verifies the chain up to and including this component
 ///
@@ -392,6 +395,7 @@ fn verify_service_chain_token(
     public_key: &str,
     subject: &str,
     resource: &str,
+    operation: &str,
     service_nodes: &str, // JSON array of service nodes
     component: Option<&str>,
 ) -> Result<(), hessra_token::TokenError> {
@@ -404,6 +408,7 @@ fn verify_service_chain_token(
         public_key,
         subject,
         resource,
+        operation,
         service_nodes,
         component,
     )
@@ -420,6 +425,7 @@ fn verify_service_chain_token(
 /// * `key_name` - Optional name of the key to use (uses default if None)
 /// * `subject` - The subject (user) attempting to access the resource
 /// * `resource` - The resource being accessed
+/// * `operation` - The operation being performed
 ///
 /// # Returns
 /// * Ok(()) if verification succeeds, or an error describing why it failed
@@ -429,12 +435,13 @@ fn verify_token_with_stored_key(
     key_name: Option<&str>,
     subject: &str,
     resource: &str,
+    operation: &str,
 ) -> Result<(), String> {
     // Get the public key from the database
     let public_key = get_public_key(key_name)?;
 
     // Call the original verify_token function
-    verify_token(token, &public_key, subject, resource)
+    verify_token(token, &public_key, subject, resource, operation)
         .map_err(|e| format!("Token verification failed: {}", e))
 }
 
@@ -445,17 +452,19 @@ fn verify_token_with_stored_key(
 /// * `key_name` - Optional name of the key to use (uses default if None)
 /// * `subject` - The subject (user) attempting to access the resource
 /// * `resource` - The resource being accessed
+/// * `operation` - The operation being performed
 /// * `service_name` - Name of the service chain to use for verification
 /// * `component` - Optional component name; if specified, verifies the chain up to and including this component
 ///
 /// # Returns
 /// * Ok(()) if verification succeeds, or an error describing why it failed
 #[pg_extern]
-fn verify_service_chain_token_with_stored_config(
+fn verify_service_chain_token_with_stored_key(
     token: &str,
     key_name: Option<&str>,
     subject: &str,
     resource: &str,
+    operation: &str,
     service_name: &str,
     component: Option<&str>,
 ) -> Result<(), String> {
@@ -471,10 +480,11 @@ fn verify_service_chain_token_with_stored_config(
         &public_key,
         subject,
         resource,
+        operation,
         &service_nodes,
         component,
     )
-    .map_err(|e| format!("Service chain token verification failed: {}", e))
+    .map_err(|e| format!("Token verification failed: {}", e))
 }
 
 //-----------------------------------------------------------------------------
@@ -523,7 +533,7 @@ mod tests {
                 println!("Token blocks: {}", biscuit.print());
 
                 if metadata["type"].as_str().unwrap() == "singleton" {
-                    crate::verify_token(token_string, public_key_str, subject, resource)
+                    crate::verify_token(token_string, public_key_str, subject, resource, "read")
                 } else {
                     // Create test service nodes as JSON array
                     let service_nodes = r#"[
@@ -542,6 +552,7 @@ mod tests {
                         public_key_str,
                         subject,
                         resource,
+                        "read",
                         service_nodes,
                         None,
                     )

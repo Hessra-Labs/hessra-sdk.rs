@@ -11,6 +11,7 @@ pub extern "C" fn hessra_token_verify(
     public_key: *mut HessraPublicKey,
     subject: *const c_char,
     resource: *const c_char,
+    operation: *const c_char,
 ) -> HessraResult {
     if token_string.is_null() || public_key.is_null() {
         return HessraResult::ERROR_INVALID_PARAMETER;
@@ -46,11 +47,27 @@ pub extern "C" fn hessra_token_verify(
         None
     };
 
+    let operation_str = if !operation.is_null() {
+        match unsafe { CStr::from_ptr(operation) }.to_str() {
+            Ok(s) => Some(s),
+            Err(_) => return HessraResult::ERROR_INVALID_PARAMETER,
+        }
+    } else {
+        None
+    };
+
     // Handle optional parameters
     let subject_ref = subject_str.unwrap_or("");
     let resource_ref = resource_str.unwrap_or("");
+    let operation_ref = operation_str.unwrap_or("");
 
-    match hessra_token::verify_token_local(token_str, *public_key, subject_ref, resource_ref) {
+    match hessra_token::verify_token_local(
+        token_str,
+        *public_key,
+        subject_ref,
+        resource_ref,
+        operation_ref,
+    ) {
         Ok(_) => HessraResult::SUCCESS,
         Err(err) => err.into(),
     }
@@ -63,6 +80,7 @@ pub extern "C" fn hessra_token_verify_service_chain(
     public_key: *mut HessraPublicKey,
     subject: *const c_char,
     resource: *const c_char,
+    operation: *const c_char,
     service_nodes_json: *const c_char,
     component: *const c_char,
 ) -> HessraResult {
@@ -100,6 +118,15 @@ pub extern "C" fn hessra_token_verify_service_chain(
         None
     };
 
+    let operation_str = if !operation.is_null() {
+        match unsafe { CStr::from_ptr(operation) }.to_str() {
+            Ok(s) => Some(s),
+            Err(_) => return HessraResult::ERROR_INVALID_PARAMETER,
+        }
+    } else {
+        None
+    };
+
     let c_nodes_json = unsafe { CStr::from_ptr(service_nodes_json) };
     let nodes_json = match c_nodes_json.to_str() {
         Ok(s) => s,
@@ -123,12 +150,14 @@ pub extern "C" fn hessra_token_verify_service_chain(
     // Handle optional parameters
     let subject_ref = subject_str.unwrap_or("");
     let resource_ref = resource_str.unwrap_or("");
+    let operation_ref = operation_str.unwrap_or("");
 
     match hessra_token::verify_service_chain_token_local(
         token_str,
         *public_key,
         subject_ref,
         resource_ref,
+        operation_ref,
         service_nodes,
         component_str,
     ) {

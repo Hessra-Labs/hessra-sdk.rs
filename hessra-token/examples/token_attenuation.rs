@@ -35,6 +35,7 @@ fn main() -> Result<(), TokenError> {
         root_keypair.public(),
         "alice",
         "resource1",
+        "read",
     )?;
     println!("✅ Verification successful for attenuated token");
 
@@ -50,6 +51,7 @@ fn main() -> Result<(), TokenError> {
         root_keypair.public(),
         "alice",
         "resource1",
+        "read",
     )?;
     println!("✅ Verification successful for token with attenuation chain");
 

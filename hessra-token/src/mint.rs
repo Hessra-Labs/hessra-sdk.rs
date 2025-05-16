@@ -32,13 +32,15 @@ impl Default for TokenTimeConfig {
 fn _create_base_biscuit_builder(
     subject: String,
     resource: String,
+    operation: String,
 ) -> Result<BiscuitBuilder, Box<dyn Error>> {
-    create_base_biscuit_builder_with_time(subject, resource, TokenTimeConfig::default())
+    create_base_biscuit_builder_with_time(subject, resource, operation, TokenTimeConfig::default())
 }
 
 fn create_base_biscuit_builder_with_time(
     subject: String,
     resource: String,
+    operation: String,
     time_config: TokenTimeConfig,
 ) -> Result<BiscuitBuilder, Box<dyn Error>> {
     let start_time = time_config
@@ -48,8 +50,7 @@ fn create_base_biscuit_builder_with_time(
 
     let biscuit_builder = biscuit!(
         r#"
-            right({subject}, {resource}, "read");
-            right({subject}, {resource}, "write");
+            right({subject}, {resource}, {operation});
             check if time($time), $time < {expiration};
         "#
     );
@@ -60,11 +61,12 @@ fn create_base_biscuit_builder_with_time(
 pub fn create_raw_biscuit(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     time_config: TokenTimeConfig,
 ) -> Result<Biscuit, Box<dyn Error>> {
-    let biscuit =
-        create_base_biscuit_builder_with_time(subject, resource, time_config)?.build(&key)?;
+    let biscuit = create_base_biscuit_builder_with_time(subject, resource, operation, time_config)?
+        .build(&key)?;
 
     info!("biscuit (authority): {}", biscuit);
 
@@ -80,6 +82,7 @@ pub fn create_raw_biscuit(
 ///
 /// * `subject` - The subject (user) identifier
 /// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
 /// * `key` - The key pair used to sign the token
 /// * `time_config` - Optional time configuration for token validity
 ///
@@ -90,10 +93,11 @@ pub fn create_raw_biscuit(
 pub fn create_biscuit(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     time_config: TokenTimeConfig,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    let biscuit = create_raw_biscuit(subject, resource, key, time_config)?;
+    let biscuit = create_raw_biscuit(subject, resource, operation, key, time_config)?;
     let token = biscuit.to_vec()?;
     Ok(token)
 }
@@ -101,10 +105,11 @@ pub fn create_biscuit(
 fn create_base64_biscuit(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     time_config: TokenTimeConfig,
 ) -> Result<String, Box<dyn Error>> {
-    let biscuit = create_raw_biscuit(subject, resource, key, time_config)?;
+    let biscuit = create_raw_biscuit(subject, resource, operation, key, time_config)?;
     let token = biscuit.to_base64()?;
     Ok(token)
 }
@@ -112,18 +117,26 @@ fn create_base64_biscuit(
 pub fn create_token(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
 ) -> Result<String, Box<dyn Error>> {
-    create_base64_biscuit(subject, resource, key, TokenTimeConfig::default())
+    create_base64_biscuit(
+        subject,
+        resource,
+        operation,
+        key,
+        TokenTimeConfig::default(),
+    )
 }
 
 pub fn create_token_with_time(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     time_config: TokenTimeConfig,
 ) -> Result<String, Box<dyn Error>> {
-    create_base64_biscuit(subject, resource, key, time_config)
+    create_base64_biscuit(subject, resource, operation, key, time_config)
 }
 
 /// Creates a new biscuit token with service chain attestations.
@@ -136,6 +149,7 @@ pub fn create_token_with_time(
 ///
 /// * `subject` - The subject (user) identifier
 /// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
 /// * `key` - The key pair used to sign the token
 /// * `nodes` - Vector of service nodes that will attest to the token
 ///
@@ -146,11 +160,13 @@ pub fn create_token_with_time(
 pub fn create_service_chain_biscuit(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     nodes: &Vec<ServiceNode>,
     time_config: TokenTimeConfig,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    let biscuit = create_raw_service_chain_biscuit(subject, resource, key, nodes, time_config)?;
+    let biscuit =
+        create_raw_service_chain_biscuit(subject, resource, operation, key, nodes, time_config)?;
     let token = biscuit.to_vec()?;
     Ok(token)
 }
@@ -158,11 +174,13 @@ pub fn create_service_chain_biscuit(
 fn create_base64_service_chain_biscuit(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     nodes: &Vec<ServiceNode>,
     time_config: TokenTimeConfig,
 ) -> Result<String, Box<dyn Error>> {
-    let biscuit = create_raw_service_chain_biscuit(subject, resource, key, nodes, time_config)?;
+    let biscuit =
+        create_raw_service_chain_biscuit(subject, resource, operation, key, nodes, time_config)?;
     let token = biscuit.to_base64()?;
     Ok(token)
 }
@@ -170,20 +188,29 @@ fn create_base64_service_chain_biscuit(
 pub fn create_raw_service_chain_biscuit(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     nodes: &Vec<ServiceNode>,
     time_config: TokenTimeConfig,
 ) -> Result<Biscuit, Box<dyn Error>> {
-    create_service_chain_biscuit_with_time(subject, resource, key, nodes, time_config)
+    create_service_chain_biscuit_with_time(subject, resource, operation, key, nodes, time_config)
 }
 
 pub fn create_service_chain_token(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     nodes: &Vec<ServiceNode>,
 ) -> Result<String, Box<dyn Error>> {
-    create_base64_service_chain_biscuit(subject, resource, key, nodes, TokenTimeConfig::default())
+    create_base64_service_chain_biscuit(
+        subject,
+        resource,
+        operation,
+        key,
+        nodes,
+        TokenTimeConfig::default(),
+    )
 }
 
 /// Creates a new biscuit token with service chain attestations and custom time settings.
@@ -195,6 +222,7 @@ pub fn create_service_chain_token(
 ///
 /// * `subject` - The subject (user) identifier
 /// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
 /// * `key` - The key pair used to sign the token
 /// * `nodes` - Vector of service nodes that will attest to the token
 /// * `time_config` - Time configuration for token validity
@@ -206,12 +234,14 @@ pub fn create_service_chain_token(
 pub fn create_service_chain_biscuit_with_time(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     nodes: &Vec<ServiceNode>,
     time_config: TokenTimeConfig,
 ) -> Result<Biscuit, Box<dyn Error>> {
     let service = resource.clone();
-    let mut biscuit_builder = create_base_biscuit_builder_with_time(subject, service, time_config)?;
+    let mut biscuit_builder =
+        create_base_biscuit_builder_with_time(subject, service, operation, time_config)?;
 
     // Add each node in the service chain to the biscuit builder
     for node in nodes {
@@ -234,12 +264,19 @@ pub fn create_service_chain_biscuit_with_time(
 pub fn create_service_chain_token_with_time(
     subject: String,
     resource: String,
+    operation: String,
     key: KeyPair,
     nodes: &Vec<ServiceNode>,
     time_config: TokenTimeConfig,
 ) -> Result<String, Box<dyn Error>> {
-    let biscuit =
-        create_service_chain_biscuit_with_time(subject, resource, key, nodes, time_config)?;
+    let biscuit = create_service_chain_biscuit_with_time(
+        subject,
+        resource,
+        operation,
+        key,
+        nodes,
+        time_config,
+    )?;
     let token = biscuit.to_base64()?;
     Ok(token)
 }
@@ -254,37 +291,116 @@ mod tests {
     fn test_create_biscuit() {
         let subject = "test@test.com".to_owned();
         let resource: String = "res1".to_string();
+        let operation = "read".to_string();
         let root = KeyPair::new();
         let public_key = root.public();
         let token = create_biscuit(
             subject.clone(),
             resource.clone(),
+            operation.clone(),
             root,
             TokenTimeConfig::default(),
         )
         .unwrap();
 
-        let res = verify_biscuit_local(token, public_key, subject, resource);
+        let res = verify_biscuit_local(token, public_key, subject, resource, operation);
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_biscuit_operations() {
+        let subject = "test@test.com".to_owned();
+        let resource = "res1".to_string();
+        let operation = "read".to_string();
+        let root = KeyPair::new();
+        let public_key = root.public();
+
+        // Test read operation
+        let read_token = create_biscuit(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root,
+            TokenTimeConfig::default(),
+        )
+        .unwrap();
+
+        let res = verify_biscuit_local(
+            read_token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        );
+        assert!(res.is_ok());
+
+        let root = KeyPair::new();
+        let public_key = root.public();
+
+        // Test write operation
+        let write_token = create_biscuit(
+            subject.clone(),
+            resource.clone(),
+            "write".to_string(),
+            root,
+            TokenTimeConfig::default(),
+        )
+        .unwrap();
+
+        let res = verify_biscuit_local(
+            write_token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            "write".to_string(),
+        );
+        assert!(res.is_ok());
+
+        // Test that read token cannot be used for write
+        let res = verify_biscuit_local(
+            read_token,
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            "write".to_string(),
+        );
+        assert!(res.is_err());
+
+        // Test that write token cannot be used for read
+        let res = verify_biscuit_local(
+            write_token,
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            "read".to_string(),
+        );
+        assert!(res.is_err());
     }
 
     #[test]
     fn test_biscuit_expiration() {
         let subject = "test@test.com".to_owned();
         let resource = "res1".to_string();
+        let operation = "read".to_string();
         let root = KeyPair::new();
         let public_key = root.public();
         // Create a biscuit with a 5 minute expiration from now
         let token = create_biscuit(
             subject.clone(),
             resource.clone(),
+            operation.clone(),
             root,
             TokenTimeConfig::default(),
         )
         .unwrap();
 
-        let res =
-            verify_biscuit_local(token.clone(), public_key, subject.clone(), resource.clone());
+        let res = verify_biscuit_local(
+            token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        );
         assert!(res.is_ok());
 
         // Create a biscuit with a start time over 5 minutes ago
@@ -292,6 +408,7 @@ mod tests {
         let token = create_biscuit(
             subject.clone(),
             resource.clone(),
+            operation.clone(),
             root,
             TokenTimeConfig {
                 start_time: Some(Utc::now().timestamp() - 301),
@@ -299,7 +416,7 @@ mod tests {
             },
         )
         .unwrap();
-        let res = verify_biscuit_local(token, public_key, subject, resource);
+        let res = verify_biscuit_local(token, public_key, subject, resource, operation);
         assert!(res.is_err());
     }
 
@@ -307,6 +424,7 @@ mod tests {
     fn test_custom_token_time_config() {
         let subject = "test@test.com".to_owned();
         let resource = "res1".to_string();
+        let operation = "read".to_string();
         let root = KeyPair::new();
         let public_key = root.public();
 
@@ -317,11 +435,23 @@ mod tests {
             duration: 7200, // 2 hours
         };
 
-        let token = create_biscuit(subject.clone(), resource.clone(), root, time_config).unwrap();
+        let token = create_biscuit(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root,
+            time_config,
+        )
+        .unwrap();
 
         // Token should be valid at a time between start and expiration
-        let res =
-            verify_biscuit_local(token.clone(), public_key, subject.clone(), resource.clone());
+        let res = verify_biscuit_local(
+            token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        );
         assert!(res.is_ok());
     }
 
@@ -329,6 +459,7 @@ mod tests {
     fn test_service_chain_biscuit() {
         let subject = "test@test.com".to_owned();
         let resource = "res1".to_string();
+        let operation = "read".to_string();
         let root = KeyPair::new();
         let public_key = root.public();
         let chain_key = KeyPair::new();
@@ -342,6 +473,7 @@ mod tests {
         let token = create_service_chain_biscuit(
             subject.clone(),
             resource.clone(),
+            operation.clone(),
             root,
             &nodes,
             TokenTimeConfig::default(),
@@ -351,8 +483,13 @@ mod tests {
         }
         assert!(token.is_ok());
         let token = token.unwrap();
-        let res =
-            verify_biscuit_local(token.clone(), public_key, subject.clone(), resource.clone());
+        let res = verify_biscuit_local(
+            token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        );
         assert!(res.is_ok());
         let biscuit = Biscuit::from(&token, public_key).unwrap();
         let third_party_request = biscuit.third_party_request().unwrap();
@@ -373,6 +510,7 @@ mod tests {
             public_key,
             subject.clone(),
             resource.clone(),
+            operation.clone(),
             nodes,
             None,
         );
@@ -409,6 +547,7 @@ mod tests {
         let token = create_service_chain_biscuit(
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             root,
             &nodes,
             TokenTimeConfig::default(),
@@ -440,6 +579,7 @@ mod tests {
             public_key,
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             nodes.clone(),
             Some("edge_function".to_string()),
         );
@@ -455,6 +595,7 @@ mod tests {
             public_key,
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             nodes.clone(),
             Some("middleware".to_string()),
         );
@@ -478,6 +619,7 @@ mod tests {
         let token = create_service_chain_biscuit(
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             root,
             &nodes,
             TokenTimeConfig::default(),
@@ -506,6 +648,7 @@ mod tests {
             public_key,
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             nodes.clone(),
             Some("nonexistent_component".to_string()),
         );
@@ -557,6 +700,7 @@ mod tests {
         let token = create_service_chain_biscuit(
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             root,
             &nodes,
             TokenTimeConfig::default(),
@@ -596,6 +740,7 @@ mod tests {
             public_key,
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             all_nodes.clone(),
             Some("middleware".to_string()),
         );
@@ -609,6 +754,7 @@ mod tests {
             public_key,
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             all_nodes.clone(),
             Some("backend".to_string()),
         );
@@ -634,6 +780,7 @@ mod tests {
         let valid_token = create_service_chain_biscuit_with_time(
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             root,
             &nodes,
             TokenTimeConfig::default(),
@@ -647,6 +794,7 @@ mod tests {
             public_key,
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
         );
         assert!(res.is_ok());
 
@@ -663,6 +811,7 @@ mod tests {
         let expired_token = create_service_chain_biscuit_with_time(
             subject.clone(),
             resource.clone(),
+            "read".to_string(),
             root2,
             &nodes,
             expired_time_config,
@@ -671,7 +820,13 @@ mod tests {
         let expired_token = expired_token.unwrap().to_vec().unwrap();
 
         // Verify expired token fails
-        let res = verify_biscuit_local(expired_token, public_key2, subject, resource);
+        let res = verify_biscuit_local(
+            expired_token,
+            public_key2,
+            subject,
+            resource,
+            "read".to_string(),
+        );
         assert!(res.is_err());
     }
 }

@@ -12,7 +12,13 @@ fn main() -> Result<(), TokenError> {
 
     // Example 1: Basic verification
     println!("Example 1: Basic verification");
-    verify_token_local(&token_base64, root_keypair.public(), "alice", "resource1")?;
+    verify_token_local(
+        &token_base64,
+        root_keypair.public(),
+        "alice",
+        "resource1",
+        "read",
+    )?;
     println!("✅ Basic verification successful\n");
 
     // Example 2: Service chain verification
@@ -68,6 +74,7 @@ fn main() -> Result<(), TokenError> {
         root_keypair.public(),
         "alice",
         "resource1",
+        "read",
         service_nodes,
         None,
     )?;
@@ -82,7 +89,7 @@ fn main() -> Result<(), TokenError> {
     let parsed_pk = biscuit_key_from_string(pk_str)?;
 
     // Verify with parsed key
-    verify_token_local(&token_base64, parsed_pk, "alice", "resource1")?;
+    verify_token_local(&token_base64, parsed_pk, "alice", "resource1", "read")?;
     println!("✅ Verification with key from string successful");
 
     Ok(())

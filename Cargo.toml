@@ -12,7 +12,7 @@ exclude = ["hessra-pgrx/hessra_authz"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Rust SDK for Hessra authentication services"

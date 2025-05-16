@@ -49,6 +49,8 @@ pub enum ApiError {
 pub struct TokenRequest {
     /// The resource identifier to request authorization for
     pub resource: String,
+    /// The operation to request authorization for
+    pub operation: String,
 }
 
 /// Request payload for verifying an authorization token
@@ -60,6 +62,8 @@ pub struct VerifyTokenRequest {
     pub subject: String,
     /// The resource identifier to verify authorization against
     pub resource: String,
+    /// The operation to verify authorization for
+    pub operation: String,
 }
 
 /// Response from a token request operation
@@ -506,8 +510,15 @@ impl HessraClient {
     }
 
     /// Request a token for a resource
-    pub async fn request_token(&self, resource: String) -> Result<String, ApiError> {
-        let request = TokenRequest { resource };
+    pub async fn request_token(
+        &self,
+        resource: String,
+        operation: String,
+    ) -> Result<String, ApiError> {
+        let request = TokenRequest {
+            resource,
+            operation,
+        };
 
         let response = match self {
             HessraClient::Http1(client) => {
@@ -538,11 +549,13 @@ impl HessraClient {
         token: String,
         subject: String,
         resource: String,
+        operation: String,
     ) -> Result<String, ApiError> {
         let request = VerifyTokenRequest {
             token,
             subject,
             resource,
+            operation,
         };
 
         let response = match self {

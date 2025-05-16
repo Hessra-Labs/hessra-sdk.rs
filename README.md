@@ -42,10 +42,18 @@ let mut client = Hessra::builder()
 client.setup()?;
 
 // Request a token for a protected resource
-let token = client.request_token("my-protected-resource".to_string()).await?;
+let token = client.request_token(
+    "my-protected-resource".to_string(),
+    "read".to_string()
+).await?;
 
 // Verify the token later
-let verification = client.verify_token(token, "my-protected-resource".to_string()).await?;
+let verification = client.verify_token(
+    token,
+    "subject".to_string(),
+    "my-protected-resource".to_string(),
+    "read".to_string()
+).await?;
 ```
 
 ## Installation
@@ -54,7 +62,7 @@ Add the SDK to your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-sdk = "0.5.2"
+hessra-sdk = "0.7"
 ```
 
 ### Feature Flags
@@ -63,7 +71,7 @@ Enable optional features based on your needs:
 
 ```toml
 [dependencies]
-hessra-sdk = { version = "0.5.2", features = ["http3", "toml", "wasm"] }
+hessra-sdk = { version = "0.7", features = ["http3", "toml", "wasm"] }
 ```
 
 Available features:
@@ -72,8 +80,7 @@ Available features:
 - **toml**: Enables configuration loading from TOML files
 - **wasm**: Enables WebAssembly support for token verification and service configuration (currently WIP)
 
-HTTP3 requires building with `RUSTFLAGS='--cfg reqwest_unstable'`
-Once reqwest http3 support is stable, this won't be necessary.
+> **Note**: HTTP3 requires building with `RUSTFLAGS='--cfg reqwest_unstable'`. Once reqwest http3 support is stable, this won't be necessary.
 
 ## Configuration
 
@@ -91,12 +98,6 @@ For multi-service scenarios, you can use service chain attenuation:
 ```rust
 use hessra_sdk::{ServiceChain, ServiceNode};
 
-// gateway-service adds attenuation
-gateway_token = gateway_client.attenuate_service_chain_token(token, "data:read");
-
-// processing-service adds attenuation
-processing_token = processing_client.attenuate_service_chain_token(gateway_token, "data:read");
-
 // Define the service chain (order matters!)
 let service_chain = ServiceChain::builder()
     .add_node(ServiceNode {
@@ -109,16 +110,34 @@ let service_chain = ServiceChain::builder()
     })
     .build();
 
+// gateway-service adds attenuation
+let gateway_token = gateway_client.attenuate_service_chain_token(
+    token,
+    authz_service_pub_key,
+    "service_name",
+    gateway_keypair
+);
+
+// processing-service adds attenuation
+let processing_token = processing_client.attenuate_service_chain_token(
+    gateway_token,
+    authz_service_pub_key,
+    "service_name",
+    processing_keypair
+);
+
 // Verify a token with the service chain
 // This token is only valid if it has visited and been attenuated by
 // the gateway-service and processing-service.
 client.verify_service_chain_token(
     processing_token,
-    "user:123",
-    "data:read",
+    "user123",
+    "resourcexyz",
+    "read",
     &service_chain,
     None,
 ).await?;
+```
 
 ## Examples
 
@@ -151,4 +170,3 @@ For detailed API documentation:
 ## License
 
 This project is licensed under the Apache License, Version 2.0 - see the [LICENSE](LICENSE) file for details.
-```
