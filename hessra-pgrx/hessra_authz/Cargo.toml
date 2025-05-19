@@ -7,7 +7,7 @@ authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Postgres Authorization with Local Biscuit Verification — by Hessra"
 repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
 documentation = "https://github.com/Hessra-Labs/hessra-sdk.rs/tree/main/hessra-pgrx/hessra_authz"
-keywords = ["hessra", "authorization", "rust", "sdk", "biscuit", "postgres"]
+keywords = ["hessra", "authorization", "rust", "biscuit", "postgres"]
 categories = ["security"]
 readme = "README.md"
 
