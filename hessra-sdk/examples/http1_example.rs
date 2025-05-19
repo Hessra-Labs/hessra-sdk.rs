@@ -1,7 +1,7 @@
 use hessra_sdk::{Hessra, Protocol};
 use std::error::Error;
 
-static BASE_URL: &str = "test.hessra.net";
+static BASE_URL: &str = "test.hessra.dev";
 static PORT: u16 = 443;
 static MTLS_CERT: &str = include_str!("../../certs/client.crt");
 static MTLS_KEY: &str = include_str!("../../certs/client.key");

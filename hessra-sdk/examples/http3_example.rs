@@ -5,7 +5,7 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize the client with HTTP/3
     let mut client = Hessra::builder()
-        .base_url("test.hessra.net")
+        .base_url("test.hessra.dev")
         .port(443)
         .protocol(Protocol::Http3)
         .mtls_cert(include_str!("../../certs/client.crt"))
