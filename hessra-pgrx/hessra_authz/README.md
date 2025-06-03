@@ -104,26 +104,20 @@ SELECT delete_service_chain('payment_flow');
 SELECT verify_token(
   'biscuit_token_string',
   '-----BEGIN PUBLIC KEY-----\n...',
-  'user_id',
-  'resource_path'
+  'subject',
+  'resource',
+  'operation',
+  NULL
 );
 
 -- Verify a token using a stored key
 SELECT verify_token_with_stored_key(
   'biscuit_token_string',
   'my_key',  -- Optional, uses default key if NULL
-  'user_id',
-  'resource_path'
-);
-
--- Verify a token in a service chain
-SELECT verify_service_chain_token_with_stored_config(
-  'biscuit_token_string',
-  'my_key',  -- Optional, uses default key if NULL
-  'user_id',
+  'subject',
   'resource_path',
-  'payment_flow',
-  'payment_service'  -- Optional, verifies for specific component
+  'operation',
+  NULL
 );
 ```
 
@@ -137,7 +131,9 @@ CREATE POLICY user_data_policy ON user_data
       current_setting('app.auth_token', true),
       NULL,  -- Use default key
       user_id::text,
-      'user_data/' || id::text
+      'user_data/' || id::text,
+      'create',
+      NULL
     ) IS NULL  -- Successful verification returns NULL
   );
 
