@@ -16,7 +16,7 @@ static CA_CERT: &str = include_str!("../../certs/ca-2030.pem");
 /// the token before adding its own attestation.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Personal keypairs for each node (in a real scenario, these would be generated securely)
+    // Personal keypairs for each node (in a real scenario, these would be generated and stored securely)
     let auth_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIBnMQ6SB/juVEWCLh/08eSiw5EXeClS4uUq1gFNpkK1I\ngSEA5XYYBYsdLgOBqYE8FAWDDV7X1gNxc4TvVV2cwM+mXYM=\n-----END PRIVATE KEY-----";
     let payment_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIAzPrr2kfWdHnkNwqEwBKokMg/IFX97w8eD5LvSdDC1W\ngSEAeO9CVcTJq1xxhtbbR2B1iwZhbAQqJTgyOuOwWAlANLY=\n-----END PRIVATE KEY-----";
     let order_keypair = "-----BEGIN PRIVATE KEY-----\nMFECAQEwBQYDK2VwBCIEIBGKjvJA+jpBYyKl/wWOa81fORZdQtkMHwahnevMiTd/\ngSEAGuvFpu78VpBRkmpqr1VWjlPttHXy8uuQRSJgk5HYgRM=\n-----END PRIVATE KEY-----";
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Initialize the service chain with public keys of each node
     // Note: In a real implementation, these public keys would be extracted from the keypairs
-    // and registered with the authorization server
+    // and registered or configured with the authorization server
     let full_service_chain = ServiceChain::new()
         .with_node(auth_service_node)
         .with_node(payment_service_node)

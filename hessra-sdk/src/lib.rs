@@ -426,8 +426,8 @@ impl Hessra {
         .map_err(SdkError::Token)
     }
 
-    /// Attenuate a service chain token with a new service node attestation
-    /// Expects a base64 encoded token string
+    /// Attest a service chain token with a new service node attestation
+    /// Expects a base64 encoded token string and a service name
     /// Returns a base64 encoded token string
     pub fn attest_service_chain_token(
         &self,
@@ -451,13 +451,10 @@ impl Hessra {
         // Parse keypair from string to KeyPair
         let keypair = KeyPair::from_private_key_pem(keypair_str.as_str())
             .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
-        println!("Keypair: {:?}", keypair);
 
         // Parse public key from PEM string
         let public_key = PublicKey::from_pem(public_key_str.as_str())
             .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
-        //let public_key = hessra_token::biscuit_key_from_string(public_key_str.clone())?;
-        println!("Public key: {:?}", public_key);
 
         // Convert token to Vec<u8>
         let token_vec = decode_token(&token)?;
