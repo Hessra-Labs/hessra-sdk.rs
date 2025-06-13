@@ -4,12 +4,12 @@ A PostgreSQL extension for authorization and token verification using Biscuit to
 
 ## Overview
 
-The `hessra_authz` extension provides a lightweight, secure way to manage and verify authorization tokens directly within PostgreSQL. It supports:
+The `hessra_authz` extension provides a lightweight, secure way to manage and verify authorization tokens issued from the Hessra authorization service directly within PostgreSQL. It supports:
 
 - Public key management for token verification
 - Service chain verification for multi-service architectures
-- Integration with Biscuit tokens (attenuation-based authorization tokens)
 - SQL-friendly API for authorization checks
+- local-only token verification with no remote calls at authorization time
 
 This extension is ideal for applications that use PostgreSQL and need to perform token-based authorization checks directly in database queries.
 
@@ -168,4 +168,4 @@ This extension integrates with the Biscuit token format to enable secure, decent
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the Apache-2.0 License.
