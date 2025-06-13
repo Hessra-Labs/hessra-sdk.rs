@@ -159,8 +159,8 @@ cargo pgrx run --package hessra_authz
 
 [Biscuit](https://www.biscuitsec.org/) is an authorization token format built for microservices and distributed systems:
 
-- **Attenuation-based**: Tokens can be restricted but not extended
-- **Offline verification**: No need to call a central service
+- **Attenuation and Attestation**: Tokens can be restricted and 3rd parties can add attestations
+- **Offline verification**: No need to call a central service to verify a biscuit, you only need the public key(s)
 - **Cryptographically secure**: Based on public-key cryptography
 - **Capability-based**: Tokens contain the necessary authorization information
 

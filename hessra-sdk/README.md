@@ -65,11 +65,11 @@ For services that need to verify tokens passed through multiple services:
 ```rust
 use hessra_sdk::{ServiceChain, ServiceNode};
 
-// gateway-service adds attenuation
-gateway_token = gateway_client.attenuate_service_chain_token(token, "data:read");
+// gateway-service adds attestation
+gateway_token = gateway_client.attest_service_chain_token(token, "data:read");
 
-// processing-service adds attenuation
-processing_token = processing_client.attenuate_service_chain_token(gateway_token, "data:read");
+// processing-service adds attestation
+processing_token = processing_client.attest_service_chain_token(gateway_token, "data:read");
 
 // Define the service chain (order matters!)
 let service_chain = ServiceChain::builder()
@@ -84,7 +84,7 @@ let service_chain = ServiceChain::builder()
     .build();
 
 // Verify a token with the service chain
-// This token is only valid if it has visited and been attenuated by
+// This token is only valid if it has visited and been attested by
 // the gateway-service and processing-service.
 client.verify_service_chain_token(
     processing_token,

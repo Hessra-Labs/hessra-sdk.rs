@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // The auth service is the first in the chain, so it doesn't need to verify
     // any previous attestations - it only adds its own
     println!("Adding auth-service attestation to token");
-    let token_with_auth = auth_client.attenuate_service_chain_token(token, resource.clone())?;
+    let token_with_auth = auth_client.attest_service_chain_token(token, resource.clone())?;
 
     // --- PAYMENT SERVICE ---
     println!("\n=== Payment Service (Node 2) ===");
@@ -126,7 +126,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Add payment service attestation to the token
     println!("Adding payment_service attestation to token");
     let token_with_payment =
-        payment_client.attenuate_service_chain_token(token_with_auth, resource.clone())?;
+        payment_client.attest_service_chain_token(token_with_auth, resource.clone())?;
 
     // --- ORDER SERVICE ---
     println!("\n=== Order Service (Node 3) ===");
@@ -160,7 +160,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Add order service attestation (though no service will need to verify this)
     println!("Adding order-service attestation to token");
     let final_token =
-        order_client.attenuate_service_chain_token(token_with_payment, resource.clone())?;
+        order_client.attest_service_chain_token(token_with_payment, resource.clone())?;
 
     // A hypothetical verification of the complete chain by a client
     println!("\n=== Final Verification ===");

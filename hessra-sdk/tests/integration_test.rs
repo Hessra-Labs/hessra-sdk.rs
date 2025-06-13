@@ -103,7 +103,7 @@ async fn test_sdk_integration() -> Result<(), SdkError> {
     // For testing, we're just creating the instance
     let hessra = Hessra::new(config)?;
 
-    // 3. Create a service chain for attenuations
+    // 3. Create a service chain for attestations
     let _service_chain = ServiceChain::builder()
         .add_node(ServiceNode {
             component: "service1".to_string(),

@@ -1,6 +1,6 @@
 use biscuit_auth::macros::biscuit;
 use hessra_token::{
-    add_service_node_attenuation, biscuit_key_from_string, decode_token, encode_token,
+    add_service_node_attestation, biscuit_key_from_string, decode_token, encode_token,
     verify_service_chain_token_local, verify_token_local, KeyPair, ServiceNode, TokenError,
 };
 use std::sync::Arc;
@@ -52,17 +52,17 @@ fn main() -> Result<(), TokenError> {
         service2_public_key,
     )?;
 
-    // attenuate the token for node1
-    let attenuated_token = add_service_node_attenuation(
+    // attest the token for node1
+    let attested_token = add_service_node_attestation(
         decode_token(&chain_token)?,
         root_keypair.public(),
         "resource1",
         &service1_keypair,
     )?;
 
-    // attenuate the token for node2
-    let attenuated_token2 = add_service_node_attenuation(
-        attenuated_token,
+    // attest the token for node2
+    let attested_token2 = add_service_node_attestation(
+        attested_token,
         root_keypair.public(),
         "resource1",
         &service2_keypair,
@@ -70,7 +70,7 @@ fn main() -> Result<(), TokenError> {
 
     // Verify with service chain
     verify_service_chain_token_local(
-        &encode_token(&attenuated_token2),
+        &encode_token(&attested_token2),
         root_keypair.public(),
         "alice",
         "resource1",

@@ -93,7 +93,7 @@ The SDK offers multiple ways to configure the client:
 
 ## Service Chain Attestation
 
-For multi-service scenarios, you can use service chain attenuation:
+For multi-service scenarios, you can use service chain attestation:
 
 ```rust
 use hessra_sdk::{ServiceChain, ServiceNode};
@@ -110,16 +110,16 @@ let service_chain = ServiceChain::builder()
     })
     .build();
 
-// gateway-service adds attenuation
-let gateway_token = gateway_client.attenuate_service_chain_token(
+// gateway-service adds attestation
+let gateway_token = gateway_client.attest_service_chain_token(
     token,
     authz_service_pub_key,
     "service_name",
     gateway_keypair
 );
 
-// processing-service adds attenuation
-let processing_token = processing_client.attenuate_service_chain_token(
+// processing-service adds attestation
+let processing_token = processing_client.attest_service_chain_token(
     gateway_token,
     authz_service_pub_key,
     "service_name",
@@ -127,7 +127,7 @@ let processing_token = processing_client.attenuate_service_chain_token(
 );
 
 // Verify a token with the service chain
-// This token is only valid if it has visited and been attenuated by
+// This token is only valid if it has visited and been attested by
 // the gateway-service and processing-service.
 client.verify_service_chain_token(
     processing_token,

@@ -2,7 +2,7 @@
 
 Core verification library for Hessra authentication tokens.
 
-This crate provides functionality for creating, verifying and attenuating biscuit tokens
+This crate provides functionality for creating, verifying and attesting biscuit tokens
 used in the Hessra authentication system. It is designed to be WASM-compatible
 and has no networking dependencies.
 
@@ -145,12 +145,12 @@ fn main() -> Result<(), hessra_token::TokenError> {
 }
 ```
 
-### Token Attenuation
+### Token Attestation
 
 To add service node attestations to tokens:
 
 ```rust
-use hessra_token::{add_service_node_attenuation, decode_token, encode_token, KeyPair, PublicKey};
+use hessra_token::{add_service_node_attestation, decode_token, encode_token, KeyPair, PublicKey};
 
 fn main() -> Result<(), hessra_token::TokenError> {
     let token_base64 = "YOUR_TOKEN_STRING";
@@ -162,8 +162,8 @@ fn main() -> Result<(), hessra_token::TokenError> {
     // Service node key pair
     let service_keypair = KeyPair::new();
 
-    // Add service node attenuation
-    let attenuated_token = add_service_node_attenuation(
+    // Add service node attestation
+    let attested_token = add_service_node_attestation(
         token_bytes,
         public_key,
         "my-service",
@@ -171,9 +171,9 @@ fn main() -> Result<(), hessra_token::TokenError> {
     )?;
 
     // Encode back to URL-safe base64 for storage or transmission
-    let attenuated_token_base64 = encode_token(&attenuated_token);
+    let attested_token_base64 = encode_token(&attested_token);
 
-    println!("Token attenuated: {}", attenuated_token_base64);
+    println!("Token attestation: {}", attested_token_base64);
     Ok(())
 }
 ```

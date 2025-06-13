@@ -21,8 +21,8 @@ use crate::error::TokenError;
 ///
 /// # Returns
 ///
-/// The attenuated token binary data
-pub fn add_service_node_attenuation(
+/// The attested token binary data
+pub fn add_service_node_attestation(
     token: Vec<u8>,
     public_key: PublicKey,
     service: &str,
@@ -49,14 +49,14 @@ pub fn add_service_node_attenuation(
         .map_err(TokenError::biscuit_error)?;
 
     // Append the third-party block to the token
-    let attenuated_biscuit = biscuit
+    let attested_biscuit = biscuit
         .append_third_party(node_key.public(), third_party_block)
         .map_err(TokenError::biscuit_error)?;
 
     // Serialize the token
-    let attenuated_token = attenuated_biscuit
+    let attested_token = attested_biscuit
         .to_vec()
         .map_err(TokenError::biscuit_error)?;
 
-    Ok(attenuated_token)
+    Ok(attested_token)
 }

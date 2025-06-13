@@ -1,6 +1,6 @@
 use biscuit_auth::macros::biscuit;
 use hessra_token::{
-    add_service_node_attenuation, decode_token, encode_token, verify_token_local, KeyPair,
+    add_service_node_attestation, decode_token, encode_token, verify_token_local, KeyPair,
     TokenError,
 };
 
@@ -15,9 +15,9 @@ fn main() -> Result<(), TokenError> {
     // 1. First, we need the binary token data
     let token_bytes = decode_token(&token_base64)?;
 
-    // 2. Add service node attenuation
-    println!("Adding service node attenuation...");
-    let attenuated_token = add_service_node_attenuation(
+    // 2. Add service node attestation
+    println!("Adding service node attestation...");
+    let attested_token = add_service_node_attestation(
         token_bytes,
         root_keypair.public(),
         "my-service",
@@ -25,27 +25,27 @@ fn main() -> Result<(), TokenError> {
     )?;
 
     // 3. Encode back to base64
-    let attenuated_token_base64 = encode_token(&attenuated_token);
-    println!("Attenuated token: {}\n", attenuated_token_base64);
+    let attested_token_base64 = encode_token(&attested_token);
+    println!("Attested token: {}\n", attested_token_base64);
 
-    // 4. Verify the attenuated token still works
-    println!("Verifying attenuated token...");
+    // 4. Verify the attested token still works
+    println!("Verifying attested token...");
     verify_token_local(
-        &attenuated_token_base64,
+        &attested_token_base64,
         root_keypair.public(),
         "alice",
         "resource1",
         "read",
     )?;
-    println!("✅ Verification successful for attenuated token");
+    println!("✅ Verification successful for attested token");
 
-    // 5. Generate a chain of attenuations
-    println!("\nCreating a chain of attenuations...");
-    let token_with_chain = create_attenuation_chain(&token_base64, &root_keypair)?;
-    println!("Token with attenuation chain: {}", token_with_chain);
+    // 5. Generate a chain of attestations
+    println!("\nCreating a chain of attestations...");
+    let token_with_chain = create_attestation_chain(&token_base64, &root_keypair)?;
+    println!("Token with attestation chain: {}", token_with_chain);
 
     // 6. Verify the chain token
-    println!("\nVerifying token with attenuation chain...");
+    println!("\nVerifying token with attestation chain...");
     verify_token_local(
         &token_with_chain,
         root_keypair.public(),
@@ -53,7 +53,7 @@ fn main() -> Result<(), TokenError> {
         "resource1",
         "read",
     )?;
-    println!("✅ Verification successful for token with attenuation chain");
+    println!("✅ Verification successful for token with attestation chain");
 
     Ok(())
 }
@@ -84,7 +84,7 @@ fn generate_example_token() -> Result<(String, KeyPair), TokenError> {
 }
 
 /// Create a chain of service attestations
-fn create_attenuation_chain(
+fn create_attestation_chain(
     token_base64: &str,
     root_keypair: &KeyPair,
 ) -> Result<String, TokenError> {
@@ -102,7 +102,7 @@ fn create_attenuation_chain(
         let service_keypair = KeyPair::new();
 
         // Add an attestation
-        token_bytes = add_service_node_attenuation(
+        token_bytes = add_service_node_attestation(
             token_bytes,
             root_keypair.public(),
             service_name,

@@ -501,12 +501,12 @@ mod tests {
         let third_party_block = third_party_request
             .create_block(&chain_key.private(), third_party_block)
             .unwrap();
-        let attenuated_biscuit = biscuit
+        let attested_biscuit = biscuit
             .append_third_party(chain_key.public(), third_party_block)
             .unwrap();
-        let attenuated_token = attenuated_biscuit.to_vec().unwrap();
+        let attested_token = attested_biscuit.to_vec().unwrap();
         let res = verify_service_chain_biscuit_local(
-            attenuated_token,
+            attested_token,
             public_key,
             subject.clone(),
             resource.clone(),
@@ -566,16 +566,16 @@ mod tests {
         let third_party_block = third_party_request
             .create_block(&chain_key1.private(), third_party_block)
             .unwrap();
-        let attenuated_biscuit = biscuit
+        let attested_biscuit = biscuit
             .append_third_party(chain_key1.public(), third_party_block)
             .unwrap();
-        let attenuated_token = attenuated_biscuit.to_vec().unwrap();
+        let attested_token = attested_biscuit.to_vec().unwrap();
 
         // Test with the "edge_function" component name - should pass
         // the first node in the service chain checking itself is valid
         // since it is checking the base biscuit
         let res = verify_service_chain_biscuit_local(
-            attenuated_token.clone(),
+            attested_token.clone(),
             public_key,
             subject.clone(),
             resource.clone(),
@@ -591,7 +591,7 @@ mod tests {
 
         // Test with "middleware" component - should succeed verifying node1 only
         let res = verify_service_chain_biscuit_local(
-            attenuated_token.clone(),
+            attested_token.clone(),
             public_key,
             subject.clone(),
             resource.clone(),
@@ -637,14 +637,14 @@ mod tests {
         let third_party_block = third_party_request
             .create_block(&chain_key.private(), third_party_block)
             .unwrap();
-        let attenuated_biscuit = biscuit
+        let attested_biscuit = biscuit
             .append_third_party(chain_key.public(), third_party_block)
             .unwrap();
-        let attenuated_token = attenuated_biscuit.to_vec().unwrap();
+        let attested_token = attested_biscuit.to_vec().unwrap();
 
         // Test with a component name that doesn't exist in the chain
         let res = verify_service_chain_biscuit_local(
-            attenuated_token,
+            attested_token,
             public_key,
             subject.clone(),
             resource.clone(),
@@ -721,7 +721,7 @@ mod tests {
         let third_party_block1 = third_party_request1
             .create_block(&chain_key1.private(), third_party_block1)
             .unwrap();
-        let attenuated_biscuit1 = biscuit
+        let attested_biscuit1 = biscuit
             .append_third_party(chain_key1.public(), third_party_block1)
             .unwrap();
 
@@ -731,12 +731,12 @@ mod tests {
             chain_node2.clone(),
             chain_node3.clone(),
         ];
-        let attenuated_token1 = attenuated_biscuit1.to_vec().unwrap();
+        let attested_token1 = attested_biscuit1.to_vec().unwrap();
 
         // Test 1: Verify up to but not including middleware
         // This should verify edge_function only
         let res = verify_service_chain_biscuit_local(
-            attenuated_token1.clone(),
+            attested_token1.clone(),
             public_key,
             subject.clone(),
             resource.clone(),
@@ -748,9 +748,9 @@ mod tests {
 
         // Test 3: Verify up to but not including backend
         // This should try to verify both edge_function and middleware
-        // but since the middleware attenuation wasn't added, it will fail
+        // but since the middleware attestation wasn't added, it will fail
         let res = verify_service_chain_biscuit_local(
-            attenuated_token1.clone(),
+            attested_token1.clone(),
             public_key,
             subject.clone(),
             resource.clone(),

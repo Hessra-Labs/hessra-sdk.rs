@@ -33,7 +33,7 @@ use thiserror::Error;
 // Re-export everything from the component crates
 pub use hessra_token::{
     // Token attestation
-    add_service_node_attenuation,
+    add_service_node_attestation,
     decode_token,
     encode_token,
     // Token verification
@@ -429,7 +429,7 @@ impl Hessra {
     /// Attenuate a service chain token with a new service node attestation
     /// Expects a base64 encoded token string
     /// Returns a base64 encoded token string
-    pub fn attenuate_service_chain_token(
+    pub fn attest_service_chain_token(
         &self,
         token: String,
         service: impl Into<String>,
@@ -465,7 +465,7 @@ impl Hessra {
         // Convert service to String
         let service_str = service.into();
 
-        let token_vec = add_service_node_attenuation(token_vec, public_key, &service_str, &keypair)
+        let token_vec = add_service_node_attestation(token_vec, public_key, &service_str, &keypair)
             .map_err(SdkError::Token)?;
 
         Ok(encode_token(&token_vec))

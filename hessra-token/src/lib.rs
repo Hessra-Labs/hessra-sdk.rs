@@ -2,7 +2,7 @@
 //!
 //! Core verification library for Hessra authentication tokens.
 //!
-//! This crate provides functionality for creating, verifying and attenuating biscuit tokens
+//! This crate provides functionality for creating, verifying and attesting biscuit tokens
 //! used in the Hessra authentication system. It is designed to be WASM-compatible
 //! and has no networking dependencies.
 //!
@@ -39,13 +39,13 @@
 //! }
 //! ```
 
-mod attenuate;
+mod attest;
 mod error;
 mod mint;
 mod utils;
 mod verify;
 
-pub use attenuate::add_service_node_attenuation;
+pub use attest::add_service_node_attestation;
 pub use error::TokenError;
 pub use mint::{
     create_biscuit, create_service_chain_biscuit, create_service_chain_token,
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn test_add_service_node_attenuation() {
+    fn test_add_service_node_attestation() {
         // Create test keypairs
         let root_keypair = KeyPair::new();
         let service_keypair = KeyPair::new();
@@ -146,18 +146,18 @@ mod tests {
         let biscuit = biscuit_builder.build(&root_keypair).unwrap();
         let token_bytes = biscuit.to_vec().unwrap();
 
-        // Add service node attenuation
-        let attenuated_token = add_service_node_attenuation(
+        // Add service node attestation
+        let attested_token = add_service_node_attestation(
             token_bytes,
             root_keypair.public(),
             "resource1",
             &service_keypair,
         );
-        assert!(attenuated_token.is_ok());
+        assert!(attested_token.is_ok());
 
         // Verify the biscuit still works
         let result = verify_biscuit_local(
-            attenuated_token.unwrap(),
+            attested_token.unwrap(),
             root_keypair.public(),
             "alice".to_string(),
             "resource1".to_string(),
@@ -491,7 +491,7 @@ mod tests {
 
         assert!(result.is_ok(), "Final token verification failed");
 
-        // Verify that token not attenuated by the full chain fails authorization against the full chain
+        // Verify that token not attested by the full chain fails authorization against the full chain
         let result = verify_service_chain_token_local(
             token_after_auth,
             root_public_key,

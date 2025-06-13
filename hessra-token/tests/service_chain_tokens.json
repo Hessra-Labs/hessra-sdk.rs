@@ -18,7 +18,7 @@
         "subject": "uri:urn:test:argo-cli1",
         "resource": "order_service",
         "type": "service_chain",
-        "description": "Service chain token for order_service attenuated by the first node of the chain: auth_service",
+        "description": "Service chain token for order_service attested by the first node of the chain: auth_service",
         "service_nodes": [
           {
             "component": "auth_service",
@@ -34,7 +34,7 @@
         "subject": "uri:urn:test:argo-cli1",
         "resource": "order_service",
         "type": "service_chain",
-        "description": "Service chain token for order_service attenuated by the second node of the chain: payment_service",
+        "description": "Service chain token for order_service attested by the second node of the chain: payment_service",
         "service_nodes": [
           {
             "component": "auth_service",
@@ -54,7 +54,7 @@
         "subject": "uri:urn:test:argo-cli1",
         "resource": "order_service",
         "type": "service_chain",
-        "description": "Service chain token for order_service attenuated by the third node of the chain: order_service. Token is ready for final destination.",
+        "description": "Service chain token for order_service attested by the third node of the chain: order_service. Token is ready for final destination.",
         "service_nodes": [
           {
             "component": "auth_service",
