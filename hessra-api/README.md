@@ -47,7 +47,8 @@ let client = HessraClient::builder()
 ```rust
 // Request a token for a resource
 let resource = "example-resource".to_string();
-let token = client.request_token(resource.clone()).await?;
+let operation = "read".to_string();
+let token = client.request_token(resource, operation).await?;
 ```
 
 ### Verifying a Token
@@ -56,10 +57,13 @@ let token = client.request_token(resource.clone()).await?;
 // Verify the token
 let subject = "example-user".to_string();
 let resource = "example-resource".to_string();
-let result = client.verify_token(token, subject, resource).await?;
+let operation = "read".to_string();
+let result = client.verify_token(token, subject, resource, operation).await?;
 ```
 
 ### Getting the Public Key
+
+The public_key endpoint is available for both authenticated and unauthenticated requests. If requesting the public_key with an authenticated request and authentication fails, the request will fail.
 
 ```rust
 // Retrieve the server's public key
@@ -81,7 +85,8 @@ let result = client.verify_service_chain_token(
     token,
     subject,
     resource,
-    Some("component-name".to_string()),
+    operation,
+    Some("component-name".to_string()), // or None to verify the token against the full service chain
 ).await?;
 ```
 
@@ -91,7 +96,7 @@ To use HTTP/3, enable the `http3` feature in your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-api = { version = "0.1.0", features = ["http3"] }
+hessra-api = { version = "0.3.0", features = ["http3"] }
 ```
 
 Then create a client with the HTTP/3 protocol:

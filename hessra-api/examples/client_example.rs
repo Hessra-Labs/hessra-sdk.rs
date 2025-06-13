@@ -27,6 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let client = HessraClient::builder().from_config(&config).build()?;
 
     // Request a token for a resource
+    // This is requesting a token for allowing a read operation on resource1
+    // The subject is the identity of the requester, in this case "argo-cli0"
+    // which is embedded as "URI:urn:test:argo-cli0" in the x509 certificate,
+    // mtls_cert.
     let resource = "resource1".to_string();
     println!("Requesting token for resource: {}", resource);
 
@@ -65,7 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         }
     }
 
-    // Retrieve the server's public key
+    // Retrieve the server's public key so tokens can be verified locally,
+    // without having to call the remote authorization service API.
     println!("Retrieving public key from server");
     match client.get_public_key().await {
         Ok(public_key) => {

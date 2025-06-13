@@ -155,7 +155,7 @@ impl Http1Client {
 
         // Build the reqwest client with mTLS configuration
         let client = reqwest::ClientBuilder::new()
-            .use_rustls_tls() // Explicitly use rustls TLS
+            .use_rustls_tls()
             .identity(identity)
             .add_root_certificate(cert_der)
             .build()
@@ -164,7 +164,7 @@ impl Http1Client {
         Ok(Self { config, client })
     }
 
-    /// Send a request to the Hessra service
+    /// Send a request to the remote Hessra authorization service
     pub async fn send_request<T, R>(&self, endpoint: &str, request_body: &T) -> Result<R, ApiError>
     where
         T: Serialize,
@@ -229,7 +229,7 @@ impl Http3Client {
 
         // Build the reqwest client with mTLS configuration
         let client = reqwest::ClientBuilder::new()
-            .use_rustls_tls() // Explicitly use rustls TLS
+            .use_rustls_tls()
             .http3_prior_knowledge()
             .identity(identity)
             .add_root_certificate(cert_der)
@@ -322,25 +322,28 @@ impl HessraClientBuilder {
         self
     }
 
-    /// Set the base URL for the client
+    /// Set the base URL for the client, e.g. "test.hessra.net"
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
         self.config.base_url = base_url.into();
         self
     }
 
     /// Set the mTLS private key for the client
+    /// PEM formatted string
     pub fn mtls_key(mut self, mtls_key: impl Into<String>) -> Self {
         self.config.mtls_key = mtls_key.into();
         self
     }
 
     /// Set the mTLS certificate for the client
+    /// PEM formatted string
     pub fn mtls_cert(mut self, mtls_cert: impl Into<String>) -> Self {
         self.config.mtls_cert = mtls_cert.into();
         self
     }
 
     /// Set the server CA certificate for the client
+    /// PEM formatted string
     pub fn server_ca(mut self, server_ca: impl Into<String>) -> Self {
         self.config.server_ca = server_ca.into();
         self
@@ -359,12 +362,15 @@ impl HessraClientBuilder {
     }
 
     /// Set the public key for token verification
+    /// PEM formatted string. note, this is JUST the public key, not the entire keypair.
     pub fn public_key(mut self, public_key: impl Into<String>) -> Self {
         self.config.public_key = Some(public_key.into());
         self
     }
 
     /// Set the personal keypair for service chain attestation
+    /// PEM formatted string. note, this is the entire keypair
+    /// and needs to be kept secret.
     pub fn personal_keypair(mut self, keypair: impl Into<String>) -> Self {
         self.config.personal_keypair = Some(keypair.into());
         self
@@ -406,6 +412,8 @@ impl HessraClient {
     }
 
     /// Fetch the public key from the Hessra service without creating a client
+    /// The public_key endpoint is available as both an authenticated and unauthenticated
+    /// request.
     pub async fn fetch_public_key(
         base_url: impl Into<String>,
         port: Option<u16>,
@@ -543,7 +551,8 @@ impl HessraClient {
         }
     }
 
-    /// Verify a token for a subject and resource
+    /// Verify a token for subject doing operation on resource.
+    /// This will verify the token using the remote authorization service API.
     pub async fn verify_token(
         &self,
         token: String,
@@ -575,7 +584,12 @@ impl HessraClient {
         Ok(response.response_msg)
     }
 
-    /// Verify a service chain token
+    /// Verify a service chain token. If no component is provided,
+    /// the entire service chain will be used to verify the token.
+    /// If a component name is provided, the service chain up to and
+    /// excluding the component will be used to verify the token. This
+    /// is useful for a node in the middle of the service chain
+    /// verifying a token has been attested by all previous nodes.
     pub async fn verify_service_chain_token(
         &self,
         token: String,
