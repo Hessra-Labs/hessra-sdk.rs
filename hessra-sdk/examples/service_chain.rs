@@ -1,7 +1,7 @@
 use hessra_sdk::{fetch_public_key, Hessra, Protocol, ServiceChain, ServiceNode};
 use std::error::Error;
 
-static BASE_URL: &str = "test.hessra.dev";
+static BASE_URL: &str = "test.hessra.net";
 static PORT: u16 = 443;
 static CA_CERT: &str = include_str!("../../certs/ca-2030.pem");
 /// This example demonstrates how to use service chains to attest and verify
