@@ -5,26 +5,33 @@
 [![License](https://img.shields.io/crates/l/hessra-sdk.svg)](https://github.com/hessra-labs/hessra-sdk.rs/blob/main/LICENSE)
 [![CI Status](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jcorrv/b2734fbe9a9c147a9dfdeafcdcd6c7b7/raw/hessra-sdk-rs-ci-status.json)](https://github.com/hessra-labs/hessra-sdk.rs/actions/workflows/ci.yml)
 
-A secure, flexible Rust SDK for the Hessra authorization service, providing mTLS-backed token request and verification capabilities.
+A complete rust SDK for requesting and handling authorization tokens from the Hessra authorization service.
+
+## How to use
+
+- Request your authorization token before you make your request
+- Include the authorization token in your request
+- verify and optionally add service chain attestations to the token along the way, completely offline
+- verify the final token, completely offline
 
 ## Project Structure
 
 This repository is organized as a Rust workspace with the following components:
 
 - **hessra-sdk**: Main SDK crate that provides a unified API (this is what you'll import)
-- **hessra-token**: Core token verification and attestation functionality
+- **hessra-token**: Core token creation, verification, and attestation functionality
 - **hessra-config**: Configuration management for the SDK
 - **hessra-api**: HTTP client for communicating with Hessra services
 - **hessra-ffi**: Foreign Function Interface for other languages
+- **hessra-pgrx**: Postgres extension to verify tokens (e.g. Row Level Security)
 
 ## Features
 
-- **Secure by Design**: Built-in mutual TLS (mTLS) authentication with the Hessra service
+- **Secure by Design**: tokens are short-lived and narrowly scoped to a single request
 - **Protocol Support**: HTTP/1.1 with optional HTTP/3 (via feature flag)
 - **Flexible Configuration**: Multiple ways to configure the client including environment variables, files, and code
 - **Token Management**: Request and verify authorization tokens with strong cryptographic guarantees
-- **Service Chain Attestation**: Support for multi-service attestation chains
-- **WebAssembly Support**: Optional WASM compatibility for token verification (via feature flag)
+- **Service Chain Attestation**: Support for multi-service attestation chains: prove your request went through the proper places
 
 ## Quick Start
 
@@ -62,7 +69,7 @@ Add the SDK to your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-sdk = "0.7"
+hessra-sdk = "0.8"
 ```
 
 ### Feature Flags
@@ -71,7 +78,7 @@ Enable optional features based on your needs:
 
 ```toml
 [dependencies]
-hessra-sdk = { version = "0.7", features = ["http3", "toml", "wasm"] }
+hessra-sdk = { version = "0.8", features = ["http3", "toml", "wasm"] }
 ```
 
 Available features:
@@ -93,7 +100,7 @@ The SDK offers multiple ways to configure the client:
 
 ## Service Chain Attestation
 
-For multi-service scenarios, you can use service chain attestation:
+For multi-service scenarios or anyplace you have concrete security boundaries, you can use service chain attestation:
 
 ```rust
 use hessra_sdk::{ServiceChain, ServiceNode};
@@ -101,7 +108,7 @@ use hessra_sdk::{ServiceChain, ServiceNode};
 // Define the service chain (order matters!)
 let service_chain = ServiceChain::builder()
     .add_node(ServiceNode {
-        component: "gateway-service",
+        component: "api-gateway",
         public_key: "ed25519/abcdef1234567890",
     })
     .add_node(ServiceNode {

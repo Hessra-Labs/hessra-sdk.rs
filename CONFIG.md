@@ -19,12 +19,14 @@ The core of the configuration system is the `HessraConfig` struct, which contain
 ```rust
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HessraConfig {
-    pub base_url: String,        // URL of the Hessra service
-    pub port: Option<u16>,       // Port to connect to (optional)
-    pub mtls_cert: String,       // mTLS certificate (PEM-encoded)
-    pub mtls_key: String,        // mTLS private key (PEM-encoded)
-    pub server_ca: String,       // Server CA certificate (PEM-encoded)
-    pub protocol: Protocol,      // HTTP/1 or HTTP/3
+    pub base_url: String,                 // URL of the Hessra service (e.g. test.hessra.net)
+    pub port: Option<u16>,                // Port to connect to (optional, default 443)
+    pub mtls_cert: String,                // mTLS certificate (PEM-encoded)
+    pub mtls_key: String,                 // mTLS private key (PEM-encoded)
+    pub server_ca: String,                // Server CA certificate (PEM-encoded)
+    pub protocol: Protocol,               // HTTP/1 or HTTP/3, default is HTTP/1
+    pub public_key: Option<String>,       // Authorization service's public key for offline token verification
+    pub personal_keypair: Option<String>, // This client's keypair for signing attestations for service chain tokens (must be ed25519 or P-256 keypair)
 }
 ```
 
@@ -117,13 +119,15 @@ let config = HessraConfig::from_env("HESSRA")
     .expect("Failed to load configuration from environment");
 ```
 
-Required environment variables:
+Environment variables:
 
 - `{PREFIX}_BASE_URL`: URL of the Hessra service
-- `{PREFIX}_PORT`: Port to connect to (optional)
-- `{PREFIX}_MTLS_CERT`: mTLS certificate (PEM-encoded)
-- `{PREFIX}_MTLS_KEY`: mTLS private key (PEM-encoded)
-- `{PREFIX}_SERVER_CA`: Server CA certificate (PEM-encoded)
+- `{PREFIX}_PORT`: Port to connect to (optional, default 443)
+- `{PREFIX}_MTLS_CERT`: mTLS certificate (PEM-format, base64 encoded)
+- `{PREFIX}_MTLS_KEY`: mTLS private key (PEM-format, base64 encoded)
+- `{PREFIX}_SERVER_CA`: Server CA certificate (PEM-format, base64 encoded)
+- `{PREFIX}_PUBLIC_KEY`: The authorization service's public key (PEM-format, base64 encoded)
+- `{PREFIX}_PERSONAL_KEYPAIR`: This client/node's keypair to attest service chain tokens with (PEM-format, base64 encoded. MUST BE either ed25519 or P-256. Can be the same as MTLS_KEY)
 - `{PREFIX}_PROTOCOL`: "http1" or "http3" (optional, defaults to "http1")
 
 ### 4. Environment Variables with File Paths
@@ -138,7 +142,7 @@ let config = HessraConfig::from_env_or_file("HESSRA")
     .expect("Failed to load configuration from environment");
 ```
 
-Required environment variables:
+Environment variables:
 
 - `{PREFIX}_BASE_URL`: URL of the Hessra service
 - `{PREFIX}_PORT`: Port to connect to (optional)
@@ -253,5 +257,5 @@ To enable these features, add them to your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-sdk = { version = "0.1.0", features = ["http3", "toml"] }
+hessra-sdk = { version = "0.8.0", features = ["http3", "toml"] }
 ```
