@@ -20,6 +20,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -125,7 +126,7 @@ pub struct HessraConfig {
     /// This is used for service chain attestations. When acting as a node in a service chain,
     /// this keypair is used to sign attestations that this node has processed the request.
     /// The private key should be kept secret and only the public key should be shared with
-    /// the authentication service.
+    /// the authorization service.
     #[serde(default)]
     pub personal_keypair: Option<String>,
 }
@@ -273,7 +274,7 @@ impl HessraConfigBuilder {
     ///
     /// # Arguments
     ///
-    /// * `base_url` - The base URL for the Hessra service
+    /// * `base_url` - The base URL for the Hessra service, e.g. "test.hessra.net"
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = Some(base_url.into());
         self
@@ -283,7 +284,7 @@ impl HessraConfigBuilder {
     ///
     /// # Arguments
     ///
-    /// * `port` - The port to use for the Hessra service
+    /// * `port` - The port to use for the Hessra service, e.g. 443
     pub fn port(mut self, port: u16) -> Self {
         self.port = Some(port);
         self
@@ -293,7 +294,7 @@ impl HessraConfigBuilder {
     ///
     /// # Arguments
     ///
-    /// * `cert` - The client certificate in PEM format
+    /// * `cert` - The client certificate in PEM format, e.g. "-----BEGIN CERTIFICATE-----\nENV CERT\n-----END CERTIFICATE-----"
     pub fn mtls_cert(mut self, cert: impl Into<String>) -> Self {
         self.mtls_cert = Some(cert.into());
         self
@@ -303,7 +304,7 @@ impl HessraConfigBuilder {
     ///
     /// # Arguments
     ///
-    /// * `key` - The client private key in PEM format
+    /// * `key` - The client private key in PEM format, e.g. "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----"
     pub fn mtls_key(mut self, key: impl Into<String>) -> Self {
         self.mtls_key = Some(key.into());
         self
@@ -313,7 +314,7 @@ impl HessraConfigBuilder {
     ///
     /// # Arguments
     ///
-    /// * `ca` - The server CA certificate in PEM format
+    /// * `ca` - The server CA certificate in PEM format, e.g. "-----BEGIN CERTIFICATE-----\nENV CA\n-----END CERTIFICATE-----"
     pub fn server_ca(mut self, ca: impl Into<String>) -> Self {
         self.server_ca = Some(ca.into());
         self
@@ -339,11 +340,12 @@ impl HessraConfigBuilder {
         self
     }
 
-    /// Set the personal keypair for the user
+    /// Set the ed25519 or P-256 personal keypair if this is a service node in a service chain
     ///
     /// # Arguments
     ///
-    /// * `personal_keypair` - The personal keypair in PEM format
+    /// * `personal_keypair` - The personal keypair in PEM format, e.g. "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----"
+    ///   Note: Only ed25519 or P-256 keypairs are supported.
     pub fn personal_keypair(mut self, personal_keypair: impl Into<String>) -> Self {
         self.personal_keypair = Some(personal_keypair.into());
         self
@@ -384,12 +386,12 @@ impl HessraConfig {
     ///
     /// # Arguments
     ///
-    /// * `base_url` - The base URL for the Hessra service
-    /// * `port` - Optional port to use for the Hessra service
+    /// * `base_url` - The base URL for the Hessra service, e.g. "test.hessra.net"
+    /// * `port` - Optional port to use for the Hessra service, e.g. 443
     /// * `protocol` - The protocol to use (HTTP/1.1 or HTTP/3)
-    /// * `mtls_cert` - The client certificate in PEM format
-    /// * `mtls_key` - The client private key in PEM format
-    /// * `server_ca` - The server CA certificate in PEM format
+    /// * `mtls_cert` - The client certificate in PEM format, e.g. "-----BEGIN CERTIFICATE-----\nENV CERT\n-----END CERTIFICATE-----"
+    /// * `mtls_key` - The client private key in PEM format, e.g. "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----"
+    /// * `server_ca` - The server CA certificate in PEM format, e.g. "-----BEGIN CERTIFICATE-----\nENV CA\n-----END CERTIFICATE-----"
     pub fn new(
         base_url: impl Into<String>,
         port: Option<u16>,
@@ -458,11 +460,11 @@ impl HessraConfig {
     /// * `{PREFIX}_BASE_URL` - Base URL for the Hessra service
     /// * `{PREFIX}_PORT` - Port for the Hessra service (optional)
     /// * `{PREFIX}_PROTOCOL` - Protocol to use ("http1" or "http3")
-    /// * `{PREFIX}_MTLS_CERT` - Client certificate in PEM format
-    /// * `{PREFIX}_MTLS_KEY` - Client private key in PEM format
-    /// * `{PREFIX}_SERVER_CA` - Server CA certificate in PEM format
-    /// * `{PREFIX}_PUBLIC_KEY` - Server's public key for token verification (optional)
-    /// * `{PREFIX}_PERSONAL_KEYPAIR` - Personal keypair in PEM format (optional)
+    /// * `{PREFIX}_MTLS_CERT` - Base64-encoded client certificate in PEM format
+    /// * `{PREFIX}_MTLS_KEY` - Base64-encoded client private key in PEM format
+    /// * `{PREFIX}_SERVER_CA` - Base64-encoded server CA certificate in PEM format
+    /// * `{PREFIX}_PUBLIC_KEY` - Base64-encoded server's public key for token verification (optional)
+    /// * `{PREFIX}_PERSONAL_KEYPAIR` - Base64-encoded personal keypair in PEM format (optional)
     ///
     /// The certificate and key values can also be loaded from files by using:
     ///
@@ -471,6 +473,9 @@ impl HessraConfig {
     /// * `{PREFIX}_SERVER_CA_FILE` - Path to server CA certificate file
     /// * `{PREFIX}_PUBLIC_KEY_FILE` - Path to server's public key file
     /// * `{PREFIX}_PERSONAL_KEYPAIR_FILE` - Path to personal keypair file
+    ///
+    /// Note: When using environment variables for certificates and keys, the PEM content should be
+    /// base64-encoded to avoid issues with newlines and special characters in environment variables.
     pub fn from_env(prefix: &str) -> Result<Self, ConfigError> {
         let mut builder = HessraConfigBuilder::new();
 
@@ -504,9 +509,21 @@ impl HessraConfig {
             builder = builder.protocol(protocol);
         }
 
+        // Helper function to decode base64 and validate PEM format
+        fn decode_base64_pem(value: &str) -> Result<String, ConfigError> {
+            base64::engine::general_purpose::STANDARD
+                .decode(value)
+                .map_err(|e| ConfigError::ParseError(format!("Invalid base64 encoding: {}", e)))
+                .and_then(|decoded| {
+                    String::from_utf8(decoded)
+                        .map_err(|e| ConfigError::ParseError(format!("Invalid UTF-8: {}", e)))
+                })
+        }
+
         // Client certificate (either direct or from file)
         if let Ok(mtls_cert) = env::var(format!("{}_MTLS_CERT", prefix)) {
-            builder = builder.mtls_cert(mtls_cert);
+            let decoded_cert = decode_base64_pem(&mtls_cert)?;
+            builder = builder.mtls_cert(decoded_cert);
         } else if let Ok(mtls_cert_file) = env::var(format!("{}_MTLS_CERT_FILE", prefix)) {
             let cert_content = fs::read_to_string(mtls_cert_file)?;
             builder = builder.mtls_cert(cert_content);
@@ -514,7 +531,8 @@ impl HessraConfig {
 
         // Client key (either direct or from file)
         if let Ok(mtls_key) = env::var(format!("{}_MTLS_KEY", prefix)) {
-            builder = builder.mtls_key(mtls_key);
+            let decoded_key = decode_base64_pem(&mtls_key)?;
+            builder = builder.mtls_key(decoded_key);
         } else if let Ok(mtls_key_file) = env::var(format!("{}_MTLS_KEY_FILE", prefix)) {
             let key_content = fs::read_to_string(mtls_key_file)?;
             builder = builder.mtls_key(key_content);
@@ -522,7 +540,8 @@ impl HessraConfig {
 
         // Server CA certificate (either direct or from file)
         if let Ok(server_ca) = env::var(format!("{}_SERVER_CA", prefix)) {
-            builder = builder.server_ca(server_ca);
+            let decoded_ca = decode_base64_pem(&server_ca)?;
+            builder = builder.server_ca(decoded_ca);
         } else if let Ok(server_ca_file) = env::var(format!("{}_SERVER_CA_FILE", prefix)) {
             let ca_content = fs::read_to_string(server_ca_file)?;
             builder = builder.server_ca(ca_content);
@@ -530,7 +549,8 @@ impl HessraConfig {
 
         // Public key (optional, either direct or from file)
         if let Ok(public_key) = env::var(format!("{}_PUBLIC_KEY", prefix)) {
-            builder = builder.public_key(public_key);
+            let decoded_key = decode_base64_pem(&public_key)?;
+            builder = builder.public_key(decoded_key);
         } else if let Ok(public_key_file) = env::var(format!("{}_PUBLIC_KEY_FILE", prefix)) {
             let key_content = fs::read_to_string(public_key_file)?;
             builder = builder.public_key(key_content);
@@ -538,7 +558,8 @@ impl HessraConfig {
 
         // Personal keypair (optional, either direct or from file)
         if let Ok(personal_keypair) = env::var(format!("{}_PERSONAL_KEYPAIR", prefix)) {
-            builder = builder.personal_keypair(personal_keypair);
+            let decoded_keypair = decode_base64_pem(&personal_keypair)?;
+            builder = builder.personal_keypair(decoded_keypair);
         } else if let Ok(personal_keypair_file) =
             env::var(format!("{}_PERSONAL_KEYPAIR_FILE", prefix))
         {

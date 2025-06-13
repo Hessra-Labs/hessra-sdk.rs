@@ -23,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-hessra-config = "0.1.1"
+hessra-config = "0.2.0"
 ```
 
 ## Usage
@@ -86,6 +86,9 @@ use hessra_config::HessraConfig;
 
 // Using the prefix "HESSRA" for environment variables
 // Looks for HESSRA_BASE_URL, HESSRA_PORT, etc.
+//
+// Note: keys and certificates should be in PEM format encoded as base64 strings
+// when stored as environment variables
 let config = HessraConfig::from_env("HESSRA").unwrap();
 ```
 

@@ -1,6 +1,13 @@
+use base64;
+use base64::Engine;
 use hessra_config::{get_default_config, set_default_config, ConfigError, HessraConfig, Protocol};
 use std::env;
 use std::fs;
+
+// Helper function to create base64-encoded PEM content
+fn create_base64_pem(content: &str) -> String {
+    base64::engine::general_purpose::STANDARD.encode(content)
+}
 
 #[test]
 fn test_config_new() {
@@ -180,21 +187,21 @@ fn test_config_from_toml() {
 
 #[test]
 fn test_config_from_env() {
-    // Set environment variables
+    // Create PEM content and base64 encode it
+    let cert_content = "-----BEGIN CERTIFICATE-----\nENV CERT\n-----END CERTIFICATE-----";
+    let key_content = "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----";
+    let ca_content = "-----BEGIN CERTIFICATE-----\nENV CA\n-----END CERTIFICATE-----";
+
+    let cert_b64 = create_base64_pem(cert_content);
+    let key_b64 = create_base64_pem(key_content);
+    let ca_b64 = create_base64_pem(ca_content);
+
+    // Set environment variables with base64-encoded values
     env::set_var("TEST_BASE_URL", "https://env.example.com");
     env::set_var("TEST_PORT", "6443");
-    env::set_var(
-        "TEST_MTLS_CERT",
-        "-----BEGIN CERTIFICATE-----\nENV CERT\n-----END CERTIFICATE-----",
-    );
-    env::set_var(
-        "TEST_MTLS_KEY",
-        "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----",
-    );
-    env::set_var(
-        "TEST_SERVER_CA",
-        "-----BEGIN CERTIFICATE-----\nENV CA\n-----END CERTIFICATE-----",
-    );
+    env::set_var("TEST_MTLS_CERT", cert_b64);
+    env::set_var("TEST_MTLS_KEY", key_b64);
+    env::set_var("TEST_SERVER_CA", ca_b64);
     env::set_var("TEST_PROTOCOL", "http1");
 
     // Load the configuration from environment variables
@@ -202,18 +209,9 @@ fn test_config_from_env() {
 
     assert_eq!(config.base_url, "https://env.example.com");
     assert_eq!(config.port, Some(6443));
-    assert_eq!(
-        config.mtls_cert,
-        "-----BEGIN CERTIFICATE-----\nENV CERT\n-----END CERTIFICATE-----"
-    );
-    assert_eq!(
-        config.mtls_key,
-        "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----"
-    );
-    assert_eq!(
-        config.server_ca,
-        "-----BEGIN CERTIFICATE-----\nENV CA\n-----END CERTIFICATE-----"
-    );
+    assert_eq!(config.mtls_cert, cert_content);
+    assert_eq!(config.mtls_key, key_content);
+    assert_eq!(config.server_ca, ca_content);
     match config.protocol {
         Protocol::Http1 => {}
         #[cfg(feature = "http3")]
@@ -239,28 +237,20 @@ fn test_config_from_env_or_file() {
     let key_path = temp_dir.path().join("client.key");
     let ca_path = temp_dir.path().join("ca.crt");
 
-    fs::write(
-        &cert_path,
-        "-----BEGIN CERTIFICATE-----\nFILE CERT CONTENT\n-----END CERTIFICATE-----",
-    )
-    .unwrap();
-    fs::write(
-        &key_path,
-        "-----BEGIN PRIVATE KEY-----\nFILE KEY CONTENT\n-----END PRIVATE KEY-----",
-    )
-    .unwrap();
-    fs::write(
-        &ca_path,
-        "-----BEGIN CERTIFICATE-----\nFILE CA CONTENT\n-----END CERTIFICATE-----",
-    )
-    .unwrap();
+    let cert_content = "-----BEGIN CERTIFICATE-----\nFILE CERT CONTENT\n-----END CERTIFICATE-----";
+    let key_content = "-----BEGIN PRIVATE KEY-----\nFILE KEY CONTENT\n-----END PRIVATE KEY-----";
+    let ca_content = "-----BEGIN CERTIFICATE-----\nFILE CA CONTENT\n-----END CERTIFICATE-----";
 
-    // Set environment variables
+    fs::write(&cert_path, cert_content).unwrap();
+    fs::write(&key_path, key_content).unwrap();
+    fs::write(&ca_path, ca_content).unwrap();
+
+    // Set environment variables with base64-encoded values
     env::set_var("FILE_TEST_BASE_URL", "https://file.example.com");
     env::set_var("FILE_TEST_PORT", "5443");
-    env::set_var("FILE_TEST_MTLS_CERT_FILE", cert_path.to_str().unwrap());
-    env::set_var("FILE_TEST_MTLS_KEY_FILE", key_path.to_str().unwrap());
-    env::set_var("FILE_TEST_SERVER_CA_FILE", ca_path.to_str().unwrap());
+    env::set_var("FILE_TEST_MTLS_CERT", create_base64_pem(cert_content));
+    env::set_var("FILE_TEST_MTLS_KEY", create_base64_pem(key_content));
+    env::set_var("FILE_TEST_SERVER_CA", create_base64_pem(ca_content));
     env::set_var("FILE_TEST_PROTOCOL", "http1");
 
     // Load the configuration from environment variables with file paths
@@ -268,18 +258,9 @@ fn test_config_from_env_or_file() {
 
     assert_eq!(config.base_url, "https://file.example.com");
     assert_eq!(config.port, Some(5443));
-    assert_eq!(
-        config.mtls_cert,
-        "-----BEGIN CERTIFICATE-----\nFILE CERT CONTENT\n-----END CERTIFICATE-----"
-    );
-    assert_eq!(
-        config.mtls_key,
-        "-----BEGIN PRIVATE KEY-----\nFILE KEY CONTENT\n-----END PRIVATE KEY-----"
-    );
-    assert_eq!(
-        config.server_ca,
-        "-----BEGIN CERTIFICATE-----\nFILE CA CONTENT\n-----END CERTIFICATE-----"
-    );
+    assert_eq!(config.mtls_cert, cert_content);
+    assert_eq!(config.mtls_key, key_content);
+    assert_eq!(config.server_ca, ca_content);
     match config.protocol {
         Protocol::Http1 => {}
         #[cfg(feature = "http3")]
@@ -289,9 +270,9 @@ fn test_config_from_env_or_file() {
     // Clean up
     env::remove_var("FILE_TEST_BASE_URL");
     env::remove_var("FILE_TEST_PORT");
-    env::remove_var("FILE_TEST_MTLS_CERT_FILE");
-    env::remove_var("FILE_TEST_MTLS_KEY_FILE");
-    env::remove_var("FILE_TEST_SERVER_CA_FILE");
+    env::remove_var("FILE_TEST_MTLS_CERT");
+    env::remove_var("FILE_TEST_MTLS_KEY");
+    env::remove_var("FILE_TEST_SERVER_CA");
     env::remove_var("FILE_TEST_PROTOCOL");
 }
 
@@ -350,20 +331,20 @@ fn test_default_config() {
 #[cfg(feature = "http3")]
 #[test]
 fn test_http3_protocol() {
-    // Test HTTP/3 protocol with environment variables
+    // Create PEM content and base64 encode it
+    let cert_content = "-----BEGIN CERTIFICATE-----\nHTTP3 CERT\n-----END CERTIFICATE-----";
+    let key_content = "-----BEGIN PRIVATE KEY-----\nHTTP3 KEY\n-----END PRIVATE KEY-----";
+    let ca_content = "-----BEGIN CERTIFICATE-----\nHTTP3 CA\n-----END CERTIFICATE-----";
+
+    let cert_b64 = create_base64_pem(cert_content);
+    let key_b64 = create_base64_pem(key_content);
+    let ca_b64 = create_base64_pem(ca_content);
+
+    // Set environment variables with base64-encoded values
     env::set_var("HTTP3_TEST_BASE_URL", "https://http3.example.com");
-    env::set_var(
-        "HTTP3_TEST_MTLS_CERT",
-        "-----BEGIN CERTIFICATE-----\nHTTP3 CERT\n-----END CERTIFICATE-----",
-    );
-    env::set_var(
-        "HTTP3_TEST_MTLS_KEY",
-        "-----BEGIN PRIVATE KEY-----\nHTTP3 KEY\n-----END PRIVATE KEY-----",
-    );
-    env::set_var(
-        "HTTP3_TEST_SERVER_CA",
-        "-----BEGIN CERTIFICATE-----\nHTTP3 CA\n-----END CERTIFICATE-----",
-    );
+    env::set_var("HTTP3_TEST_MTLS_CERT", cert_b64);
+    env::set_var("HTTP3_TEST_MTLS_KEY", key_b64);
+    env::set_var("HTTP3_TEST_SERVER_CA", ca_b64);
     env::set_var("HTTP3_TEST_PROTOCOL", "http3");
 
     // Load the configuration

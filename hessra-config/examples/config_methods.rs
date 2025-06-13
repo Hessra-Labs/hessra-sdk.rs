@@ -1,3 +1,5 @@
+use base64;
+use base64::Engine;
 use hessra_config::{get_default_config, set_default_config, HessraConfig, Protocol};
 use std::env;
 use std::error::Error;
@@ -52,21 +54,21 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Method 4: Load from environment variables
     println!("Method 4: Load from environment variables");
-    // Set environment variables
+
+    // Create PEM content and base64 encode it
+    let cert_content = "-----BEGIN CERTIFICATE-----\nENV CERT\n-----END CERTIFICATE-----";
+    let key_content = "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----";
+    let ca_content = "-----BEGIN CERTIFICATE-----\nENV CA\n-----END CERTIFICATE-----";
+
+    let cert_b64 = base64::engine::general_purpose::STANDARD.encode(cert_content);
+    let key_b64 = base64::engine::general_purpose::STANDARD.encode(key_content);
+    let ca_b64 = base64::engine::general_purpose::STANDARD.encode(ca_content);
+
     env::set_var("HESSRA_BASE_URL", "https://env.hessra.example.com");
     env::set_var("HESSRA_PORT", "7443");
-    env::set_var(
-        "HESSRA_MTLS_CERT",
-        "-----BEGIN CERTIFICATE-----\nENV CERT\n-----END CERTIFICATE-----",
-    );
-    env::set_var(
-        "HESSRA_MTLS_KEY",
-        "-----BEGIN PRIVATE KEY-----\nENV KEY\n-----END PRIVATE KEY-----",
-    );
-    env::set_var(
-        "HESSRA_SERVER_CA",
-        "-----BEGIN CERTIFICATE-----\nENV CA\n-----END CERTIFICATE-----",
-    );
+    env::set_var("HESSRA_MTLS_CERT", cert_b64);
+    env::set_var("HESSRA_MTLS_KEY", key_b64);
+    env::set_var("HESSRA_SERVER_CA", ca_b64);
     env::set_var("HESSRA_PROTOCOL", "Http1");
 
     let env_config = HessraConfig::from_env("HESSRA")?;
