@@ -67,13 +67,13 @@ fn add_public_key(key_name: &str, public_key: &str, is_default: bool) -> Result<
     // First validate the public key format
     match biscuit_auth::PublicKey::from_pem(public_key) {
         Ok(_) => (),
-        Err(e) => return Err(format!("Invalid public key format: {}", e)),
+        Err(e) => return Err(format!("Invalid public key format: {e}")),
     }
 
     // If setting as default, unset any existing defaults
     if is_default {
         let update_sql = "UPDATE hessra_public_keys SET is_default = FALSE WHERE is_default = TRUE";
-        Spi::run(update_sql).map_err(|e| format!("Failed to update existing keys: {}", e))?;
+        Spi::run(update_sql).map_err(|e| format!("Failed to update existing keys: {e}"))?;
     }
 
     // Insert the new key and return the ID
@@ -87,7 +87,7 @@ fn add_public_key(key_name: &str, public_key: &str, is_default: bool) -> Result<
     );
 
     let result =
-        Spi::get_one::<i32>(&insert_sql).map_err(|e| format!("Failed to insert key: {}", e))?;
+        Spi::get_one::<i32>(&insert_sql).map_err(|e| format!("Failed to insert key: {e}"))?;
 
     match result {
         Some(id) => Ok(id),
@@ -109,13 +109,13 @@ fn update_public_key(key_name: &str, public_key: &str, is_default: bool) -> Resu
     // First validate the public key format
     match biscuit_auth::PublicKey::from_pem(public_key) {
         Ok(_) => (),
-        Err(e) => return Err(format!("Invalid public key format: {}", e)),
+        Err(e) => return Err(format!("Invalid public key format: {e}")),
     }
 
     // If setting as default, unset any existing defaults
     if is_default {
         let update_sql = "UPDATE hessra_public_keys SET is_default = FALSE WHERE is_default = TRUE";
-        Spi::run(update_sql).map_err(|e| format!("Failed to update existing keys: {}", e))?;
+        Spi::run(update_sql).map_err(|e| format!("Failed to update existing keys: {e}"))?;
     }
 
     // Update the key
@@ -134,10 +134,10 @@ fn update_public_key(key_name: &str, public_key: &str, is_default: bool) -> Resu
         sql_escape(key_name)
     );
 
-    Spi::run(&update_sql).map_err(|e| format!("Failed to update key: {}", e))?;
+    Spi::run(&update_sql).map_err(|e| format!("Failed to update key: {e}"))?;
 
     let count = Spi::get_one::<i64>(&check_sql)
-        .map_err(|e| format!("Failed to check update result: {}", e))?
+        .map_err(|e| format!("Failed to check update result: {e}"))?
         .unwrap_or(0);
 
     Ok(count > 0)
@@ -159,7 +159,7 @@ fn delete_public_key(key_name: &str) -> Result<bool, String> {
     );
 
     let count_before = Spi::get_one::<i64>(&check_sql)
-        .map_err(|e| format!("Failed to check key existence: {}", e))?
+        .map_err(|e| format!("Failed to check key existence: {e}"))?
         .unwrap_or(0);
 
     if count_before == 0 {
@@ -172,7 +172,7 @@ fn delete_public_key(key_name: &str) -> Result<bool, String> {
         sql_escape(key_name)
     );
 
-    Spi::run(&delete_sql).map_err(|e| format!("Failed to delete key: {}", e))?;
+    Spi::run(&delete_sql).map_err(|e| format!("Failed to delete key: {e}"))?;
 
     Ok(true)
 }
@@ -196,13 +196,12 @@ fn get_public_key(key_name: Option<&str>) -> Result<String, String> {
         }
     };
 
-    let result =
-        Spi::get_one::<String>(&select_sql).map_err(|e| format!("Database error: {}", e))?;
+    let result = Spi::get_one::<String>(&select_sql).map_err(|e| format!("Database error: {e}"))?;
 
     match result {
         Some(key) => Ok(key),
         None => Err(match key_name {
-            Some(name) => format!("No public key found with name: {}", name),
+            Some(name) => format!("No public key found with name: {name}"),
             None => "No default public key found".to_string(),
         }),
     }
@@ -225,7 +224,7 @@ fn add_service_chain(service_name: &str, service_nodes: &str) -> Result<i32, Str
     // Validate the service_nodes JSON
     match serde_json::from_str::<Vec<hessra_token::ServiceNode>>(service_nodes) {
         Ok(_) => (),
-        Err(e) => return Err(format!("Invalid service nodes JSON: {}", e)),
+        Err(e) => return Err(format!("Invalid service nodes JSON: {e}")),
     }
 
     let insert_sql = format!(
@@ -237,7 +236,7 @@ fn add_service_chain(service_name: &str, service_nodes: &str) -> Result<i32, Str
     );
 
     let result = Spi::get_one::<i32>(&insert_sql)
-        .map_err(|e| format!("Failed to insert service chain: {}", e))?;
+        .map_err(|e| format!("Failed to insert service chain: {e}"))?;
 
     match result {
         Some(id) => Ok(id),
@@ -258,7 +257,7 @@ fn update_service_chain(service_name: &str, service_nodes: &str) -> Result<bool,
     // Validate the service_nodes JSON
     match serde_json::from_str::<Vec<hessra_token::ServiceNode>>(service_nodes) {
         Ok(_) => (),
-        Err(e) => return Err(format!("Invalid service nodes JSON: {}", e)),
+        Err(e) => return Err(format!("Invalid service nodes JSON: {e}")),
     }
 
     // Check if the service chain exists
@@ -268,7 +267,7 @@ fn update_service_chain(service_name: &str, service_nodes: &str) -> Result<bool,
     );
 
     let count_before = Spi::get_one::<i64>(&check_sql)
-        .map_err(|e| format!("Failed to check service chain existence: {}", e))?
+        .map_err(|e| format!("Failed to check service chain existence: {e}"))?
         .unwrap_or(0);
 
     if count_before == 0 {
@@ -284,7 +283,7 @@ fn update_service_chain(service_name: &str, service_nodes: &str) -> Result<bool,
         sql_escape(service_name)
     );
 
-    Spi::run(&update_sql).map_err(|e| format!("Failed to update service chain: {}", e))?;
+    Spi::run(&update_sql).map_err(|e| format!("Failed to update service chain: {e}"))?;
 
     Ok(true)
 }
@@ -305,7 +304,7 @@ fn delete_service_chain(service_name: &str) -> Result<bool, String> {
     );
 
     let count_before = Spi::get_one::<i64>(&check_sql)
-        .map_err(|e| format!("Failed to check service chain existence: {}", e))?
+        .map_err(|e| format!("Failed to check service chain existence: {e}"))?
         .unwrap_or(0);
 
     if count_before == 0 {
@@ -318,7 +317,7 @@ fn delete_service_chain(service_name: &str) -> Result<bool, String> {
         sql_escape(service_name)
     );
 
-    Spi::run(&delete_sql).map_err(|e| format!("Failed to delete service chain: {}", e))?;
+    Spi::run(&delete_sql).map_err(|e| format!("Failed to delete service chain: {e}"))?;
 
     Ok(true)
 }
@@ -337,15 +336,11 @@ fn get_service_chain(service_name: &str) -> Result<String, String> {
         sql_escape(service_name)
     );
 
-    let result =
-        Spi::get_one::<String>(&select_sql).map_err(|e| format!("Database error: {}", e))?;
+    let result = Spi::get_one::<String>(&select_sql).map_err(|e| format!("Database error: {e}"))?;
 
     match result {
         Some(nodes) => Ok(nodes),
-        None => Err(format!(
-            "No service chain found with name: {}",
-            service_name
-        )),
+        None => Err(format!("No service chain found with name: {service_name}")),
     }
 }
 
@@ -442,7 +437,7 @@ fn verify_token_with_stored_key(
 
     // Call the original verify_token function
     verify_token(token, &public_key, subject, resource, operation)
-        .map_err(|e| format!("Token verification failed: {}", e))
+        .map_err(|e| format!("Token verification failed: {e}"))
 }
 
 /// Verifies a token in a service chain context using stored configurations
@@ -484,7 +479,7 @@ fn verify_service_chain_token_with_stored_key(
         &service_nodes,
         component,
     )
-    .map_err(|e| format!("Token verification failed: {}", e))
+    .map_err(|e| format!("Token verification failed: {e}"))
 }
 
 //-----------------------------------------------------------------------------
