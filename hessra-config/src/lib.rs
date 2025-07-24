@@ -480,12 +480,12 @@ impl HessraConfig {
         let mut builder = HessraConfigBuilder::new();
 
         // Base URL is required
-        if let Ok(base_url) = env::var(format!("{}_BASE_URL", prefix)) {
+        if let Ok(base_url) = env::var(format!("{prefix}_BASE_URL")) {
             builder = builder.base_url(base_url);
         }
 
         // Port is optional
-        if let Ok(port_str) = env::var(format!("{}_PORT", prefix)) {
+        if let Ok(port_str) = env::var(format!("{prefix}_PORT")) {
             if let Ok(port) = port_str.parse::<u16>() {
                 builder = builder.port(port);
             } else {
@@ -494,15 +494,14 @@ impl HessraConfig {
         }
 
         // Protocol is optional (defaults to HTTP/1.1)
-        if let Ok(protocol_str) = env::var(format!("{}_PROTOCOL", prefix)) {
+        if let Ok(protocol_str) = env::var(format!("{prefix}_PROTOCOL")) {
             let protocol = match protocol_str.to_lowercase().as_str() {
                 "http1" => Protocol::Http1,
                 #[cfg(feature = "http3")]
                 "http3" => Protocol::Http3,
                 _ => {
                     return Err(ConfigError::ParseError(format!(
-                        "Invalid protocol: {}",
-                        protocol_str
+                        "Invalid protocol: {protocol_str}"
                     )))
                 }
             };
@@ -513,55 +512,55 @@ impl HessraConfig {
         fn decode_base64_pem(value: &str) -> Result<String, ConfigError> {
             base64::engine::general_purpose::STANDARD
                 .decode(value)
-                .map_err(|e| ConfigError::ParseError(format!("Invalid base64 encoding: {}", e)))
+                .map_err(|e| ConfigError::ParseError(format!("Invalid base64 encoding: {e}")))
                 .and_then(|decoded| {
                     String::from_utf8(decoded)
-                        .map_err(|e| ConfigError::ParseError(format!("Invalid UTF-8: {}", e)))
+                        .map_err(|e| ConfigError::ParseError(format!("Invalid UTF-8: {e}")))
                 })
         }
 
         // Client certificate (either direct or from file)
-        if let Ok(mtls_cert) = env::var(format!("{}_MTLS_CERT", prefix)) {
+        if let Ok(mtls_cert) = env::var(format!("{prefix}_MTLS_CERT")) {
             let decoded_cert = decode_base64_pem(&mtls_cert)?;
             builder = builder.mtls_cert(decoded_cert);
-        } else if let Ok(mtls_cert_file) = env::var(format!("{}_MTLS_CERT_FILE", prefix)) {
+        } else if let Ok(mtls_cert_file) = env::var(format!("{prefix}_MTLS_CERT_FILE")) {
             let cert_content = fs::read_to_string(mtls_cert_file)?;
             builder = builder.mtls_cert(cert_content);
         }
 
         // Client key (either direct or from file)
-        if let Ok(mtls_key) = env::var(format!("{}_MTLS_KEY", prefix)) {
+        if let Ok(mtls_key) = env::var(format!("{prefix}_MTLS_KEY")) {
             let decoded_key = decode_base64_pem(&mtls_key)?;
             builder = builder.mtls_key(decoded_key);
-        } else if let Ok(mtls_key_file) = env::var(format!("{}_MTLS_KEY_FILE", prefix)) {
+        } else if let Ok(mtls_key_file) = env::var(format!("{prefix}_MTLS_KEY_FILE")) {
             let key_content = fs::read_to_string(mtls_key_file)?;
             builder = builder.mtls_key(key_content);
         }
 
         // Server CA certificate (either direct or from file)
-        if let Ok(server_ca) = env::var(format!("{}_SERVER_CA", prefix)) {
+        if let Ok(server_ca) = env::var(format!("{prefix}_SERVER_CA")) {
             let decoded_ca = decode_base64_pem(&server_ca)?;
             builder = builder.server_ca(decoded_ca);
-        } else if let Ok(server_ca_file) = env::var(format!("{}_SERVER_CA_FILE", prefix)) {
+        } else if let Ok(server_ca_file) = env::var(format!("{prefix}_SERVER_CA_FILE")) {
             let ca_content = fs::read_to_string(server_ca_file)?;
             builder = builder.server_ca(ca_content);
         }
 
         // Public key (optional, either direct or from file)
-        if let Ok(public_key) = env::var(format!("{}_PUBLIC_KEY", prefix)) {
+        if let Ok(public_key) = env::var(format!("{prefix}_PUBLIC_KEY")) {
             let decoded_key = decode_base64_pem(&public_key)?;
             builder = builder.public_key(decoded_key);
-        } else if let Ok(public_key_file) = env::var(format!("{}_PUBLIC_KEY_FILE", prefix)) {
+        } else if let Ok(public_key_file) = env::var(format!("{prefix}_PUBLIC_KEY_FILE")) {
             let key_content = fs::read_to_string(public_key_file)?;
             builder = builder.public_key(key_content);
         }
 
         // Personal keypair (optional, either direct or from file)
-        if let Ok(personal_keypair) = env::var(format!("{}_PERSONAL_KEYPAIR", prefix)) {
+        if let Ok(personal_keypair) = env::var(format!("{prefix}_PERSONAL_KEYPAIR")) {
             let decoded_keypair = decode_base64_pem(&personal_keypair)?;
             builder = builder.personal_keypair(decoded_keypair);
         } else if let Ok(personal_keypair_file) =
-            env::var(format!("{}_PERSONAL_KEYPAIR_FILE", prefix))
+            env::var(format!("{prefix}_PERSONAL_KEYPAIR_FILE"))
         {
             let keypair_content = fs::read_to_string(personal_keypair_file)?;
             builder = builder.personal_keypair(keypair_content);
@@ -601,7 +600,7 @@ impl HessraConfig {
         }
 
         // Check if a config file path is specified in the environment
-        if let Ok(config_file) = env::var(format!("{}_CONFIG_FILE", prefix)) {
+        if let Ok(config_file) = env::var(format!("{prefix}_CONFIG_FILE")) {
             return Self::load_from_file(&config_file);
         }
 

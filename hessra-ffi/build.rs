@@ -9,7 +9,7 @@ fn main() {
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
     let package_name = env::var("CARGO_PKG_NAME").unwrap().replace('-', "_");
-    let output_file = PathBuf::from(&crate_dir).join(format!("{}.h", package_name)); // Will generate e.g., hessra_ffi.h
+    let output_file = PathBuf::from(&crate_dir).join(format!("{package_name}.h")); // Will generate e.g., hessra_ffi.h
 
     // Use a cbindgen.toml file for configuration if it exists
     let config_file = PathBuf::from(&crate_dir).join("cbindgen.toml");

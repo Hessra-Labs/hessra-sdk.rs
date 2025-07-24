@@ -121,7 +121,7 @@ impl BaseConfig {
     /// Get the formatted base URL, with port if specified
     pub fn get_base_url(&self) -> String {
         match self.port {
-            Some(port) => format!("{}:{}", self.base_url, port),
+            Some(port) => format!("{}:{port}", self.base_url),
             None => self.base_url.clone(),
         }
     }
@@ -144,14 +144,13 @@ impl Http1Client {
 
         let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
             ApiError::SslConfig(format!(
-                "Failed to create identity from certificate and key: {}",
-                e
+                "Failed to create identity from certificate and key: {e}"
             ))
         })?;
 
         // Parse the CA certificate
         let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
-            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {}", e)))?;
+            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {e}")))?;
 
         // Build the reqwest client with mTLS configuration
         let client = reqwest::ClientBuilder::new()
@@ -171,7 +170,7 @@ impl Http1Client {
         R: for<'de> Deserialize<'de>,
     {
         let base_url = self.config.get_base_url();
-        let url = format!("https://{}/{}", base_url, endpoint);
+        let url = format!("https://{base_url}/{endpoint}");
 
         let response = self
             .client
@@ -185,15 +184,14 @@ impl Http1Client {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(ApiError::InvalidResponse(format!(
-                "HTTP error: {} - {}",
-                status, error_text
+                "HTTP error: {status} - {error_text}"
             )));
         }
 
         let result = response
             .json::<R>()
             .await
-            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {e}")))?;
 
         Ok(result)
     }
@@ -218,14 +216,13 @@ impl Http3Client {
 
         let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
             ApiError::SslConfig(format!(
-                "Failed to create identity from certificate and key: {}",
-                e
+                "Failed to create identity from certificate and key: {e}"
             ))
         })?;
 
         // Parse the CA certificate
         let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
-            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {}", e)))?;
+            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {e}")))?;
 
         // Build the reqwest client with mTLS configuration
         let client = reqwest::ClientBuilder::new()
@@ -246,7 +243,7 @@ impl Http3Client {
         R: for<'de> Deserialize<'de>,
     {
         let base_url = self.config.get_base_url();
-        let url = format!("https://{}/{}", base_url, endpoint);
+        let url = format!("https://{base_url}/{endpoint}");
 
         let response = self
             .client
@@ -261,15 +258,14 @@ impl Http3Client {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(ApiError::InvalidResponse(format!(
-                "HTTP error: {} - {}",
-                status, error_text
+                "HTTP error: {status} - {error_text}"
             )));
         }
 
         let result = response
             .json::<R>()
             .await
-            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {e}")))?;
 
         Ok(result)
     }
@@ -435,8 +431,8 @@ impl HessraClient {
 
         // Format the URL
         let url = match port {
-            Some(port) => format!("https://{}:{}/public_key", base_url, port),
-            None => format!("https://{}/public_key", base_url),
+            Some(port) => format!("https://{base_url}:{port}/public_key"),
+            None => format!("https://{base_url}/public_key"),
         };
 
         // Make the request
@@ -450,8 +446,7 @@ impl HessraClient {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(ApiError::InvalidResponse(format!(
-                "HTTP error: {} - {}",
-                status, error_text
+                "HTTP error: {status} - {error_text}"
             )));
         }
 
@@ -459,7 +454,7 @@ impl HessraClient {
         let result = response
             .json::<PublicKeyResponse>()
             .await
-            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {e}")))?;
 
         Ok(result.public_key)
     }
@@ -487,8 +482,8 @@ impl HessraClient {
 
         // Format the URL
         let url = match port {
-            Some(port) => format!("https://{}:{}/public_key", base_url, port),
-            None => format!("https://{}/public_key", base_url),
+            Some(port) => format!("https://{base_url}:{port}/public_key"),
+            None => format!("https://{base_url}/public_key"),
         };
 
         // Make the request
@@ -503,8 +498,7 @@ impl HessraClient {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(ApiError::InvalidResponse(format!(
-                "HTTP error: {} - {}",
-                status, error_text
+                "HTTP error: {status} - {error_text}"
             )));
         }
 
@@ -512,7 +506,7 @@ impl HessraClient {
         let result = response
             .json::<PublicKeyResponse>()
             .await
-            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {e}")))?;
 
         Ok(result.public_key)
     }
@@ -629,7 +623,7 @@ impl HessraClient {
             HessraClient::Http1(client) => {
                 // For this endpoint, we just need a GET request, not a POST with a body
                 let base_url = client.config.get_base_url();
-                let full_url = format!("https://{}/{}", base_url, url_path);
+                let full_url = format!("https://{base_url}/{url_path}");
 
                 let response = client
                     .client
@@ -642,19 +636,18 @@ impl HessraClient {
                     let status = response.status();
                     let error_text = response.text().await.unwrap_or_default();
                     return Err(ApiError::InvalidResponse(format!(
-                        "HTTP error: {} - {}",
-                        status, error_text
+                        "HTTP error: {status} - {error_text}"
                     )));
                 }
 
                 response.json::<PublicKeyResponse>().await.map_err(|e| {
-                    ApiError::InvalidResponse(format!("Failed to parse response: {}", e))
+                    ApiError::InvalidResponse(format!("Failed to parse response: {e}"))
                 })?
             }
             #[cfg(feature = "http3")]
             HessraClient::Http3(client) => {
                 let base_url = client.config.get_base_url();
-                let full_url = format!("https://{}/{}", base_url, url_path);
+                let full_url = format!("https://{base_url}/{url_path}");
 
                 let response = client
                     .client
@@ -668,13 +661,12 @@ impl HessraClient {
                     let status = response.status();
                     let error_text = response.text().await.unwrap_or_default();
                     return Err(ApiError::InvalidResponse(format!(
-                        "HTTP error: {} - {}",
-                        status, error_text
+                        "HTTP error: {status} - {error_text}"
                     )));
                 }
 
                 response.json::<PublicKeyResponse>().await.map_err(|e| {
-                    ApiError::InvalidResponse(format!("Failed to parse response: {}", e))
+                    ApiError::InvalidResponse(format!("Failed to parse response: {e}"))
                 })?
             }
         };

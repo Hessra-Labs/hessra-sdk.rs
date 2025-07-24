@@ -30,14 +30,14 @@ pub fn encode_token(token_bytes: &[u8]) -> String {
 pub fn decode_token(token_string: &str) -> Result<Vec<u8>, TokenError> {
     URL_SAFE
         .decode(token_string)
-        .map_err(|e| TokenError::generic(format!("Failed to decode base64 token: {}", e)))
+        .map_err(|e| TokenError::generic(format!("Failed to decode base64 token: {e}")))
 }
 
 pub fn public_key_from_pem_file(path: &str) -> Result<PublicKey, TokenError> {
     let key_string = read_to_string(path)
-        .map_err(|e| TokenError::generic(format!("Failed to read file: {}", e)))?;
+        .map_err(|e| TokenError::generic(format!("Failed to read file: {e}")))?;
     let key = PublicKey::from_pem(&key_string)
-        .map_err(|e| TokenError::generic(format!("Failed to parse PEM: {}", e)))?;
+        .map_err(|e| TokenError::generic(format!("Failed to parse PEM: {e}")))?;
     Ok(key)
 }
 

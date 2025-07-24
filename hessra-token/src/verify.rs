@@ -122,8 +122,6 @@ pub fn verify_token_local(
 /// Takes a public key encoded as a string in the format "ed25519/..." or "secp256r1/..."
 /// and returns a PublicKey.
 pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
-    println!("Key: {:?}", key);
-    // first split the string on the /
     let parts = key.split('/').collect::<Vec<&str>>();
     if parts.len() != 2 {
         return Err(TokenError::invalid_key_format(
