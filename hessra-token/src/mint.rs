@@ -2,7 +2,7 @@ extern crate biscuit_auth as biscuit;
 
 use crate::verify::{biscuit_key_from_string, ServiceNode};
 
-use biscuit::macros::{biscuit, rule};
+use biscuit::macros::{biscuit, check, rule};
 use biscuit::{Biscuit, BiscuitBuilder, KeyPair};
 use chrono::Utc;
 use std::error::Error;
@@ -275,6 +275,69 @@ pub fn create_service_chain_token_with_time(
         operation,
         key,
         nodes,
+        time_config,
+    )?;
+    let token = biscuit.to_base64()?;
+    Ok(token)
+}
+
+/// Creates a new biscuit token with multi-party attestations.
+///
+/// This function creates a token that grants access to the specified resource for the given subject,
+/// includes attestations for each multi-party node in the chain, and allows custom time configuration.
+///
+/// The key difference between a multi-party biscuit and a service chain biscuit is that a multi-party
+/// biscuit is not valid until it has been attested by all the parties.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `multi_party_nodes` - Vector of multi-party nodes that will attest to the token
+pub fn create_multi_party_biscuit_with_time(
+    subject: String,
+    resource: String,
+    operation: String,
+    key: KeyPair,
+    multi_party_nodes: &Vec<ServiceNode>,
+    time_config: TokenTimeConfig,
+) -> Result<Biscuit, Box<dyn Error>> {
+    let mut biscuit_builder =
+        create_base_biscuit_builder_with_time(subject, resource, operation, time_config)?;
+
+    for node in multi_party_nodes {
+        let component = node.component.clone();
+        let public_key = biscuit_key_from_string(node.public_key.clone())?;
+        biscuit_builder = biscuit_builder.check(check!(
+            r#"
+                check if namespace({component}) trusting {public_key};
+            "#
+        ))?;
+    }
+
+    let biscuit = biscuit_builder.build(&key)?;
+
+    info!("biscuit (authority): {}", biscuit);
+
+    Ok(biscuit)
+}
+
+pub fn create_multi_party_token_with_time(
+    subject: String,
+    resource: String,
+    operation: String,
+    key: KeyPair,
+    multi_party_nodes: &Vec<ServiceNode>,
+    time_config: TokenTimeConfig,
+) -> Result<String, Box<dyn Error>> {
+    let biscuit = create_multi_party_biscuit_with_time(
+        subject,
+        resource,
+        operation,
+        key,
+        multi_party_nodes,
         time_config,
     )?;
     let token = biscuit.to_base64()?;
