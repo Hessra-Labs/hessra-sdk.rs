@@ -77,6 +77,8 @@ pub fn add_multi_party_attestation(
     namespace: String,
     namespace_key: KeyPair,
 ) -> Result<Vec<u8>, TokenError> {
+    // Note that this deserializes a token and validates the signature using the root public key
+    // so this effectively validates that the first party created and signed the token
     let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
 
     let third_party_request = biscuit
