@@ -30,30 +30,73 @@ pub fn add_service_node_attestation(
 ) -> Result<Vec<u8>, TokenError> {
     let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
 
-    // Create a third-party request
     let third_party_request = biscuit
         .third_party_request()
         .map_err(TokenError::biscuit_error)?;
     let service_name = service.to_string();
 
-    // Create a block for the service attestation
     let third_party_block = block!(
         r#"
             service({service_name});
         "#
     );
 
-    // Create the third-party block and sign it
     let third_party_block = third_party_request
         .create_block(&node_key.private(), third_party_block)
         .map_err(TokenError::biscuit_error)?;
 
-    // Append the third-party block to the token
     let attested_biscuit = biscuit
         .append_third_party(node_key.public(), third_party_block)
         .map_err(TokenError::biscuit_error)?;
 
-    // Serialize the token
+    let attested_token = attested_biscuit
+        .to_vec()
+        .map_err(TokenError::biscuit_error)?;
+
+    Ok(attested_token)
+}
+
+/// Add a multi-party attestation to a token
+///
+/// This function adds a third-party block to a token that attests
+/// that the token has been authorized by the specified namespace.
+///
+/// # Arguments
+///
+/// * `token` - The binary token data
+/// * `public_key` - The public key to verify the token
+/// * `namespace` - The namespace identifier (e.g. "othercorp.hessra.net")
+/// * `namespace_key` - The key pair of the namespace
+///
+/// # Returns
+///
+/// The attested token binary data
+pub fn add_multi_party_attestation(
+    token: Vec<u8>,
+    public_key: PublicKey,
+    namespace: String,
+    namespace_key: KeyPair,
+) -> Result<Vec<u8>, TokenError> {
+    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
+
+    let third_party_request = biscuit
+        .third_party_request()
+        .map_err(TokenError::biscuit_error)?;
+
+    let third_party_block = block!(
+        r#"
+            namespace({namespace});
+        "#
+    );
+
+    let third_party_block = third_party_request
+        .create_block(&namespace_key.private(), third_party_block)
+        .map_err(TokenError::biscuit_error)?;
+
+    let attested_biscuit = biscuit
+        .append_third_party(namespace_key.public(), third_party_block)
+        .map_err(TokenError::biscuit_error)?;
+
     let attested_token = attested_biscuit
         .to_vec()
         .map_err(TokenError::biscuit_error)?;
