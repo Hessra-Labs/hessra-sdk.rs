@@ -29,6 +29,21 @@ impl Default for TokenTimeConfig {
     }
 }
 
+/// Creates a base biscuit builder with default time configuration.
+///
+/// This is a private helper function that creates a biscuit builder with the default
+/// time configuration (5 minutes duration from current time).
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier
+/// * `operation` - The operation to be granted
+///
+/// # Returns
+///
+/// * `Ok(BiscuitBuilder)` - The configured biscuit builder if successful
+/// * `Err(Box<dyn Error>)` - If builder creation fails
 fn _create_base_biscuit_builder(
     subject: String,
     resource: String,
@@ -37,6 +52,22 @@ fn _create_base_biscuit_builder(
     create_base_biscuit_builder_with_time(subject, resource, operation, TokenTimeConfig::default())
 }
 
+/// Creates a base biscuit builder with custom time configuration.
+///
+/// This is a private helper function that creates a biscuit builder with custom
+/// time settings for token validity period.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier
+/// * `operation` - The operation to be granted
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(BiscuitBuilder)` - The configured biscuit builder if successful
+/// * `Err(Box<dyn Error>)` - If builder creation fails
 fn create_base_biscuit_builder_with_time(
     subject: String,
     resource: String,
@@ -58,6 +89,25 @@ fn create_base_biscuit_builder_with_time(
     Ok(biscuit_builder)
 }
 
+/// Creates a biscuit (not serialized, not base64 encoded) with custom time
+/// configuration.
+///
+/// This function creates a raw Biscuit object that can be further processed
+/// or converted to different formats. It grants the specified operation on
+/// the resource for the given subject.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(Biscuit)` - The raw biscuit if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 pub fn create_raw_biscuit(
     subject: String,
     resource: String,
@@ -102,6 +152,23 @@ pub fn create_biscuit(
     Ok(token)
 }
 
+/// Creates a base64-encoded biscuit token with custom time configuration.
+///
+/// This is a private helper function that creates a biscuit token and returns
+/// it as a base64-encoded string for easy transmission and storage.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 fn create_base64_biscuit(
     subject: String,
     resource: String,
@@ -114,6 +181,23 @@ fn create_base64_biscuit(
     Ok(token)
 }
 
+/// Creates a biscuit token with default time configuration.
+///
+/// This function creates a base64-encoded token string that grants the specified
+/// operation on the resource for the given subject. The token will be valid for
+/// 5 minutes by default.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 pub fn create_token(
     subject: String,
     resource: String,
@@ -129,6 +213,23 @@ pub fn create_token(
     )
 }
 
+/// Creates a biscuit token with custom time configuration.
+///
+/// This function creates a base64-encoded token string that grants the specified
+/// operation on the resource for the given subject with custom time settings.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 pub fn create_token_with_time(
     subject: String,
     resource: String,
@@ -171,6 +272,24 @@ pub fn create_service_chain_biscuit(
     Ok(token)
 }
 
+/// Creates a base64-encoded service chain biscuit token.
+///
+/// This is a private helper function that creates a service chain biscuit token
+/// and returns it as a base64-encoded string for easy transmission and storage.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `nodes` - Vector of service nodes that will attest to the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 fn create_base64_service_chain_biscuit(
     subject: String,
     resource: String,
@@ -185,6 +304,25 @@ fn create_base64_service_chain_biscuit(
     Ok(token)
 }
 
+/// Creates a raw service chain biscuit token.
+///
+/// This function creates a raw Biscuit object with service chain attestations
+/// that can be further processed or converted to different formats. It delegates
+/// to the time-aware version with the provided configuration.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `nodes` - Vector of service nodes that will attest to the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(Biscuit)` - The raw biscuit if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 pub fn create_raw_service_chain_biscuit(
     subject: String,
     resource: String,
@@ -196,6 +334,25 @@ pub fn create_raw_service_chain_biscuit(
     create_service_chain_biscuit_with_time(subject, resource, operation, key, nodes, time_config)
 }
 
+/// Creates a service chain biscuit token with default time configuration.
+///
+/// This function creates a base64-encoded service chain token string that grants
+/// the specified operation on the resource for the given subject. The token will
+/// be valid for 5 minutes by default and includes attestations for each service
+/// node in the chain.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `nodes` - Vector of service nodes that will attest to the token
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 pub fn create_service_chain_token(
     subject: String,
     resource: String,
@@ -261,6 +418,25 @@ pub fn create_service_chain_biscuit_with_time(
     Ok(biscuit)
 }
 
+/// Creates a service chain biscuit token with custom time configuration.
+///
+/// This function creates a base64-encoded service chain token string that grants
+/// the specified operation on the resource for the given subject with custom time
+/// settings. The token includes attestations for each service node in the chain.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `nodes` - Vector of service nodes that will attest to the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 pub fn create_service_chain_token_with_time(
     subject: String,
     resource: String,
@@ -296,6 +472,154 @@ pub fn create_service_chain_token_with_time(
 /// * `operation` - The operation to grant access to
 /// * `key` - The key pair used to sign the token
 /// * `multi_party_nodes` - Vector of multi-party nodes that will attest to the token
+pub fn create_raw_multi_party_biscuit(
+    subject: String,
+    resource: String,
+    operation: String,
+    key: KeyPair,
+    multi_party_nodes: &Vec<ServiceNode>,
+) -> Result<Biscuit, Box<dyn Error>> {
+    create_multi_party_biscuit_with_time(
+        subject,
+        resource,
+        operation,
+        key,
+        multi_party_nodes,
+        TokenTimeConfig::default(),
+    )
+}
+
+/// Creates a new biscuit token with multi-party attestations.
+///
+/// This function creates a token that grants access to the specified resource for the given subject,
+/// includes attestations for each multi-party node in the chain. The token will be valid for 5 minutes by default.
+///
+/// The key difference between a multi-party biscuit and a service chain biscuit is that a multi-party
+/// biscuit is not valid until it has been attested by all the parties.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `multi_party_nodes` - Vector of multi-party nodes that will attest to the token
+///
+/// # Returns
+///
+/// * `Ok(Vec<u8>)` - The binary token data if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
+pub fn create_multi_party_biscuit(
+    subject: String,
+    resource: String,
+    operation: String,
+    key: KeyPair,
+    multi_party_nodes: &Vec<ServiceNode>,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let biscuit =
+        create_raw_multi_party_biscuit(subject, resource, operation, key, multi_party_nodes)?;
+    let token = biscuit.to_vec()?;
+    Ok(token)
+}
+
+/// Creates a base64-encoded multi-party biscuit token.
+///
+/// This is a private helper function that creates a multi-party biscuit token
+/// and returns it as a base64-encoded string for easy transmission and storage.
+/// Multi-party tokens require attestation from all specified nodes before they
+/// become valid.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `multi_party_nodes` - Vector of multi-party nodes that must attest to the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
+fn create_base64_multi_party_biscuit(
+    subject: String,
+    resource: String,
+    operation: String,
+    key: KeyPair,
+    multi_party_nodes: &Vec<ServiceNode>,
+    time_config: TokenTimeConfig,
+) -> Result<String, Box<dyn Error>> {
+    let biscuit = create_multi_party_biscuit_with_time(
+        subject,
+        resource,
+        operation,
+        key,
+        multi_party_nodes,
+        time_config,
+    )?;
+    let token = biscuit.to_base64()?;
+    Ok(token)
+}
+
+/// Creates a new multi-party biscuit token with default time configuration.
+///
+/// This function creates a token that grants access to the specified resource for the given subject,
+/// includes attestations for each multi-party node, and uses the default time configuration (5 minutes).
+///
+/// The key difference between a multi-party biscuit and a service chain biscuit is that a multi-party
+/// biscuit is not valid until it has been attested by all the parties.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `multi_party_nodes` - Vector of multi-party nodes that will attest to the token
+///
+/// # Returns
+///
+/// * `Ok(String)` - The base64-encoded token if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
+pub fn create_multi_party_token(
+    subject: String,
+    resource: String,
+    operation: String,
+    key: KeyPair,
+    multi_party_nodes: &Vec<ServiceNode>,
+) -> Result<String, Box<dyn Error>> {
+    create_base64_multi_party_biscuit(
+        subject,
+        resource,
+        operation,
+        key,
+        multi_party_nodes,
+        TokenTimeConfig::default(),
+    )
+}
+
+/// Creates a new biscuit token with multi-party attestations and custom time settings.
+///
+/// This function creates a token that grants access to the specified resource for the given subject,
+/// includes attestations for each multi-party node in the chain, and allows custom time configuration.
+///
+/// The key difference between a multi-party biscuit and a service chain biscuit is that a multi-party
+/// biscuit is not valid until it has been attested by all the parties.
+///
+/// # Arguments
+///
+/// * `subject` - The subject (user) identifier
+/// * `resource` - The resource identifier to grant access to
+/// * `operation` - The operation to grant access to
+/// * `key` - The key pair used to sign the token
+/// * `multi_party_nodes` - Vector of multi-party nodes that will attest to the token
+/// * `time_config` - Time configuration for token validity
+///
+/// # Returns
+///
+/// * `Ok(Biscuit)` - The raw biscuit if successful
+/// * `Err(Box<dyn Error>)` - If token creation fails
 pub fn create_multi_party_biscuit_with_time(
     subject: String,
     resource: String,
@@ -891,5 +1215,83 @@ mod tests {
             "read".to_string(),
         );
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_multi_party_biscuit_helper_functions() {
+        let subject = "test@test.com".to_owned();
+        let resource = "res1".to_string();
+        let operation = "read".to_string();
+        let root = KeyPair::new();
+
+        // Create a multi-party node
+        let multi_party_key = KeyPair::new();
+        let multi_party_public_key = hex::encode(multi_party_key.public().to_bytes());
+        let multi_party_public_key = format!("ed25519/{}", multi_party_public_key);
+        let multi_party_node = ServiceNode {
+            component: "approval_service".to_string(),
+            public_key: multi_party_public_key.clone(),
+        };
+        let nodes = vec![multi_party_node];
+
+        // Test create_multi_party_token (default time config)
+        let token_string = create_multi_party_token(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root,
+            &nodes,
+        );
+        assert!(token_string.is_ok());
+
+        // Test create_multi_party_biscuit (binary token with default time config)
+        let root2 = KeyPair::new();
+        let binary_token = create_multi_party_biscuit(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root2,
+            &nodes,
+        );
+        assert!(binary_token.is_ok());
+
+        // Test create_raw_multi_party_biscuit (raw biscuit with default time config)
+        let root3 = KeyPair::new();
+        let raw_biscuit = create_raw_multi_party_biscuit(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root3,
+            &nodes,
+        );
+        assert!(raw_biscuit.is_ok());
+
+        // Test create_multi_party_token_with_time (custom time config)
+        let custom_time_config = TokenTimeConfig {
+            start_time: Some(Utc::now().timestamp()),
+            duration: 600, // 10 minutes
+        };
+        let root4 = KeyPair::new();
+        let custom_time_token = create_multi_party_token_with_time(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root4,
+            &nodes,
+            custom_time_config,
+        );
+        assert!(custom_time_token.is_ok());
+
+        // Test create_multi_party_biscuit_with_time (raw biscuit with custom time config)
+        let root5 = KeyPair::new();
+        let custom_time_biscuit = create_multi_party_biscuit_with_time(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root5,
+            &nodes,
+            custom_time_config,
+        );
+        assert!(custom_time_biscuit.is_ok());
     }
 }
