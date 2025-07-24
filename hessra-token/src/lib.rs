@@ -45,11 +45,13 @@ mod mint;
 mod utils;
 mod verify;
 
-pub use attest::add_service_node_attestation;
+pub use attest::{add_multi_party_attestation, add_service_node_attestation};
 pub use error::TokenError;
 pub use mint::{
-    create_biscuit, create_service_chain_biscuit, create_service_chain_token,
-    create_service_chain_token_with_time, create_token, create_token_with_time, TokenTimeConfig,
+    create_biscuit, create_multi_party_biscuit, create_multi_party_biscuit_with_time,
+    create_multi_party_token, create_multi_party_token_with_time, create_raw_multi_party_biscuit,
+    create_service_chain_biscuit, create_service_chain_token, create_service_chain_token_with_time,
+    create_token, create_token_with_time, TokenTimeConfig,
 };
 pub use utils::{decode_token, encode_token, parse_token, public_key_from_pem_file};
 pub use verify::{
@@ -506,5 +508,191 @@ mod tests {
             result.is_err(),
             "Incomplete service chain should be rejected"
         );
+    }
+
+    #[test]
+    fn test_multi_party_token_verification_lifecycle() {
+        let subject = "test@test.com".to_owned();
+        let resource = "res1".to_string();
+        let operation = "read".to_string();
+        let root = KeyPair::new();
+        let public_key = root.public();
+
+        // Create a multi-party node that must attest to the token
+        let approval_service_key = KeyPair::new();
+        let approval_service_public_key = hex::encode(approval_service_key.public().to_bytes());
+        let approval_service_public_key = format!("ed25519/{}", approval_service_public_key);
+        let approval_service_node = ServiceNode {
+            component: "approval_service".to_string(),
+            public_key: approval_service_public_key.clone(),
+        };
+        let nodes = vec![approval_service_node];
+
+        // Step 1: Create a new multi-party token successfully
+        let token = create_multi_party_biscuit(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root,
+            &nodes,
+        );
+        assert!(token.is_ok(), "Failed to create multi-party token");
+        let token = token.unwrap();
+        let token_string = encode_token(&token);
+
+        println!("✓ Multi-party token created successfully");
+
+        // Step 2: Show that the multi-party token fails to verify without attestation
+        let result = verify_token_local(&token_string, public_key, &subject, &resource, &operation);
+        assert!(
+            result.is_err(),
+            "Multi-party token should fail verification without attestation"
+        );
+        println!("✓ Unattested multi-party token correctly failed verification");
+
+        // Step 3: Attest the token as the approval service
+        let attested_token = add_multi_party_attestation(
+            token,
+            public_key,
+            "approval_service".to_string(),
+            approval_service_key,
+        );
+        assert!(
+            attested_token.is_ok(),
+            "Failed to add multi-party attestation"
+        );
+        let attested_token = attested_token.unwrap();
+        let attested_token_string = encode_token(&attested_token);
+
+        println!("✓ Multi-party attestation added successfully");
+
+        // Step 4: Show that the token now verifies/authorizes
+        let result = verify_token_local(
+            &attested_token_string,
+            public_key,
+            &subject,
+            &resource,
+            &operation,
+        );
+        assert!(
+            result.is_ok(),
+            "Attested multi-party token should pass verification"
+        );
+        println!("✓ Attested multi-party token correctly passed verification");
+
+        // Additional test: Verify that the wrong namespace attestation fails
+        let wrong_service_key = KeyPair::new();
+        let wrong_attested_token = add_multi_party_attestation(
+            decode_token(&token_string).unwrap(),
+            public_key,
+            "wrong_service".to_string(),
+            wrong_service_key,
+        );
+        assert!(wrong_attested_token.is_ok(), "Attestation should succeed");
+        let wrong_attested_token_string = encode_token(&wrong_attested_token.unwrap());
+
+        let result = verify_token_local(
+            &wrong_attested_token_string,
+            public_key,
+            &subject,
+            &resource,
+            &operation,
+        );
+        assert!(
+            result.is_err(),
+            "Token attested by wrong namespace should fail verification"
+        );
+        println!("✓ Token attested by wrong namespace correctly failed verification");
+    }
+
+    #[test]
+    fn test_multi_party_token_with_multiple_parties() {
+        let subject = "test@test.com".to_owned();
+        let resource = "sensitive_resource".to_string();
+        let operation = "admin".to_string();
+        let root = KeyPair::new();
+        let public_key = root.public();
+
+        // Create two multi-party nodes that must both attest to the token
+        let legal_dept_key = KeyPair::new();
+        let legal_dept_public_key = hex::encode(legal_dept_key.public().to_bytes());
+        let legal_dept_public_key = format!("ed25519/{}", legal_dept_public_key);
+        let legal_dept_node = ServiceNode {
+            component: "legal_dept".to_string(),
+            public_key: legal_dept_public_key.clone(),
+        };
+
+        let security_team_key = KeyPair::new();
+        let security_team_public_key = hex::encode(security_team_key.public().to_bytes());
+        let security_team_public_key = format!("ed25519/{}", security_team_public_key);
+        let security_team_node = ServiceNode {
+            component: "security_team".to_string(),
+            public_key: security_team_public_key.clone(),
+        };
+
+        let nodes = vec![legal_dept_node, security_team_node];
+
+        // Create a multi-party token requiring both attestations
+        let token = create_multi_party_biscuit(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            root,
+            &nodes,
+        );
+        assert!(token.is_ok(), "Failed to create multi-party token");
+        let token = token.unwrap();
+        let token_string = encode_token(&token);
+
+        // Verify token fails without any attestations
+        let result = verify_token_local(&token_string, public_key, &subject, &resource, &operation);
+        assert!(result.is_err(), "Token should fail without attestations");
+
+        // Add attestation from legal department only
+        let partially_attested_token = add_multi_party_attestation(
+            decode_token(&token_string).unwrap(),
+            public_key,
+            "legal_dept".to_string(),
+            legal_dept_key,
+        )
+        .unwrap();
+        let partially_attested_token_string = encode_token(&partially_attested_token);
+
+        // Verify token still fails with only one attestation
+        let result = verify_token_local(
+            &partially_attested_token_string,
+            public_key,
+            &subject,
+            &resource,
+            &operation,
+        );
+        assert!(
+            result.is_err(),
+            "Token should fail with only one of two required attestations"
+        );
+
+        // Add attestation from security team
+        let fully_attested_token = add_multi_party_attestation(
+            partially_attested_token,
+            public_key,
+            "security_team".to_string(),
+            security_team_key,
+        )
+        .unwrap();
+        let fully_attested_token_string = encode_token(&fully_attested_token);
+
+        // Now the token should pass verification
+        let result = verify_token_local(
+            &fully_attested_token_string,
+            public_key,
+            &subject,
+            &resource,
+            &operation,
+        );
+        assert!(
+            result.is_ok(),
+            "Token should pass with both required attestations"
+        );
+        println!("✓ Multi-party token with multiple parties verified successfully");
     }
 }
