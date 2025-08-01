@@ -1,5 +1,6 @@
 extern crate biscuit_auth as biscuit;
 
+use crate::utils;
 use biscuit::macros::block;
 use biscuit::{Biscuit, KeyPair, PublicKey};
 
@@ -103,5 +104,17 @@ pub fn add_multi_party_attestation(
         .to_vec()
         .map_err(TokenError::biscuit_error)?;
 
+    Ok(attested_token)
+}
+
+pub fn add_multi_party_attestation_to_token(
+    token: String,
+    public_key: PublicKey,
+    namespace: String,
+    namespace_key: KeyPair,
+) -> Result<String, TokenError> {
+    let biscuit = utils::decode_token(&token).map_err(TokenError::biscuit_error)?;
+    let biscuit = add_multi_party_attestation(biscuit, public_key, namespace, namespace_key)?;
+    let attested_token = utils::encode_token(&biscuit);
     Ok(attested_token)
 }

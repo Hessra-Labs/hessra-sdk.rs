@@ -45,7 +45,9 @@ mod mint;
 mod utils;
 mod verify;
 
-pub use attest::{add_multi_party_attestation, add_service_node_attestation};
+pub use attest::{
+    add_multi_party_attestation, add_multi_party_attestation_to_token, add_service_node_attestation,
+};
 pub use error::TokenError;
 pub use mint::{
     create_biscuit, create_multi_party_biscuit, create_multi_party_biscuit_with_time,
