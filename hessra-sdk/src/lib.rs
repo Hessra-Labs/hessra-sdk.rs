@@ -52,8 +52,9 @@ pub use hessra_token::{
 pub use hessra_config::{ConfigError, HessraConfig, Protocol};
 
 pub use hessra_api::{
-    ApiError, HessraClient, HessraClientBuilder, PublicKeyResponse, TokenRequest, TokenResponse,
-    VerifyServiceChainTokenRequest, VerifyTokenRequest, VerifyTokenResponse,
+    ApiError, HessraClient, HessraClientBuilder, PublicKeyResponse, SignTokenRequest,
+    SignTokenResponse, SignoffInfo, TokenRequest, TokenResponse, VerifyServiceChainTokenRequest,
+    VerifyTokenRequest, VerifyTokenResponse,
 };
 
 /// Errors that can occur in the Hessra SDK
@@ -158,7 +159,7 @@ impl ServiceChain {
         }
 
         let chain: TomlServiceChain = toml::from_str(toml_str)
-            .map_err(|e| SdkError::Generic(format!("TOML parse error: {}", e)))?;
+            .map_err(|e| SdkError::Generic(format!("TOML parse error: {e}")))?;
 
         Ok(Self::with_nodes(chain.nodes))
     }
@@ -252,15 +253,169 @@ impl Hessra {
     }
 
     /// Request a token for a resource
+    /// Returns the full TokenResponse which may include pending signoffs for multi-party tokens
     pub async fn request_token(
         &self,
         resource: impl Into<String>,
         operation: impl Into<String>,
-    ) -> Result<String, SdkError> {
+    ) -> Result<TokenResponse, SdkError> {
         self.client
             .request_token(resource.into(), operation.into())
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Request a token for a resource (simple version)
+    /// Returns just the token string for backward compatibility
+    pub async fn request_token_simple(
+        &self,
+        resource: impl Into<String>,
+        operation: impl Into<String>,
+    ) -> Result<String, SdkError> {
+        let response = self.request_token(resource, operation).await?;
+        match response.token {
+            Some(token) => Ok(token),
+            None => Err(SdkError::Generic(format!(
+                "Failed to get token: {}",
+                response.response_msg
+            ))),
+        }
+    }
+
+    /// Sign a multi-party token by calling an authorization service's signoff endpoint
+    pub async fn sign_token(
+        &self,
+        token: &str,
+        resource: &str,
+        operation: &str,
+    ) -> Result<SignTokenResponse, SdkError> {
+        self.client
+            .sign_token(token, resource, operation)
+            .await
+            .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Parse an authorization service URL to extract base URL and port
+    /// Handles URLs like "https://hostname:port/path" or "hostname:port/path"
+    /// Returns (base_url, port) where base_url is just the hostname part
+    fn parse_authorization_service_url(url: &str) -> Result<(String, Option<u16>), SdkError> {
+        let url_str = if url.starts_with("http://") || url.starts_with("https://") {
+            url.to_string()
+        } else {
+            // If no protocol, assume https for parsing
+            format!("https://{url}")
+        };
+
+        let parsed_url = url::Url::parse(&url_str).map_err(|e| {
+            SdkError::Generic(format!(
+                "Failed to parse authorization service URL '{url}': {e}"
+            ))
+        })?;
+
+        let host = parsed_url
+            .host_str()
+            .ok_or_else(|| SdkError::Generic(format!("No host found in URL: {url}")))?;
+
+        // For URLs where port is not explicitly specified but the scheme indicates a default port,
+        // we need to check if the original URL had an explicit port
+        let port = if parsed_url.port().is_some() {
+            parsed_url.port()
+        } else if url.contains(':') && !url.starts_with("http://") && !url.starts_with("https://") {
+            // If the original URL has a colon and no protocol, it likely has an explicit port
+            // Try to extract it manually
+            if let Some(host_port) = url.split('/').next() {
+                if let Some(port_str) = host_port.split(':').nth(1) {
+                    port_str.parse::<u16>().ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            parsed_url.port()
+        };
+
+        Ok((host.to_string(), port))
+    }
+
+    /// Collect all required signoffs for a multi-party token
+    /// Returns the fully signed token once all signoffs are collected
+    pub async fn collect_signoffs(
+        &self,
+        initial_token_response: TokenResponse,
+        resource: &str,
+        operation: &str,
+    ) -> Result<String, SdkError> {
+        // If no pending signoffs, return the token immediately
+        let pending_signoffs = match &initial_token_response.pending_signoffs {
+            Some(signoffs) if !signoffs.is_empty() => signoffs,
+            _ => {
+                return initial_token_response
+                    .token
+                    .ok_or_else(|| SdkError::Generic("No token in response".to_string()))
+            }
+        };
+
+        let mut current_token = initial_token_response.token.ok_or_else(|| {
+            SdkError::Generic("No initial token to collect signoffs for".to_string())
+        })?;
+
+        // For each SignoffInfo in pending_signoffs, create a client and call sign_token
+        for signoff_info in pending_signoffs {
+            // Parse the authorization service URL to extract base URL and port
+            let (base_url, port) =
+                Self::parse_authorization_service_url(&signoff_info.authorization_service)?;
+
+            // Create a temporary client for this authorization service
+            // Note: This is a simplified approach. In practice, you might want to
+            // have a configuration system for managing multiple service certificates
+            let mut client_builder = HessraClientBuilder::new()
+                .base_url(base_url)
+                .protocol(self.config.protocol.clone())
+                .mtls_cert(self.config.mtls_cert.clone())
+                .mtls_key(self.config.mtls_key.clone())
+                .server_ca(self.config.server_ca.clone());
+
+            if let Some(port) = port {
+                client_builder = client_builder.port(port);
+            }
+
+            let signoff_client = client_builder
+                .build()
+                .map_err(|e| SdkError::Generic(format!("Failed to create signoff client: {e}")))?;
+
+            let sign_response = signoff_client
+                .sign_token(&current_token, resource, operation)
+                .await
+                .map_err(|e| {
+                    SdkError::Generic(format!(
+                        "Signoff failed for {}: {e}",
+                        signoff_info.component
+                    ))
+                })?;
+
+            current_token = sign_response.signed_token.ok_or_else(|| {
+                SdkError::Generic(format!(
+                    "No signed token returned from {}: {}",
+                    signoff_info.component, sign_response.response_msg
+                ))
+            })?;
+        }
+
+        Ok(current_token)
+    }
+
+    /// Request a token and automatically collect any required signoffs
+    /// This is a convenience method that combines token request and signoff collection
+    pub async fn request_token_with_signoffs(
+        &self,
+        resource: &str,
+        operation: &str,
+    ) -> Result<String, SdkError> {
+        let initial_response = self.request_token(resource, operation).await?;
+        self.collect_signoffs(initial_response, resource, operation)
+            .await
     }
 
     /// Verify a token
@@ -642,5 +797,43 @@ mod tests {
         assert_eq!(chain.nodes().len(), 2);
         assert_eq!(chain.nodes()[0].component, "auth");
         assert_eq!(chain.nodes()[1].component, "payment");
+    }
+
+    #[test]
+    fn test_parse_authorization_service_url() {
+        // Test URL with https protocol and path
+        let (base_url, port) =
+            Hessra::parse_authorization_service_url("https://127.0.0.1:4433/sign_token").unwrap();
+        assert_eq!(base_url, "127.0.0.1");
+        assert_eq!(port, Some(4433));
+
+        // Test URL with http protocol
+        let (base_url, port) =
+            Hessra::parse_authorization_service_url("http://example.com:8080/api/sign").unwrap();
+        assert_eq!(base_url, "example.com");
+        assert_eq!(port, Some(8080));
+
+        // Test URL without protocol but with port and path
+        let (base_url, port) =
+            Hessra::parse_authorization_service_url("test.hessra.net:443/sign_token").unwrap();
+        assert_eq!(base_url, "test.hessra.net");
+        assert_eq!(port, Some(443));
+
+        // Test URL without protocol and without port
+        let (base_url, port) =
+            Hessra::parse_authorization_service_url("example.com/api/endpoint").unwrap();
+        assert_eq!(base_url, "example.com");
+        assert_eq!(port, None);
+
+        // Test URL with just hostname and port (no path)
+        let (base_url, port) =
+            Hessra::parse_authorization_service_url("https://localhost:8443").unwrap();
+        assert_eq!(base_url, "localhost");
+        assert_eq!(port, Some(8443));
+
+        // Test hostname only (no protocol, port, or path)
+        let (base_url, port) = Hessra::parse_authorization_service_url("api.example.org").unwrap();
+        assert_eq!(base_url, "api.example.org");
+        assert_eq!(port, None);
     }
 }

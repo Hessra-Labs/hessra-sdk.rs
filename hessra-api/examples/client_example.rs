@@ -34,19 +34,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     let resource = "resource1".to_string();
     println!("Requesting token for resource: {}", resource);
 
-    let token = match client
+    let token_response = match client
         .request_token(resource.clone(), "read".to_string())
         .await
     {
-        Ok(token) => {
+        Ok(response) => {
             println!("Token received successfully");
-            token
+            if let Some(pending) = &response.pending_signoffs {
+                println!("Token has {} pending signoffs", pending.len());
+            }
+            response
         }
         Err(e) => {
             eprintln!("Error requesting token: {}", e);
             return Err(e.into());
         }
     };
+
+    let token = token_response.token.ok_or("No token in response")?;
 
     // Verify the token, this will verify using the remote authorization
     // service API since the service's public key is not known yet to the client

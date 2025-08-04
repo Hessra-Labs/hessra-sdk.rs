@@ -20,6 +20,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 toml = { version = "0.8", optional = true }
+url = "2.4"
 
 [features]
 default = []
@@ -45,3 +46,7 @@ path = "examples/http1_example.rs"
 name = "http3"
 path = "examples/http3_example.rs"
 required-features = ["http3"]
+
+[[example]]
+name = "multi_party_auth"
+path = "examples/multi_party_auth.rs"

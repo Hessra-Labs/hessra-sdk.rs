@@ -41,6 +41,18 @@ pub enum ApiError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Signoff failed: {0}")]
+    SignoffFailed(String),
+
+    #[error("Missing signoff configuration for service: {0}")]
+    MissingSignoffConfig(String),
+
+    #[error("Invalid signoff response from {service}: {reason}")]
+    InvalidSignoffResponse { service: String, reason: String },
+
+    #[error("Signoff collection incomplete: {missing_signoffs} signoffs remaining")]
+    IncompleteSignoffs { missing_signoffs: usize },
 }
 
 // Request and response structures
@@ -66,13 +78,39 @@ pub struct VerifyTokenRequest {
     pub operation: String,
 }
 
-/// Response from a token request operation
-#[derive(Serialize, Deserialize)]
+/// Information about required signoffs for multi-party tokens
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SignoffInfo {
+    pub component: String,
+    pub authorization_service: String,
+    pub public_key: String,
+}
+
+/// Request structure for token signing operations
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SignTokenRequest {
+    pub token: String,
+    pub resource: String,
+    pub operation: String,
+}
+
+/// Response structure for token signing operations
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SignTokenResponse {
+    pub response_msg: String,
+    pub signed_token: Option<String>,
+}
+
+/// Enhanced token response that may include pending signoffs
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TokenResponse {
     /// Response message from the server
     pub response_msg: String,
     /// The issued token, if successful
     pub token: Option<String>,
+    /// Pending signoffs required for multi-party tokens
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_signoffs: Option<Vec<SignoffInfo>>,
 }
 
 /// Response from a token verification operation
@@ -512,11 +550,12 @@ impl HessraClient {
     }
 
     /// Request a token for a resource
+    /// Returns the full TokenResponse which may include pending signoffs for multi-party tokens
     pub async fn request_token(
         &self,
         resource: String,
         operation: String,
-    ) -> Result<String, ApiError> {
+    ) -> Result<TokenResponse, ApiError> {
         let request = TokenRequest {
             resource,
             operation,
@@ -535,6 +574,18 @@ impl HessraClient {
                     .await?
             }
         };
+
+        Ok(response)
+    }
+
+    /// Request a token for a resource (legacy method)
+    /// This method returns just the token string for backward compatibility
+    pub async fn request_token_simple(
+        &self,
+        resource: String,
+        operation: String,
+    ) -> Result<String, ApiError> {
+        let response = self.request_token(resource, operation).await?;
 
         match response.token {
             Some(token) => Ok(token),
@@ -613,6 +664,36 @@ impl HessraClient {
         };
 
         Ok(response.response_msg)
+    }
+
+    /// Sign a multi-party token by calling an authorization service's signoff endpoint
+    pub async fn sign_token(
+        &self,
+        token: &str,
+        resource: &str,
+        operation: &str,
+    ) -> Result<SignTokenResponse, ApiError> {
+        let request = SignTokenRequest {
+            token: token.to_string(),
+            resource: resource.to_string(),
+            operation: operation.to_string(),
+        };
+
+        let response = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request::<_, SignTokenResponse>("sign_token", &request)
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request::<_, SignTokenResponse>("sign_token", &request)
+                    .await?
+            }
+        };
+
+        Ok(response)
     }
 
     /// Get the public key from the server

@@ -25,10 +25,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Request a token for a specific resource
     let resource = "resource1".to_string();
-    let token = client
+    let token_response = client
         .request_token(resource.clone(), "read".to_string())
         .await?;
-    println!("Received token: {}", token);
+
+    if let Some(pending) = &token_response.pending_signoffs {
+        println!("Token has {} pending signoffs", pending.len());
+    }
+
+    let token = token_response.token.ok_or("No token in response")?;
+    println!(
+        "Received token: {}...",
+        &token[..std::cmp::min(50, token.len())]
+    );
 
     // Verify the token, this will verify the token locally since
     // the authorization service public key is set in the client
