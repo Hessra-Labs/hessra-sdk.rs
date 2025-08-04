@@ -6,9 +6,9 @@ The primary interface for interacting with Hessra authentication services.
 
 This crate integrates functionality from these component crates:
 
-- `hessra-token`: Token verification and attestation
+- `hessra-token`: Token verification, attestation, and multi-party authorization
 - `hessra-config`: Configuration management
-- `hessra-api`: HTTP client for the Hessra service
+- `hessra-api`: HTTP client for the Hessra service including multi-party token signing
 
 ## Detailed Usage
 
@@ -110,6 +110,45 @@ client.verify_service_chain_token_local(
     &service_chain,
     None,
 )?;
+```
+
+### Multi-Party Authorization
+
+Handle tokens that require signoffs from multiple authorization services:
+
+```rust
+use hessra_sdk::Hessra;
+
+// Request a token that may require multi-party authorization
+let token_response = client.request_token("sensitive_resource", "admin").await?;
+
+if let Some(pending_signoffs) = token_response.pending_signoffs {
+    println!("Token requires {} additional signoffs", pending_signoffs.len());
+
+    // Automatically collect all required signoffs
+    let fully_signed_token = client
+        .collect_signoffs(token_response, "sensitive_resource", "admin")
+        .await?;
+
+    println!("All signoffs collected: {}", fully_signed_token);
+
+    // Verify the fully signed token
+    client.verify_token(
+        &fully_signed_token,
+        "user:123",
+        "sensitive_resource",
+        "admin"
+    ).await?;
+} else if let Some(token) = token_response.token {
+    println!("Token issued without additional signoffs required");
+}
+
+// Manually sign a token at a specific authorization service
+let signed_response = client.sign_token(
+    "token_to_sign",
+    "resource_name",
+    "operation"
+).await?;
 ```
 
 ### Error Handling

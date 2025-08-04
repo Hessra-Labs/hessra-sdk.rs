@@ -8,7 +8,8 @@ This crate provides a client for making HTTP requests to the Hessra authorizatio
 
 - HTTP/1.1 client for Hessra services
 - Optional HTTP/3 support via the `http3` feature flag
-- Implementation of all Hessra API endpoints
+- Implementation of all Hessra API endpoints including multi-party authorization
+- Multi-party token signing via the `/sign_token` endpoint
 - Mutual TLS (mTLS) for secure client authentication
 - Proper error handling with custom error types
 - Comprehensive test coverage
@@ -90,13 +91,32 @@ let result = client.verify_service_chain_token(
 ).await?;
 ```
 
+### Multi-Party Token Signing
+
+Sign a token that requires multi-party authorization:
+
+```rust
+// Sign a token using the /sign_token endpoint
+let signed_response = client.sign_token(
+    "token_to_sign",
+    "resource_name",
+    "operation"
+).await?;
+
+if let Some(signed_token) = signed_response.token {
+    println!("Token signed successfully: {}", signed_token);
+} else if let Some(pending_signoffs) = signed_response.pending_signoffs {
+    println!("Token still requires {} more signoffs", pending_signoffs.len());
+}
+```
+
 ## HTTP/3 Support
 
 To use HTTP/3, enable the `http3` feature in your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-api = { version = "0.3.0", features = ["http3"] }
+hessra-api = { version = "0.4.0", features = ["http3"] }
 ```
 
 Then create a client with the HTTP/3 protocol:

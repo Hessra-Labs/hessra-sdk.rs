@@ -9,8 +9,10 @@ and has no networking dependencies.
 ## Features
 
 - **Token creation**: Create new tokens with configurable time settings and operations
+- **Multi-party tokens**: Create tokens that require signoffs from multiple authorization services
 - **Token verification**: Verify tokens without contacting the authorization server
 - **Token attestation**: Add service node attestations to tokens
+- **Multi-party attestation**: Add attestations for multi-party authorization workflows
 - **WASM compatibility**: Can be compiled to WebAssembly for use in browsers (via the `wasm` feature)
 
 ## Usage
@@ -145,6 +147,42 @@ fn main() -> Result<(), hessra_token::TokenError> {
 }
 ```
 
+### Multi-Party Token Creation
+
+Create tokens that require signoffs from multiple authorization services:
+
+```rust
+use hessra_token::{create_multi_party_token, ServiceNode, KeyPair, TokenTimeConfig};
+
+fn main() -> Result<(), hessra_token::TokenError> {
+    let keypair = KeyPair::new();
+
+    // Define multi-party signers
+    let multi_party_nodes = vec![
+        ServiceNode {
+            component: "finance_approval".to_string(),
+            public_key: "ed25519/finance_service_key".to_string(),
+        },
+        ServiceNode {
+            component: "security_approval".to_string(),
+            public_key: "ed25519/security_service_key".to_string(),
+        },
+    ];
+
+    // Create a multi-party token
+    let token = create_multi_party_token(
+        "user123".to_string(),
+        "sensitive_resource".to_string(),
+        "admin".to_string(),
+        keypair,
+        &multi_party_nodes,
+    )?;
+
+    println!("Multi-party token created: {}", token);
+    Ok(())
+}
+```
+
 ### Token Attestation
 
 To add service node attestations to tokens:
@@ -178,13 +216,39 @@ fn main() -> Result<(), hessra_token::TokenError> {
 }
 ```
 
+### Multi-Party Token Attestation
+
+Add attestations for multi-party authorization workflows:
+
+```rust
+use hessra_token::{add_multi_party_attestation_to_token, KeyPair};
+
+fn main() -> Result<(), hessra_token::TokenError> {
+    let token_base64 = "YOUR_MULTI_PARTY_TOKEN";
+
+    // Service key pair for attestation
+    let service_keypair = KeyPair::new();
+
+    // Add multi-party attestation
+    let attested_token = add_multi_party_attestation_to_token(
+        token_base64,
+        service_keypair.public(),
+        "finance_approval",
+        &service_keypair,
+    )?;
+
+    println!("Multi-party attested token: {}", attested_token);
+    Ok(())
+}
+```
+
 ## WebAssembly Support
 
 To compile with WebAssembly support, enable the `wasm` feature:
 
 ```toml
 [dependencies]
-hessra-token = { version = "0.3", features = ["wasm"] }
+hessra-token = { version = "0.5", features = ["wasm"] }
 ```
 
 ## Lower-level API
