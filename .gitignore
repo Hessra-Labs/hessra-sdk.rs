@@ -1,3 +1,22 @@
-/target
 .env.local
 /.private
+
+# Rust build output
+**/target/
+
+# Python virtual environments and version files
+**/.python-version
+**/.venv/
+**/env/
+**/venv/
+
+# Python build artifacts
+**/__pycache__/
+**/*.py[cod]
+**/*.so
+**/*.egg-info/
+**/build/
+**/dist/
+
+# uv cache
+**/.uv/

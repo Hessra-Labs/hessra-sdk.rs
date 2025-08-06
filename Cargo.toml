@@ -7,7 +7,7 @@ members = [
     "hessra-ffi",
 ]
 
-exclude = ["hessra-pgrx/hessra_authz"]
+exclude = ["hessra-pgrx/hessra_authz", "hessra-py"]
 
 resolver = "2"
 
