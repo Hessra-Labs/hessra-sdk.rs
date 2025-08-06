@@ -7,8 +7,8 @@ demonstrating the complete workflow of client setup, token request, and verifica
 """
 
 import os
-import hessra_py
 
+import hessra_py
 
 BASE_URL = "test.hessra.net"
 PORT = 443
@@ -17,7 +17,7 @@ PORT = 443
 def read_cert_file(filename):
     """Read certificate file from the certs directory."""
     cert_path = os.path.join(os.path.dirname(__file__), "../../certs", filename)
-    with open(cert_path, "r") as f:
+    with open(cert_path) as f:
         return f.read()
 
 

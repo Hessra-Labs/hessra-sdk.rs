@@ -9,6 +9,12 @@ pub struct PyHessraConfig {
     inner: HessraConfig,
 }
 
+impl Default for PyHessraConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[pymethods]
 impl PyHessraConfig {
     #[new]
@@ -113,7 +119,7 @@ impl PyHessraConfigBuilder {
             "http1" => Protocol::Http1,
             _ => {
                 return Err(crate::error::HessraPyError {
-                    inner: format!("Invalid protocol: {}. Must be 'http1'", protocol),
+                    inner: format!("Invalid protocol: {protocol}. Must be 'http1'"),
                 })
             }
         };

@@ -6,11 +6,13 @@ on:
     paths-ignore:
       - "*.md"
       - "project-docs/**"
+      - "hessra-py/README.md"
   pull_request:
     branches: [main]
     paths-ignore:
       - "*.md"
       - "project-docs/**"
+      - "hessra-py/README.md"
   workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
@@ -95,7 +97,11 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy for non-PGRX crates
-        run: RUSTFLAGS='--cfg reqwest_unstable' cargo clippy --workspace --exclude hessra_authz -- -D warnings
+        run: RUSTFLAGS='--cfg reqwest_unstable' cargo clippy --workspace --exclude hessra_authz --exclude hessra-py -- -D warnings
+
+      - name: Run clippy for hessra-py crate
+        working-directory: hessra-py
+        run: cargo clippy -- -D warnings
 
       - name: Run clippy for PGRX crate
         working-directory: hessra-pgrx/hessra_authz
@@ -144,7 +150,7 @@ jobs:
 
       - name: Run tests for non-PGRX crates
         run: |
-          cargo test --workspace --exclude hessra_authz
+          cargo test --workspace --exclude hessra_authz --exclude hessra-py
 
       - name: Run tests for individual crates
         run: |
@@ -152,6 +158,10 @@ jobs:
           cargo test -p hessra-config
           cargo test -p hessra-api
           cargo test -p hessra-sdk
+
+      - name: Run tests for hessra-py crate
+        working-directory: hessra-py
+        run: cargo test
 
   pgrx-test:
     name: Test PGRX crates
@@ -204,13 +214,43 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Generate code coverage
-        run: cargo llvm-cov --workspace --exclude hessra_authz --lcov --output-path lcov.info
+        run: cargo llvm-cov --workspace --exclude hessra_authz --exclude hessra-py --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: lcov.info
           fail_ci_if_error: false
+
+  python-lint:
+    name: Python Lint (hessra-py)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        working-directory: hessra-py
+        run: uv sync --dev
+
+      - name: Run ruff check
+        working-directory: hessra-py
+        run: uv run ruff check examples/
+
+      - name: Run ruff format check
+        working-directory: hessra-py
+        run: uv run ruff format --check examples/
+
+      - name: Run black check
+        working-directory: hessra-py
+        run: uv run black --check --diff examples/
 
   integration-tests:
     name: Run integration examples
@@ -236,6 +276,47 @@ jobs:
 
       - name: Run service_chain.rs
         run: cargo run --example service_chain --manifest-path hessra-sdk/Cargo.toml
+
+  python-integration-tests:
+    name: Python Integration Tests (hessra-py)
+    runs-on: ubuntu-latest
+    needs: [test, lint, python-lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-python-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install dependencies and build Python module
+        working-directory: hessra-py
+        run: |
+          uv sync --dev
+          uv run maturin develop
+
+      - name: Run comprehensive example
+        working-directory: hessra-py
+        run: uv run python examples/comprehensive_example.py
+
+      - name: Run verification-only example
+        working-directory: hessra-py
+        run: uv run python examples/verification_only_example.py
 
   docs:
     name: Build Documentation
@@ -263,7 +344,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Build non-PGRX docs
-        run: cargo doc --no-deps --workspace --exclude hessra_authz
+        run: cargo doc --no-deps --workspace --exclude hessra_authz --exclude hessra-py
 
       - name: Build PGRX docs
         working-directory: hessra-pgrx/hessra_authz

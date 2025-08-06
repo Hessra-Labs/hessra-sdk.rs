@@ -19,7 +19,7 @@ impl PyHessraClient {
     #[new]
     pub fn new(config: &PyHessraConfig) -> HessraPyResult<Self> {
         let runtime = Arc::new(Runtime::new().map_err(|e| crate::error::HessraPyError {
-            inner: format!("Failed to create async runtime: {}", e),
+            inner: format!("Failed to create async runtime: {e}"),
         })?);
 
         let hessra = Hessra::new(config.inner().clone())?;
@@ -223,7 +223,7 @@ impl PyHessraClientBuilder {
             "http1" => Protocol::Http1,
             _ => {
                 return Err(crate::error::HessraPyError {
-                    inner: format!("Invalid protocol: {}. Must be 'http1'", protocol),
+                    inner: format!("Invalid protocol: {protocol}. Must be 'http1'"),
                 })
             }
         };
@@ -246,7 +246,7 @@ impl PyHessraClientBuilder {
 
     pub fn build(&mut self) -> HessraPyResult<PyHessraClient> {
         let runtime = Arc::new(Runtime::new().map_err(|e| crate::error::HessraPyError {
-            inner: format!("Failed to create async runtime: {}", e),
+            inner: format!("Failed to create async runtime: {e}"),
         })?);
 
         let inner = std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder());
