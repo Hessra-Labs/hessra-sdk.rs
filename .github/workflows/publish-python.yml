@@ -17,7 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64, i686, aarch64, armv7]
+        target: [x86_64, aarch64]
+        include:
+          - target: x86_64
+            manylinux: auto
+          - target: aarch64  
+            # Use newer manylinux for ring v0.17+ compatibility
+            manylinux: manylinux_2_28
     steps:
       - uses: actions/checkout@v4
       
@@ -31,8 +37,11 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
-          manylinux: auto
+          manylinux: ${{ matrix.manylinux }}
           working-directory: hessra-py
+        env:
+          # Fix for ring crate v0.17+ ARM cross-compilation
+          CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
       
       - name: Upload wheels
         uses: actions/upload-artifact@v4
