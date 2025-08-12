@@ -3,11 +3,11 @@ name: Publish hessra-py to PyPI
 on:
   push:
     tags:
-      - 'hessra-py-v*'
+      - "hessra-py-v*"
   workflow_dispatch:
     inputs:
       test-pypi:
-        description: 'Publish to TestPyPI instead of PyPI'
+        description: "Publish to TestPyPI instead of PyPI"
         required: false
         default: false
         type: boolean
@@ -21,28 +21,28 @@ jobs:
         include:
           - target: x86_64
             manylinux: auto
-          - target: aarch64  
+          - target: aarch64
             # Use newer manylinux for ring v0.17+ compatibility
             manylinux: manylinux_2_28
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      
+          python-version: "3.10"
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'true'
+          sccache: "true"
           manylinux: ${{ matrix.manylinux }}
           working-directory: hessra-py
         env:
           # Fix for ring crate v0.17+ ARM cross-compilation
           CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
-      
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -56,20 +56,20 @@ jobs:
         target: [x64, x86]
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
           architecture: ${{ matrix.target }}
-      
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'true'
+          sccache: "true"
           working-directory: hessra-py
-      
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -83,19 +83,19 @@ jobs:
         target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      
+          python-version: "3.10"
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'true'
+          sccache: "true"
           working-directory: hessra-py
-      
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -106,14 +106,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
           working-directory: hessra-py
-      
+
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
@@ -127,8 +127,8 @@ jobs:
     # Use different environments for prod vs test
     environment: ${{ github.event.inputs.test-pypi == 'true' && 'testpypi' || 'pypi' }}
     permissions:
-      id-token: write  # Required for trusted publishing
-      contents: read   # Required to download artifacts
+      id-token: write # Required for trusted publishing
+      contents: read # Required to download artifacts
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -136,17 +136,17 @@ jobs:
           pattern: wheels-*
           path: dist
           merge-multiple: true
-      
+
       - name: List built artifacts
         run: ls -la dist/
-      
+
       - name: Publish to TestPyPI
         if: ${{ github.event.inputs.test-pypi == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
-      
+
       - name: Publish to PyPI
         if: ${{ github.event.inputs.test-pypi != 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
