@@ -12,7 +12,7 @@ dev-dependencies = [
 
 [project]
 name = "hessra-py"
-description = "Python bindings for Hessra authentication services"
+description = "Python bindings for the Hessra Rust SDK"
 authors = [{ name = "Jake Valentic", email = "jake@hessra.net" }]
 license = { text = "Apache-2.0" }
 readme = "README.md"
