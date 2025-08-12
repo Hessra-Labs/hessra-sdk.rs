@@ -15,10 +15,14 @@ This Python package provides bindings to the Rust-based Hessra SDK, enabling Pyt
 
 ## Installation
 
-### From PyPI (when published)
+### From PyPI
 
 ```bash
+# With uv
 uv add hessra-py
+
+# With pip
+pip install hessra-py
 ```
 
 ### From Source
@@ -276,6 +280,19 @@ The Python bindings use `uv` for fast dependency management and `maturin` for bu
 2. **Development builds**: `uv run maturin develop` builds and installs for testing
 3. **Running examples**: `uv run python examples/...` executes Python scripts
 4. **Release builds**: `uv run maturin build --release` creates optimized wheels
+
+## Publishing and Releases
+
+This package is published to PyPI independently from the main Hessra SDK. See [RELEASE.md](RELEASE.md) for the complete release process.
+
+### For Maintainers
+
+To release a new version:
+
+1. Update version in `Cargo.toml`
+2. Commit changes and create a tag: `git tag hessra-py-v0.1.1`
+3. Push the tag: `git push origin hessra-py-v0.1.1`
+4. GitHub Actions will automatically build and publish to PyPI
 
 ## License
 

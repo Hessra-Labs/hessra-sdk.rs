@@ -12,7 +12,7 @@ dev-dependencies = [
 
 [project]
 name = "hessra-py"
-description = "Python bindings for the Hessra Rust SDK"
+description = "Python bindings for the Hessra authorization system with Biscuit token verification and mTLS support"
 authors = [{ name = "Jake Valentic", email = "jake@hessra.net" }]
 license = { text = "Apache-2.0" }
 readme = "README.md"
@@ -29,9 +29,22 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Rust",
   "Topic :: Security",
+  "Topic :: Security :: Cryptography",
   "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: System :: Systems Administration :: Authentication/Directory",
 ]
-keywords = ["hessra", "authorization", "authentication", "security", "biscuit"]
+keywords = [
+    "hessra", 
+    "authorization", 
+    "authentication", 
+    "security", 
+    "biscuit", 
+    "mtls", 
+    "token", 
+    "verification",
+    "rust",
+    "cryptography"
+]
 dynamic = ["version"]
 dependencies = [
     "loguru>=0.7.3",
@@ -43,6 +56,8 @@ dependencies = [
 Homepage = "https://github.com/hessra/hessra-sdk.rs"
 Repository = "https://github.com/hessra/hessra-sdk.rs"
 Documentation = "https://docs.rs/hessra-sdk"
+"Bug Tracker" = "https://github.com/hessra/hessra-sdk.rs/issues"
+"Source Code" = "https://github.com/hessra/hessra-sdk.rs/tree/main/hessra-py"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
