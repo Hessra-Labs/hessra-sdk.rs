@@ -925,6 +925,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "hessra-token-authz"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "biscuit-auth",
+ "chrono",
+ "hex",
+ "js-sys",
+ "rand_core 0.9.3",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tracing",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "hessra-token-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "biscuit-auth",
+ "chrono",
+ "hex",
+ "js-sys",
+ "rand_core 0.9.3",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tracing",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "hessra-token-identity"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "biscuit-auth",
+ "chrono",
+ "hex",
+ "js-sys",
+ "rand_core 0.9.3",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tracing",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

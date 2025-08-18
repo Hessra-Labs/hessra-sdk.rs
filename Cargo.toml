@@ -5,6 +5,8 @@ members = [
     "hessra-api",
     "hessra-sdk",
     "hessra-ffi",
+    "hessra-token-identity",
+    "hessra-token-authz", "hessra-token-core",
 ]
 
 exclude = ["hessra-pgrx/hessra_authz", "hessra-py"]
