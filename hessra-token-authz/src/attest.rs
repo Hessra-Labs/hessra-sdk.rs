@@ -1,10 +1,7 @@
 extern crate biscuit_auth as biscuit;
 
-use crate::utils;
 use biscuit::macros::block;
-use biscuit::{Biscuit, KeyPair, PublicKey};
-
-use crate::error::TokenError;
+use hessra_token_core::{utils, Biscuit, KeyPair, PublicKey, TokenError};
 
 /// Add a service node attestation to a token
 ///

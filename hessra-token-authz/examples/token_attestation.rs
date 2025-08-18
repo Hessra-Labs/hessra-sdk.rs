@@ -1,8 +1,6 @@
 use biscuit_auth::macros::biscuit;
-use hessra_token::{
-    add_service_node_attestation, decode_token, encode_token, verify_token_local, KeyPair,
-    TokenError,
-};
+use hessra_token_authz::{add_service_node_attestation, verify_token_local};
+use hessra_token_core::{decode_token, encode_token, KeyPair, TokenError};
 
 fn main() -> Result<(), TokenError> {
     // Generate an example token

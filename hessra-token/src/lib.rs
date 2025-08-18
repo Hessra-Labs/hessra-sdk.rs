@@ -39,30 +39,38 @@
 //! }
 //! ```
 
-mod attest;
-mod error;
-mod mint;
-mod utils;
-mod verify;
+// Re-export everything from hessra-token-authz for backward compatibility
+pub use hessra_token_authz::{
+    // Attestation functions
+    add_multi_party_attestation,
+    add_multi_party_attestation_to_token,
+    add_service_node_attestation,
+    // Verify functions
+    biscuit_key_from_string,
+    // Mint functions
+    create_biscuit,
+    create_multi_party_biscuit,
+    create_multi_party_biscuit_with_time,
+    create_multi_party_token,
+    create_multi_party_token_with_time,
+    create_raw_multi_party_biscuit,
+    create_service_chain_biscuit,
+    create_service_chain_token,
+    create_service_chain_token_with_time,
+    create_token,
+    create_token_with_time,
+    verify_biscuit_local,
+    verify_service_chain_biscuit_local,
+    verify_service_chain_token_local,
+    verify_token_local,
+    ServiceNode,
+};
 
-pub use attest::{
-    add_multi_party_attestation, add_multi_party_attestation_to_token, add_service_node_attestation,
+// Re-export core types
+pub use hessra_token_core::{
+    decode_token, encode_token, parse_token, public_key_from_pem_file, Biscuit, KeyPair, PublicKey,
+    TokenError, TokenTimeConfig,
 };
-pub use error::TokenError;
-pub use mint::{
-    create_biscuit, create_multi_party_biscuit, create_multi_party_biscuit_with_time,
-    create_multi_party_token, create_multi_party_token_with_time, create_raw_multi_party_biscuit,
-    create_service_chain_biscuit, create_service_chain_token, create_service_chain_token_with_time,
-    create_token, create_token_with_time, TokenTimeConfig,
-};
-pub use utils::{decode_token, encode_token, parse_token, public_key_from_pem_file};
-pub use verify::{
-    biscuit_key_from_string, verify_biscuit_local, verify_service_chain_biscuit_local, ServiceNode,
-};
-pub use verify::{verify_service_chain_token_local, verify_token_local};
-
-// Re-export biscuit types that are needed for public API
-pub use biscuit_auth::{Biscuit, KeyPair, PublicKey};
 
 #[cfg(test)]
 mod tests {

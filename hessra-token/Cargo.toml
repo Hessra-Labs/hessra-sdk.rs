@@ -12,22 +12,21 @@ categories = ["authentication", "api-bindings", "web-programming"]
 readme = "README.md"
 
 [dependencies]
-biscuit-auth = { workspace = true }
-base64 = { workspace = true }
-chrono = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
-hex = { workspace = true }
-tracing = "0.1"
+hessra-token-core = { path = "../hessra-token-core", version = "0.1.0" }
+hessra-token-authz = { path = "../hessra-token-authz", version = "0.1.0" }
 
 # Optional dependencies for WASM support
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", features = ["console"], optional = true }
-serde_json.workspace = true
+
+# Keep for tests
+serde_json = { workspace = true }
 
 [dev-dependencies]
 rand_core = "0.9"
+biscuit-auth = { workspace = true }
+hex = { workspace = true }
 
 [features]
 default = []

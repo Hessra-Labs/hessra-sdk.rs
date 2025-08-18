@@ -1,8 +1,9 @@
 use biscuit_auth::macros::biscuit;
-use hessra_token::{
-    add_service_node_attestation, biscuit_key_from_string, decode_token, encode_token,
-    verify_service_chain_token_local, verify_token_local, KeyPair, ServiceNode, TokenError,
+use hessra_token_authz::{
+    add_service_node_attestation, biscuit_key_from_string, verify_service_chain_token_local,
+    verify_token_local, ServiceNode,
 };
+use hessra_token_core::{decode_token, encode_token, KeyPair, TokenError};
 use std::sync::Arc;
 fn main() -> Result<(), TokenError> {
     // Generate an example token

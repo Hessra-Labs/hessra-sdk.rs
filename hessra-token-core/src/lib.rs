@@ -1,14 +1,22 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! # Hessra Token Core
+//!
+//! Core utilities and types shared across Hessra token implementations.
+//!
+//! This crate provides common functionality used by both authorization tokens
+//! and identity tokens, including:
+//!
+//! - Token encoding/decoding utilities
+//! - Time configuration for token validity
+//! - Common error types
+//! - Biscuit type re-exports
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod error;
+pub mod time;
+pub mod utils;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use error::TokenError;
+pub use time::TokenTimeConfig;
+pub use utils::{decode_token, encode_token, parse_token, public_key_from_pem_file};
+
+// Re-export biscuit types that are needed for public API
+pub use biscuit_auth::{Biscuit, KeyPair, PublicKey};

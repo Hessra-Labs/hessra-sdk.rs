@@ -4,18 +4,19 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["Jake Valentic <jake@hessra.net>"]
-description = "Hessra biscuit token authorization SDK for Rust"
+description = "Authorization token implementation for Hessra SDK"
 repository = "https://github.com/Hessra-Labs/hessra-sdk.rs"
 documentation = "https://docs.rs/hessra-token-authz"
-keywords = ["hessra", "authorization", "rust", "sdk", "biscuit"]
-categories = ["authentication", "api-bindings", "web-programming"]
-readme = "README.md"
+keywords = ["hessra", "authorization", "biscuit", "token", "sdk"]
+categories = ["authentication", "api-bindings"]
 
 [dependencies]
+hessra-token-core = { path = "../hessra-token-core", version = "0.1.0" }
 biscuit-auth = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 hex = { workspace = true }
 tracing = "0.1"
@@ -24,10 +25,10 @@ tracing = "0.1"
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", features = ["console"], optional = true }
-serde_json.workspace = true
 
 [dev-dependencies]
 rand_core = "0.9"
+hex = { workspace = true }
 
 [features]
 default = []

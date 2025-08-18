@@ -910,16 +910,13 @@ dependencies = [
 name = "hessra-token"
 version = "0.5.0"
 dependencies = [
- "base64 0.22.1",
  "biscuit-auth",
- "chrono",
+ "hessra-token-authz",
+ "hessra-token-core",
  "hex",
  "js-sys",
  "rand_core 0.9.3",
- "serde",
  "serde_json",
- "thiserror 2.0.12",
- "tracing",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -931,6 +928,7 @@ dependencies = [
  "base64 0.22.1",
  "biscuit-auth",
  "chrono",
+ "hessra-token-core",
  "hex",
  "js-sys",
  "rand_core 0.9.3",
@@ -950,14 +948,8 @@ dependencies = [
  "biscuit-auth",
  "chrono",
  "hex",
- "js-sys",
- "rand_core 0.9.3",
  "serde",
- "serde_json",
  "thiserror 2.0.12",
- "tracing",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

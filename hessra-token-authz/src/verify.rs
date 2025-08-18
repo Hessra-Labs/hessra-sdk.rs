@@ -1,11 +1,10 @@
 extern crate biscuit_auth as biscuit;
 
 use biscuit::macros::{authorizer, check};
-use biscuit::{Algorithm, Biscuit, PublicKey};
+use biscuit::Algorithm;
 use chrono::Utc;
+use hessra_token_core::{Biscuit, PublicKey, TokenError};
 use serde::Deserialize;
-
-use crate::error::TokenError;
 
 fn build_base_authorizer(
     subject: String,

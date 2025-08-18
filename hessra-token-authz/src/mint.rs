@@ -3,31 +3,11 @@ extern crate biscuit_auth as biscuit;
 use crate::verify::{biscuit_key_from_string, ServiceNode};
 
 use biscuit::macros::{biscuit, check, rule};
-use biscuit::{Biscuit, BiscuitBuilder, KeyPair};
+use biscuit::BiscuitBuilder;
 use chrono::Utc;
+use hessra_token_core::{Biscuit, KeyPair, TokenTimeConfig};
 use std::error::Error;
 use tracing::info;
-
-/// TokenTimeConfig allows control over token creation times and durations
-/// This is used to create tokens with custom start times and durations
-/// for testing purposes. In the future, this can be enhanced to support
-/// variable length tokens, such as long-lived bearer tokens.
-#[derive(Debug, Clone, Copy)]
-pub struct TokenTimeConfig {
-    /// Optional custom start time (now time override)
-    pub start_time: Option<i64>,
-    /// Duration in seconds (default: 300 seconds = 5 minutes)
-    pub duration: i64,
-}
-
-impl Default for TokenTimeConfig {
-    fn default() -> Self {
-        Self {
-            start_time: None,
-            duration: 300, // 5 minutes in seconds
-        }
-    }
-}
 
 /// Creates a base biscuit builder with default time configuration.
 ///
