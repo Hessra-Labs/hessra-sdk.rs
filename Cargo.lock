@@ -959,6 +959,7 @@ dependencies = [
  "base64 0.22.1",
  "biscuit-auth",
  "chrono",
+ "hessra-token-core",
  "hex",
  "js-sys",
  "rand_core 0.9.3",

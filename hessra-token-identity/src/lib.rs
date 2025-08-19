@@ -1,14 +1,7 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+mod attenuate;
+mod mint;
+mod verify;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use attenuate::add_identity_attenuation_to_token;
+pub use mint::{create_identity_biscuit, create_identity_token, create_raw_identity_biscuit};
+pub use verify::verify_identity_token;
