@@ -9,9 +9,9 @@ pub fn verify_identity_token(
     identity: String,
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from_base64(&token, public_key).map_err(TokenError::biscuit_error)?;
-    
+
     let now = Utc::now().timestamp();
-    
+
     // Build authorizer with time and actor facts, and a simple allow policy
     // The checks in the token blocks will enforce the actual constraints
     let authz = authorizer!(
@@ -23,12 +23,15 @@ pub fn verify_identity_token(
             allow if true;
         "#
     );
-    
-    let mut authz = authz.build(&biscuit)
-        .map_err(|e| TokenError::identity_error(format!("Failed to build authorizer: {}", e)))?;
-    
+
+    let mut authz = authz
+        .build(&biscuit)
+        .map_err(|e| TokenError::identity_error(format!("Failed to build authorizer: {e}")))?;
+
     match authz.authorize() {
         Ok(_) => Ok(()),
-        Err(e) => Err(TokenError::identity_error(format!("Identity verification failed: {}", e)))
+        Err(e) => Err(TokenError::identity_error(format!(
+            "Identity verification failed: {e}"
+        ))),
     }
 }

@@ -126,7 +126,7 @@ pub fn add_multi_party_attestation(
 /// # Example
 ///
 /// ```
-/// use hessra_token::add_multi_party_attestation_to_token;
+/// use hessra_token_authz::add_multi_party_attestation_to_token;
 /// use biscuit_auth::KeyPair;
 ///
 /// let root_keypair = KeyPair::new();
