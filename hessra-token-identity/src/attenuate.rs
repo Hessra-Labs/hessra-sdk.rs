@@ -1,7 +1,7 @@
 extern crate biscuit_auth as biscuit;
 use biscuit::macros::block;
 use chrono::Utc;
-use hessra_token_core::{utils, Biscuit, KeyPair, PublicKey, TokenError, TokenTimeConfig};
+use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError, TokenTimeConfig};
 
 pub fn add_identity_attenuation_to_token(
     token: String,
@@ -17,11 +17,16 @@ pub fn add_identity_attenuation_to_token(
     let expiration = start_time + time_config.duration;
     let identity_block = block!(
         r#"
-            check if actor($a), $a.starts_with({identity});
+            check if actor($a), $a == {identity} || $a.starts_with({identity} + ":");
             check if time($time), $time < {expiration};
         "#
     );
-    let identity_block = biscuit
+
+    let third_party_request = biscuit
+        .third_party_request()
+        .map_err(TokenError::biscuit_error)?;
+
+    let identity_block = third_party_request
         .create_block(&ephemeral_key.private(), identity_block)
         .map_err(TokenError::biscuit_error)?;
 

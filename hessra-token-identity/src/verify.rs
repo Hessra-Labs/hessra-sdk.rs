@@ -3,30 +3,32 @@ use biscuit::macros::authorizer;
 use chrono::Utc;
 use hessra_token_core::{Biscuit, PublicKey, TokenError};
 
-fn build_base_identity_authorizer(
-    identity: String,
-) -> Result<biscuit::AuthorizerBuilder, TokenError> {
-    let now = Utc::now().timestamp();
-
-    let authz = authorizer!(
-        r#"
-            time({now});
-            actor({identity});
-        "#
-    );
-    Ok(authz)
-}
-
 pub fn verify_identity_token(
     token: String,
     public_key: PublicKey,
     identity: String,
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from_base64(&token, public_key).map_err(TokenError::biscuit_error)?;
-    let authz = build_base_identity_authorizer(identity)?;
-    if authz.build(&biscuit)?.authorize().is_ok() {
-        Ok(())
-    } else {
-        Err(TokenError::identity_error("Identity does not match token"))
+    
+    let now = Utc::now().timestamp();
+    
+    // Build authorizer with time and actor facts, and a simple allow policy
+    // The checks in the token blocks will enforce the actual constraints
+    let authz = authorizer!(
+        r#"
+            time({now});
+            actor({identity});
+            
+            // Allow if all checks pass
+            allow if true;
+        "#
+    );
+    
+    let mut authz = authz.build(&biscuit)
+        .map_err(|e| TokenError::identity_error(format!("Failed to build authorizer: {}", e)))?;
+    
+    match authz.authorize() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(TokenError::identity_error(format!("Identity verification failed: {}", e)))
     }
 }

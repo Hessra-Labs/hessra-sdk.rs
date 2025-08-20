@@ -18,6 +18,7 @@ fn create_base_identity_biscuit_builder_with_time(
     let biscuit_builder = biscuit!(
         r#"
             subject({subject});
+            check if actor($a), $a == {subject} || $a.starts_with({subject} + ":");
             check if time($time), $time < {expiration};
         "#
     );

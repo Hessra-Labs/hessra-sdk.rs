@@ -20,6 +20,10 @@ pub enum TokenError {
     #[error("Authorization failed: {0}")]
     AuthorizationError(String),
 
+    /// Identity verification or delegation error
+    #[error("Identity error: {0}")]
+    IdentityError(String),
+
     /// Generic error with message
     #[error("{0}")]
     Generic(String),
@@ -44,6 +48,11 @@ impl TokenError {
     /// Create a new authorization error
     pub fn authorization_error<S: Into<String>>(msg: S) -> Self {
         TokenError::AuthorizationError(msg.into())
+    }
+
+    /// Create a new identity error
+    pub fn identity_error<S: Into<String>>(msg: S) -> Self {
+        TokenError::IdentityError(msg.into())
     }
 
     /// Create a new generic error
