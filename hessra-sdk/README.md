@@ -1,14 +1,17 @@
 # Hessra SDK
 
-The primary interface for interacting with Hessra authentication services.
+The primary interface for interacting with Hessra authentication and authorization services.
+
+This SDK provides support for both identity tokens (for authentication) and authorization tokens (for resource access), with the ability to use either mTLS certificates or identity tokens for authentication.
 
 ## API Reference
 
 This crate integrates functionality from these component crates:
 
-- `hessra-token`: Token verification, attestation, and multi-party authorization
+- `hessra-token`: Authorization token verification, attestation, and multi-party authorization
+- `hessra-token-identity`: Identity token creation, verification, and delegation
 - `hessra-config`: Configuration management
-- `hessra-api`: HTTP client for the Hessra service including multi-party token signing
+- `hessra-api`: HTTP client for the Hessra service with dual authentication support
 
 ## Detailed Usage
 
@@ -43,9 +46,39 @@ let env_client = HessraClient::from_env()?;
 let file_client = HessraClient::from_file("path/to/config.json")?;
 ```
 
-### Working with Tokens
+### Working with Identity Tokens
 
-The authorization service requires a client to authenticate itself in order to get a token for it to use for a given operation on a resource. Currently, that means using an mTLS connection where the client/subject identifier is encoded in an x509 client certificate as a Subject Alternative Name (SAN).
+Identity tokens provide authentication without requiring mTLS certificates for most operations:
+
+```rust
+// Request an identity token (requires mTLS for initial issuance)
+let identity_response = client.request_identity_token(Some("urn:hessra:alice")).await?;
+let identity_token = identity_response.token;
+
+// Use identity token to request authorization tokens (no mTLS needed)
+let auth_token = client.request_token_with_identity(
+    "protected-resource",
+    "read",
+    &identity_token
+).await?;
+
+// Delegate identity to a sub-identity
+let laptop_token = client.attenuate_identity_token(
+    &identity_token,
+    "urn:hessra:alice:laptop",
+    Some(chrono::Utc::now() + chrono::Duration::hours(24))
+)?;
+
+// Verify identity token locally
+client.verify_identity_token_local(
+    &laptop_token,
+    "urn:hessra:alice:laptop"
+)?;
+```
+
+### Working with Authorization Tokens
+
+The authorization service supports both mTLS and identity token authentication for requesting authorization tokens:
 
 ```rust
 // Request a token

@@ -1,16 +1,19 @@
 # Hessra API
 
-HTTP client for Hessra authentication services.
+HTTP client for Hessra authentication and authorization services.
 
-This crate provides a client for making HTTP requests to the Hessra authorization service. It supports both HTTP/1.1 and HTTP/3 (as an optional feature) and implements the OpenAPI specification for the Hessra service.
+This crate provides a client for making HTTP requests to the Hessra services. It supports both HTTP/1.1 and HTTP/3 (as an optional feature) and implements the OpenAPI specification for the Hessra service.
 
 ## Features
 
 - HTTP/1.1 client for Hessra services
 - Optional HTTP/3 support via the `http3` feature flag
-- Implementation of all Hessra API endpoints including multi-party authorization
+- Dual authentication support: mTLS and identity tokens
+- Identity token endpoints for authentication without certificates
+- Authorization token endpoints with optional identity token authentication
 - Multi-party token signing via the `/sign_token` endpoint
-- Mutual TLS (mTLS) for secure client authentication
+- Mutual TLS (mTLS) for secure client authentication (optional for most endpoints)
+- Bearer token authentication using identity tokens
 - Proper error handling with custom error types
 - Comprehensive test coverage
 
@@ -43,13 +46,34 @@ let client = HessraClient::builder()
     .build()?;
 ```
 
-### Requesting a Token
+### Identity Tokens
 
 ```rust
-// Request a token for a resource
+// Request a new identity token (requires mTLS)
+let identity_response = client.request_identity_token(Some("urn:hessra:alice")).await?;
+let identity_token = identity_response.token;
+
+// Refresh an identity token (can use existing token for auth)
+let refreshed = client.refresh_identity_token(
+    identity_token.clone(),
+    Some("urn:hessra:alice")
+).await?;
+```
+
+### Requesting Authorization Tokens
+
+```rust
+// Request a token using mTLS authentication
 let resource = "example-resource".to_string();
 let operation = "read".to_string();
 let token = client.request_token(resource, operation).await?;
+
+// Request a token using identity token authentication (no mTLS required)
+let token = client.request_token_with_identity(
+    "example-resource",
+    "read",
+    identity_token
+).await?;
 ```
 
 ### Verifying a Token

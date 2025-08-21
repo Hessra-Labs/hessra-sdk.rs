@@ -1,12 +1,14 @@
 //! # Hessra SDK
 //!
-//! A Rust client library for interacting with Hessra authentication services.
+//! A Rust client library for interacting with Hessra authentication and authorization services.
 //!
-//! The Hessra SDK provides a robust and flexible way to request and verify authentication tokens
-//! for protected resources using mutual TLS (mTLS) for secure client authentication.
+//! The Hessra SDK provides a robust and flexible way to request and verify both identity tokens
+//! and authorization tokens for protected resources. Authentication can be done via mutual TLS (mTLS)
+//! or using identity tokens for most operations.
 //!
 //! This crate combines functionality from:
-//! - `hessra-token`: Token verification and attestation
+//! - `hessra-token`: Authorization token verification and attestation
+//! - `hessra-token-identity`: Identity token creation, verification, and delegation
 //! - `hessra-config`: Configuration management
 //! - `hessra-api`: HTTP client for the Hessra service
 //!
@@ -14,9 +16,10 @@
 //!
 //! - **Flexible configuration**: Load configuration from various sources (environment variables, files, etc.)
 //! - **Protocol support**: HTTP/1.1 support with optional HTTP/3 via feature flag
-//! - **Mutual TLS**: Strong security with client and server certificate validation
-//! - **Token management**: Request and verify authorization tokens
-//! - **Local verification**: Retrieve and store public keys for local token verification
+//! - **Dual authentication**: Support for both mTLS and identity token authentication
+//! - **Identity tokens**: Hierarchical, delegatable identity tokens for authentication
+//! - **Authorization tokens**: Request and verify authorization tokens for resources
+//! - **Local verification**: Retrieve and store public keys for offline token verification
 //! - **Service chains**: Support for service chain attestation and verification
 //!
 //! ## Feature Flags
@@ -656,7 +659,13 @@ impl Hessra {
     }
 
     /// Request a new identity token from the authorization service
-    /// Requires mTLS authentication
+    ///
+    /// This method requires mTLS authentication as it's the initial issuance of an identity token.
+    /// Once you have an identity token, you can use it for authentication in subsequent requests
+    /// instead of mTLS certificates.
+    ///
+    /// # Arguments
+    /// * `identifier` - Optional identifier for the identity. Can be derived from mTLS certificate if not provided.
     pub async fn request_identity_token(
         &self,
         identifier: Option<String>,
@@ -668,8 +677,14 @@ impl Hessra {
     }
 
     /// Refresh an existing identity token
-    /// Can use either mTLS or identity token authentication
-    /// For token-only auth, identifier is required
+    ///
+    /// This method can use either mTLS or the current identity token for authentication.
+    /// When the SDK client is configured without mTLS certificates, the current token
+    /// will be used for authentication and the identifier parameter is required.
+    ///
+    /// # Arguments
+    /// * `current_token` - The existing identity token to refresh
+    /// * `identifier` - Optional identifier. Required when not using mTLS authentication.
     pub async fn refresh_identity_token(
         &self,
         current_token: impl Into<String>,
@@ -682,6 +697,13 @@ impl Hessra {
     }
 
     /// Verify an identity token locally using the configured public key
+    ///
+    /// This performs offline verification of an identity token without contacting the server.
+    /// Requires the public key to be configured in the SDK.
+    ///
+    /// # Arguments
+    /// * `token` - The identity token to verify
+    /// * `identity` - The identity URI to verify the token for (e.g., "urn:hessra:alice")
     pub fn verify_identity_token_local(
         &self,
         token: impl Into<String>,
@@ -700,7 +722,16 @@ impl Hessra {
     }
 
     /// Attenuate an identity token by adding a delegated identity
-    /// This creates a new token that delegates from the original identity to a new one
+    ///
+    /// This creates a more restrictive token by delegating from the original identity to a sub-identity.
+    /// The resulting token can only be used by the delegated identity and its sub-hierarchies.
+    /// For example, attenuating "urn:hessra:alice" to "urn:hessra:alice:laptop" creates a token
+    /// that only the laptop identity can use.
+    ///
+    /// # Arguments
+    /// * `token` - The identity token to attenuate
+    /// * `delegated_identity` - The sub-identity to delegate to (must be hierarchically under the original)
+    /// * `expiration` - Optional expiration time for the attenuated token
     pub fn attenuate_identity_token(
         &self,
         token: impl Into<String>,
@@ -730,7 +761,14 @@ impl Hessra {
     }
 
     /// Create a new identity token locally
-    /// This is typically used by services that want to create identity tokens for their own use
+    ///
+    /// This creates an identity token without contacting the authorization service.
+    /// Typically used by services that need to create identity tokens for testing
+    /// or for use within their own trust domain.
+    ///
+    /// # Arguments
+    /// * `subject` - The identity URI for the token (e.g., "urn:hessra:service")
+    /// * `expiration` - Optional expiration time (defaults to 1 hour if not specified)
     pub fn create_identity_token_local(
         &self,
         subject: impl Into<String>,

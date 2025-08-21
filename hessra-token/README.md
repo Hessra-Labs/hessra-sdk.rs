@@ -1,19 +1,40 @@
 # Hessra Token
 
-Core verification library for Hessra authentication tokens.
+Unified token library for Hessra authentication and authorization.
 
-This crate provides functionality for creating, verifying and attesting biscuit tokens
-used in the Hessra authentication system. It is designed to be WASM-compatible
-and has no networking dependencies.
+This crate provides a combined interface for both authorization tokens and identity tokens
+used in the Hessra system. It re-exports functionality from the specialized token crates
+and is designed to be WASM-compatible with no networking dependencies.
+
+## Crate Structure
+
+This is an umbrella crate that re-exports:
+
+- `hessra-token-core`: Shared utilities and types
+- `hessra-token-authz`: Authorization token functionality
+- `hessra-token-identity`: Identity token functionality
 
 ## Features
+
+### Authorization Tokens
 
 - **Token creation**: Create new tokens with configurable time settings and operations
 - **Multi-party tokens**: Create tokens that require signoffs from multiple authorization services
 - **Token verification**: Verify tokens without contacting the authorization server
 - **Token attestation**: Add service node attestations to tokens
 - **Multi-party attestation**: Add attestations for multi-party authorization workflows
+
+### Identity Tokens
+
+- **Hierarchical identities**: URI-based identity system with delegation support
+- **Identity token creation**: Create identity tokens for authentication
+- **Identity delegation**: Attenuate tokens to sub-identities with restricted permissions
+- **Offline verification**: Verify identity tokens locally using public keys
+
+### General
+
 - **WASM compatibility**: Can be compiled to WebAssembly for use in browsers (via the `wasm` feature)
+- **No network dependencies**: Pure token operations without requiring network access
 
 ## Usage
 

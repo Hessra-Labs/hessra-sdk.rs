@@ -5,21 +5,33 @@
 [![License](https://img.shields.io/crates/l/hessra-sdk.svg)](https://github.com/hessra-labs/hessra-sdk.rs/blob/main/LICENSE)
 [![CI Status](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jcorrv/b2734fbe9a9c147a9dfdeafcdcd6c7b7/raw/hessra-sdk-rs-ci-status.json)](https://github.com/hessra-labs/hessra-sdk.rs/actions/workflows/ci.yml)
 
-A complete rust SDK for requesting and handling authorization tokens from the Hessra authorization service.
+A complete Rust SDK for requesting and handling both identity tokens and authorization tokens from the Hessra authentication and authorization services.
 
 ## How to use
 
-- Request your authorization token before you make your request
+### With Identity Tokens (Recommended)
+
+- Request an identity token once using mTLS authentication
+- Use the identity token for subsequent authorization token requests (no mTLS required)
+- Delegate identity tokens to sub-identities for fine-grained access control
+- Verify identity and authorization tokens completely offline
+
+### With mTLS Only
+
+- Request authorization tokens directly using mTLS certificates
 - Include the authorization token in your request
-- verify and optionally add service chain attestations to the token along the way, completely offline
-- verify the final token, completely offline
+- Verify and optionally add service chain attestations to the token along the way, completely offline
+- Verify the final token, completely offline
 
 ## Project Structure
 
 This repository is organized as a Rust workspace with the following components:
 
 - **hessra-sdk**: Main SDK crate that provides a unified API (this is what you'll import)
-- **hessra-token**: Core token creation, verification, and attestation functionality
+- **hessra-token**: Authorization token re-exports from sub-crates
+- **hessra-token-core**: Core utilities and types shared by token crates
+- **hessra-token-authz**: Authorization token creation, verification, and attestation
+- **hessra-token-identity**: Identity token creation, verification, and delegation
 - **hessra-config**: Configuration management for the SDK
 - **hessra-api**: HTTP client for communicating with Hessra services
 - **hessra-ffi**: Foreign Function Interface for other languages
@@ -27,13 +39,52 @@ This repository is organized as a Rust workspace with the following components:
 
 ## Features
 
-- **Secure by Design**: tokens are short-lived and narrowly scoped to a single request
+- **Dual Authentication**: Support for both mTLS and identity token authentication
+- **Identity Tokens**: Hierarchical, delegatable identity tokens for authentication without mTLS
+- **Secure by Design**: Tokens are short-lived and narrowly scoped to specific resources and operations
 - **Protocol Support**: HTTP/1.1 with optional HTTP/3 (via feature flag)
 - **Flexible Configuration**: Multiple ways to configure the client including environment variables, files, and code
-- **Token Management**: Request and verify authorization tokens with strong cryptographic guarantees
+- **Token Management**: Request and verify both identity and authorization tokens with strong cryptographic guarantees
 - **Service Chain Attestation**: Support for multi-service attestation chains: prove your request went through the proper places
+- **Offline Verification**: Verify tokens locally without network calls using cached public keys
 
 ## Quick Start
+
+### Using Identity Tokens (Recommended)
+
+```rust
+use hessra_sdk::{Hessra, Protocol};
+
+// Create a client with mTLS for initial identity token request
+let mut client = Hessra::builder()
+    .base_url("yourco.hessra.net")
+    .protocol(Protocol::Http1)
+    .mtls_cert(include_str!("certs/client.crt"))
+    .mtls_key(include_str!("certs/client.key"))
+    .server_ca(include_str!("certs/ca.crt"))
+    .build()?;
+client.setup()?;
+
+// Request an identity token (requires mTLS)
+let identity_response = client.request_identity_token(None).await?;
+let identity_token = identity_response.token;
+
+// Use identity token to request authorization tokens (no mTLS needed)
+let auth_token = client.request_token_with_identity(
+    "my-protected-resource",
+    "read",
+    &identity_token
+).await?;
+
+// Delegate identity to a sub-identity
+let delegated_token = client.attenuate_identity_token(
+    &identity_token,
+    "urn:hessra:alice:laptop",
+    None
+)?;
+```
+
+### Using mTLS Only
 
 ```rust
 use hessra_sdk::{Hessra, Protocol};
@@ -69,7 +120,7 @@ Add the SDK to your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-sdk = "0.8"
+hessra-sdk = "0.10"
 ```
 
 ### Feature Flags
@@ -78,7 +129,7 @@ Enable optional features based on your needs:
 
 ```toml
 [dependencies]
-hessra-sdk = { version = "0.8", features = ["http3", "toml", "wasm"] }
+hessra-sdk = { version = "0.10", features = ["http3", "toml", "wasm"] }
 ```
 
 Available features:
@@ -97,6 +148,42 @@ The SDK offers multiple ways to configure the client:
 2. **Configuration Files**: Load from JSON or TOML files (requires `toml` feature)
 3. **Environment Variables**: Use environment variables for configuration
 4. **Auto-discovery**: Automatically find configuration in standard locations
+
+## Identity Tokens
+
+Identity tokens provide a hierarchical, delegatable authentication mechanism that eliminates the need for mTLS certificates in most scenarios:
+
+```rust
+// Request initial identity token (requires mTLS)
+let identity_response = client.request_identity_token(Some("urn:hessra:alice")).await?;
+
+// Delegate to a sub-identity (e.g., for a specific device)
+let laptop_token = client.attenuate_identity_token(
+    &identity_response.token,
+    "urn:hessra:alice:laptop",
+    Some(chrono::Utc::now() + chrono::Duration::hours(24))
+)?;
+
+// Further delegate to an application
+let app_token = client.attenuate_identity_token(
+    &laptop_token,
+    "urn:hessra:alice:laptop:browser",
+    Some(chrono::Utc::now() + chrono::Duration::hours(1))
+)?;
+
+// Verify identity token locally
+client.verify_identity_token_local(
+    &app_token,
+    "urn:hessra:alice:laptop:browser"
+)?;
+```
+
+Key benefits of identity tokens:
+
+- **No mTLS Required**: After initial issuance, use identity tokens instead of certificates
+- **Hierarchical Delegation**: Create sub-identities with restricted permissions
+- **Time-bound**: Each delegation can have its own expiration
+- **Offline Verification**: Verify tokens locally without network calls
 
 ## Service Chain Attestation
 
@@ -153,6 +240,7 @@ Check the [examples directory](hessra-sdk/examples/) for complete working exampl
 - HTTP/1.1 client usage
 - HTTP/3 client usage (requires the `http3` feature)
 - Configuration loading
+- Identity token usage and delegation
 - Service chain attestation
 
 ## Continuous Integration

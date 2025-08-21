@@ -12,6 +12,8 @@
 //! - Optional HTTP/3 support
 //! - Implementation of all Hessra API endpoints
 //! - Mutual TLS (mTLS) for secure client authentication
+//! - Identity token support for authentication without mTLS (except initial issuance)
+//! - Bearer token authentication using identity tokens
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -905,7 +907,12 @@ impl HessraClient {
     }
 
     /// Request a new identity token from the authorization service
-    /// Requires mTLS authentication
+    ///
+    /// This endpoint requires mTLS authentication as it's the initial issuance of an identity token.
+    /// The identifier parameter is optional when using mTLS, as the identity can be derived from the client certificate.
+    ///
+    /// # Arguments
+    /// * `identifier` - Optional identifier for the identity. Required for non-mTLS future requests, optional with mTLS.
     pub async fn request_identity_token(
         &self,
         identifier: Option<String>,
@@ -930,8 +937,14 @@ impl HessraClient {
     }
 
     /// Refresh an existing identity token
-    /// Can use either mTLS or identity token authentication
-    /// For token-only auth, identifier is required
+    ///
+    /// This endpoint can use either mTLS or the current identity token for authentication.
+    /// When using identity token authentication (no mTLS), the identifier parameter is required.
+    /// The current token will be validated and a new token with updated expiration will be issued.
+    ///
+    /// # Arguments
+    /// * `current_token` - The existing identity token to refresh
+    /// * `identifier` - Optional identifier. Required when not using mTLS authentication.
     pub async fn refresh_identity_token(
         &self,
         current_token: String,
