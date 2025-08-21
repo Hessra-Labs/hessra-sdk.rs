@@ -112,8 +112,14 @@ fn default_protocol() -> Protocol {
 pub struct HessraConfig {
     pub base_url: String,
     pub port: Option<u16>,
-    pub mtls_cert: String,
-    pub mtls_key: String,
+    /// Optional mTLS client certificate in PEM format
+    /// Required for mTLS authentication, optional for identity token authentication
+    #[serde(default)]
+    pub mtls_cert: Option<String>,
+    /// Optional mTLS private key in PEM format
+    /// Required for mTLS authentication, optional for identity token authentication
+    #[serde(default)]
+    pub mtls_key: Option<String>,
     pub server_ca: String,
     #[serde(default = "default_protocol")]
     pub protocol: Protocol,
@@ -261,8 +267,8 @@ impl HessraConfigBuilder {
         Self {
             base_url: Some(config.base_url.clone()),
             port: config.port,
-            mtls_cert: Some(config.mtls_cert.clone()),
-            mtls_key: Some(config.mtls_key.clone()),
+            mtls_cert: config.mtls_cert.clone(),
+            mtls_key: config.mtls_key.clone(),
             server_ca: Some(config.server_ca.clone()),
             protocol: Some(config.protocol.clone()),
             public_key: config.public_key.clone(),
@@ -358,16 +364,21 @@ impl HessraConfigBuilder {
     /// A Result containing either the built HessraConfig or a ConfigError
     pub fn build(self) -> Result<HessraConfig, ConfigError> {
         let base_url = self.base_url.ok_or(ConfigError::MissingBaseUrl)?;
-        let mtls_cert = self.mtls_cert.ok_or(ConfigError::MissingCertificate)?;
-        let mtls_key = self.mtls_key.ok_or(ConfigError::MissingKey)?;
         let server_ca = self.server_ca.ok_or(ConfigError::MissingServerCA)?;
+
+        // mTLS is now optional - both cert and key must be provided together if any
+        match (&self.mtls_cert, &self.mtls_key) {
+            (Some(_), None) => return Err(ConfigError::MissingKey),
+            (None, Some(_)) => return Err(ConfigError::MissingCertificate),
+            _ => {}
+        }
 
         let config = HessraConfig {
             base_url,
             port: self.port,
             protocol: self.protocol.unwrap_or_else(default_protocol),
-            mtls_cert,
-            mtls_key,
+            mtls_cert: self.mtls_cert,
+            mtls_key: self.mtls_key,
             server_ca,
             public_key: self.public_key,
             personal_keypair: self.personal_keypair,
@@ -404,8 +415,36 @@ impl HessraConfig {
             base_url: base_url.into(),
             port,
             protocol,
-            mtls_cert: mtls_cert.into(),
-            mtls_key: mtls_key.into(),
+            mtls_cert: Some(mtls_cert.into()),
+            mtls_key: Some(mtls_key.into()),
+            server_ca: server_ca.into(),
+            public_key: None,
+            personal_keypair: None,
+        }
+    }
+
+    /// Create a new HessraConfig for TLS-only connections (no mTLS)
+    ///
+    /// This is useful when using identity tokens for authentication
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - The base URL for the Hessra service, e.g. "test.hessra.net"
+    /// * `port` - The port to use for the Hessra service, e.g. 443
+    /// * `protocol` - The protocol to use, Http1 or Http3 (with the "http3" feature)
+    /// * `server_ca` - The CA certificate for verifying the server
+    pub fn new_tls_only(
+        base_url: impl Into<String>,
+        port: Option<u16>,
+        protocol: Protocol,
+        server_ca: impl Into<String>,
+    ) -> Self {
+        Self {
+            base_url: base_url.into(),
+            port,
+            protocol,
+            mtls_cert: None,
+            mtls_key: None,
             server_ca: server_ca.into(),
             public_key: None,
             personal_keypair: None,
@@ -648,30 +687,41 @@ impl HessraConfig {
             return Err(ConfigError::MissingBaseUrl);
         }
 
-        if self.mtls_cert.is_empty() {
-            return Err(ConfigError::MissingCertificate);
-        }
-
-        if self.mtls_key.is_empty() {
-            return Err(ConfigError::MissingKey);
+        // Validate mTLS certificates if provided
+        // Both cert and key must be provided together
+        match (&self.mtls_cert, &self.mtls_key) {
+            (Some(cert), Some(key)) => {
+                if cert.is_empty() {
+                    return Err(ConfigError::MissingCertificate);
+                }
+                if key.is_empty() {
+                    return Err(ConfigError::MissingKey);
+                }
+            }
+            (Some(_), None) => return Err(ConfigError::MissingKey),
+            (None, Some(_)) => return Err(ConfigError::MissingCertificate),
+            (None, None) => {} // TLS-only mode, no mTLS required
         }
 
         if self.server_ca.is_empty() {
             return Err(ConfigError::MissingServerCA);
         }
 
-        // Validate PEM certificate format (basic check)
-        if !self.mtls_cert.contains("-----BEGIN CERTIFICATE-----") {
-            return Err(ConfigError::InvalidCertificate(
-                "Client certificate does not appear to be in PEM format".into(),
-            ));
+        // Validate PEM formats if mTLS is configured
+        if let Some(cert) = &self.mtls_cert {
+            if !cert.contains("-----BEGIN CERTIFICATE-----") {
+                return Err(ConfigError::InvalidCertificate(
+                    "Client certificate does not appear to be in PEM format".into(),
+                ));
+            }
         }
 
-        // Validate PEM key format (basic check)
-        if !self.mtls_key.contains("-----BEGIN") {
-            return Err(ConfigError::InvalidCertificate(
-                "Client key does not appear to be in PEM format".into(),
-            ));
+        if let Some(key) = &self.mtls_key {
+            if !key.contains("-----BEGIN") {
+                return Err(ConfigError::InvalidCertificate(
+                    "Client key does not appear to be in PEM format".into(),
+                ));
+            }
         }
 
         // Validate PEM CA certificate format (basic check)

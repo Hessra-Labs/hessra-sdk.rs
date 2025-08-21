@@ -896,6 +896,8 @@ dependencies = [
  "hessra-api",
  "hessra-config",
  "hessra-token",
+ "hessra-token-core",
+ "hessra-token-identity",
  "reqwest",
  "serde",
  "serde_json",

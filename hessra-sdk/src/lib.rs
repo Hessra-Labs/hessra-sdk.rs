@@ -49,12 +49,18 @@ pub use hessra_token::{
     TokenError,
 };
 
+// Re-export identity token functionality
+pub use hessra_token_identity::{
+    add_identity_attenuation_to_token, create_identity_token, verify_identity_token,
+};
+
 pub use hessra_config::{ConfigError, HessraConfig, Protocol};
 
 pub use hessra_api::{
-    ApiError, HessraClient, HessraClientBuilder, PublicKeyResponse, SignTokenRequest,
-    SignTokenResponse, SignoffInfo, TokenRequest, TokenResponse, VerifyServiceChainTokenRequest,
-    VerifyTokenRequest, VerifyTokenResponse,
+    ApiError, HessraClient, HessraClientBuilder, IdentityTokenRequest, IdentityTokenResponse,
+    PublicKeyResponse, RefreshIdentityTokenRequest, SignTokenRequest, SignTokenResponse,
+    SignoffInfo, TokenRequest, TokenResponse, VerifyServiceChainTokenRequest, VerifyTokenRequest,
+    VerifyTokenResponse,
 };
 
 /// Errors that can occur in the Hessra SDK
@@ -265,6 +271,21 @@ impl Hessra {
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
 
+    /// Request a token for a resource using an identity token for authentication
+    /// This method should be used when you have a delegated identity token
+    /// and want to request authorization tokens as that delegated identity
+    pub async fn request_token_with_identity(
+        &self,
+        resource: impl Into<String>,
+        operation: impl Into<String>,
+        identity_token: impl Into<String>,
+    ) -> Result<TokenResponse, SdkError> {
+        self.client
+            .request_token_with_identity(resource.into(), operation.into(), identity_token.into())
+            .await
+            .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
     /// Request a token for a resource (simple version)
     /// Returns just the token string for backward compatibility
     pub async fn request_token_simple(
@@ -373,9 +394,12 @@ impl Hessra {
             let mut client_builder = HessraClientBuilder::new()
                 .base_url(base_url)
                 .protocol(self.config.protocol.clone())
-                .mtls_cert(self.config.mtls_cert.clone())
-                .mtls_key(self.config.mtls_key.clone())
                 .server_ca(self.config.server_ca.clone());
+
+            // Add mTLS if configured
+            if let (Some(cert), Some(key)) = (&self.config.mtls_cert, &self.config.mtls_key) {
+                client_builder = client_builder.mtls_cert(cert.clone()).mtls_key(key.clone());
+            }
 
             if let Some(port) = port {
                 client_builder = client_builder.port(port);
@@ -629,6 +653,108 @@ impl Hessra {
             .get_public_key()
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Request a new identity token from the authorization service
+    /// Requires mTLS authentication
+    pub async fn request_identity_token(
+        &self,
+        identifier: Option<String>,
+    ) -> Result<IdentityTokenResponse, SdkError> {
+        self.client
+            .request_identity_token(identifier)
+            .await
+            .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Refresh an existing identity token
+    /// Can use either mTLS or identity token authentication
+    /// For token-only auth, identifier is required
+    pub async fn refresh_identity_token(
+        &self,
+        current_token: impl Into<String>,
+        identifier: Option<String>,
+    ) -> Result<IdentityTokenResponse, SdkError> {
+        self.client
+            .refresh_identity_token(current_token.into(), identifier)
+            .await
+            .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Verify an identity token locally using the configured public key
+    pub fn verify_identity_token_local(
+        &self,
+        token: impl Into<String>,
+        identity: impl Into<String>,
+    ) -> Result<(), SdkError> {
+        let public_key_str = match &self.config.public_key {
+            Some(key) => key,
+            None => return Err(SdkError::Generic("Public key not configured".to_string())),
+        };
+
+        let public_key = PublicKey::from_pem(public_key_str.as_str())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
+
+        verify_identity_token(token.into(), public_key, identity.into())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))
+    }
+
+    /// Attenuate an identity token by adding a delegated identity
+    /// This creates a new token that delegates from the original identity to a new one
+    pub fn attenuate_identity_token(
+        &self,
+        token: impl Into<String>,
+        delegated_identity: impl Into<String>,
+        duration: i64,
+    ) -> Result<String, SdkError> {
+        let public_key_str = match &self.config.public_key {
+            Some(key) => key,
+            None => return Err(SdkError::Generic("Public key not configured".to_string())),
+        };
+
+        let public_key = PublicKey::from_pem(public_key_str.as_str())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
+
+        let time_config = hessra_token_core::TokenTimeConfig {
+            start_time: None,
+            duration,
+        };
+
+        add_identity_attenuation_to_token(
+            token.into(),
+            delegated_identity.into(),
+            public_key,
+            time_config,
+        )
+        .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))
+    }
+
+    /// Create a new identity token locally
+    /// This is typically used by services that want to create identity tokens for their own use
+    pub fn create_identity_token_local(
+        &self,
+        subject: impl Into<String>,
+        duration: i64,
+    ) -> Result<String, SdkError> {
+        let keypair_str = match &self.config.personal_keypair {
+            Some(keypair) => keypair,
+            None => {
+                return Err(SdkError::Generic(
+                    "Personal keypair not configured".to_string(),
+                ))
+            }
+        };
+
+        let keypair = KeyPair::from_private_key_pem(keypair_str.as_str())
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))?;
+
+        let time_config = hessra_token_core::TokenTimeConfig {
+            start_time: None,
+            duration,
+        };
+
+        create_identity_token(subject.into(), keypair, time_config)
+            .map_err(|e| SdkError::Token(TokenError::Generic(e.to_string())))
     }
 
     /// Get the client used by this SDK instance

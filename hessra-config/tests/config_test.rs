@@ -22,8 +22,8 @@ fn test_config_new() {
 
     assert_eq!(config.base_url, "https://test.example.com");
     assert_eq!(config.port, Some(8443));
-    assert_eq!(config.mtls_cert, "CERT CONTENT");
-    assert_eq!(config.mtls_key, "KEY CONTENT");
+    assert_eq!(config.mtls_cert, Some("CERT CONTENT".to_string()));
+    assert_eq!(config.mtls_key, Some("KEY CONTENT".to_string()));
     assert_eq!(config.server_ca, "CA CONTENT");
     match config.protocol {
         Protocol::Http1 => {}
@@ -126,11 +126,11 @@ fn test_config_from_file() {
     assert_eq!(config.port, Some(9443));
     assert_eq!(
         config.mtls_cert,
-        "-----BEGIN CERTIFICATE-----\nJSON CERT\n-----END CERTIFICATE-----"
+        Some("-----BEGIN CERTIFICATE-----\nJSON CERT\n-----END CERTIFICATE-----".to_string())
     );
     assert_eq!(
         config.mtls_key,
-        "-----BEGIN PRIVATE KEY-----\nJSON KEY\n-----END PRIVATE KEY-----"
+        Some("-----BEGIN PRIVATE KEY-----\nJSON KEY\n-----END PRIVATE KEY-----".to_string())
     );
     assert_eq!(
         config.server_ca,
@@ -168,11 +168,11 @@ fn test_config_from_toml() {
     assert_eq!(config.port, Some(7443));
     assert_eq!(
         config.mtls_cert,
-        "-----BEGIN CERTIFICATE-----\nTOML CERT\n-----END CERTIFICATE-----"
+        Some("-----BEGIN CERTIFICATE-----\nTOML CERT\n-----END CERTIFICATE-----".to_string())
     );
     assert_eq!(
         config.mtls_key,
-        "-----BEGIN PRIVATE KEY-----\nTOML KEY\n-----END PRIVATE KEY-----"
+        Some("-----BEGIN PRIVATE KEY-----\nTOML KEY\n-----END PRIVATE KEY-----".to_string())
     );
     assert_eq!(
         config.server_ca,
@@ -209,8 +209,8 @@ fn test_config_from_env() {
 
     assert_eq!(config.base_url, "https://env.example.com");
     assert_eq!(config.port, Some(6443));
-    assert_eq!(config.mtls_cert, cert_content);
-    assert_eq!(config.mtls_key, key_content);
+    assert_eq!(config.mtls_cert, Some(cert_content.to_string()));
+    assert_eq!(config.mtls_key, Some(key_content.to_string()));
     assert_eq!(config.server_ca, ca_content);
     match config.protocol {
         Protocol::Http1 => {}
@@ -258,8 +258,8 @@ fn test_config_from_env_or_file() {
 
     assert_eq!(config.base_url, "https://file.example.com");
     assert_eq!(config.port, Some(5443));
-    assert_eq!(config.mtls_cert, cert_content);
-    assert_eq!(config.mtls_key, key_content);
+    assert_eq!(config.mtls_cert, Some(cert_content.to_string()));
+    assert_eq!(config.mtls_key, Some(key_content.to_string()));
     assert_eq!(config.server_ca, ca_content);
     match config.protocol {
         Protocol::Http1 => {}
@@ -301,11 +301,11 @@ fn test_default_config() {
     assert_eq!(default_config.port, Some(4443));
     assert_eq!(
         default_config.mtls_cert,
-        "-----BEGIN CERTIFICATE-----\nDEFAULT CERT\n-----END CERTIFICATE-----"
+        Some("-----BEGIN CERTIFICATE-----\nDEFAULT CERT\n-----END CERTIFICATE-----".to_string())
     );
     assert_eq!(
         default_config.mtls_key,
-        "-----BEGIN PRIVATE KEY-----\nDEFAULT KEY\n-----END PRIVATE KEY-----"
+        Some("-----BEGIN PRIVATE KEY-----\nDEFAULT KEY\n-----END PRIVATE KEY-----".to_string())
     );
     assert_eq!(
         default_config.server_ca,
@@ -325,6 +325,66 @@ fn test_default_config() {
     match set_default_config(another_config) {
         Err(ConfigError::AlreadyInitialized) => {}
         _ => panic!("Expected AlreadyInitialized error"),
+    }
+}
+
+#[test]
+fn test_tls_only_config() {
+    // Test creating a TLS-only configuration (no mTLS certificates)
+    let config = HessraConfig::new_tls_only(
+        "https://test.example.com",
+        Some(8443),
+        Protocol::Http1,
+        "-----BEGIN CERTIFICATE-----\nCA CONTENT\n-----END CERTIFICATE-----",
+    );
+
+    assert_eq!(config.base_url, "https://test.example.com");
+    assert_eq!(config.port, Some(8443));
+    assert_eq!(config.mtls_cert, None);
+    assert_eq!(config.mtls_key, None);
+    assert_eq!(
+        config.server_ca,
+        "-----BEGIN CERTIFICATE-----\nCA CONTENT\n-----END CERTIFICATE-----"
+    );
+
+    // Validate TLS-only config should succeed
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn test_mixed_mtls_config_validation() {
+    // Test that having only cert without key fails validation
+    let mut config = HessraConfig::new_tls_only(
+        "https://test.example.com",
+        Some(8443),
+        Protocol::Http1,
+        "-----BEGIN CERTIFICATE-----\nCA CONTENT\n-----END CERTIFICATE-----",
+    );
+
+    // Add only cert, not key
+    config.mtls_cert =
+        Some("-----BEGIN CERTIFICATE-----\nCERT\n-----END CERTIFICATE-----".to_string());
+
+    match config.validate() {
+        Err(ConfigError::MissingKey) => {}
+        _ => panic!("Expected MissingKey error when cert present without key"),
+    }
+
+    // Test that having only key without cert fails validation
+    let mut config2 = HessraConfig::new_tls_only(
+        "https://test.example.com",
+        Some(8443),
+        Protocol::Http1,
+        "-----BEGIN CERTIFICATE-----\nCA CONTENT\n-----END CERTIFICATE-----",
+    );
+
+    // Add only key, not cert
+    config2.mtls_key =
+        Some("-----BEGIN PRIVATE KEY-----\nKEY\n-----END PRIVATE KEY-----".to_string());
+
+    match config2.validate() {
+        Err(ConfigError::MissingCertificate) => {}
+        _ => panic!("Expected MissingCertificate error when key present without cert"),
     }
 }
 

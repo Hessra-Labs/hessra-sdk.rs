@@ -136,6 +136,35 @@ pub struct VerifyServiceChainTokenRequest {
     pub component: Option<String>,
 }
 
+/// Request for minting a new identity token
+#[derive(Serialize, Deserialize)]
+pub struct IdentityTokenRequest {
+    /// Optional identifier - required for token-only auth, optional for mTLS
+    pub identifier: Option<String>,
+}
+
+/// Request for refreshing an existing identity token
+#[derive(Serialize, Deserialize)]
+pub struct RefreshIdentityTokenRequest {
+    /// The current identity token to refresh
+    pub current_token: String,
+    /// Optional identifier - required for token-only auth, optional for mTLS
+    pub identifier: Option<String>,
+}
+
+/// Response from identity token operations
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct IdentityTokenResponse {
+    /// Response message from the server
+    pub response_msg: String,
+    /// The issued identity token, if successful
+    pub token: Option<String>,
+    /// Time until expiration in seconds
+    pub expires_in: Option<u64>,
+    /// The identity contained in the token
+    pub identity: Option<String>,
+}
+
 /// Base configuration for Hessra clients
 #[derive(Clone)]
 pub struct BaseConfig {
@@ -143,10 +172,10 @@ pub struct BaseConfig {
     pub base_url: String,
     /// Optional port to connect to
     pub port: Option<u16>,
-    /// mTLS private key in PEM format
-    pub mtls_key: String,
-    /// mTLS client certificate in PEM format
-    pub mtls_cert: String,
+    /// Optional mTLS private key in PEM format (required for mTLS auth)
+    pub mtls_key: Option<String>,
+    /// Optional mTLS client certificate in PEM format (required for mTLS auth)
+    pub mtls_cert: Option<String>,
     /// Server CA certificate in PEM format
     pub server_ca: String,
     /// Public key for token verification in PEM format
@@ -176,25 +205,27 @@ pub struct Http1Client {
 impl Http1Client {
     /// Create a new HTTP/1.1 client with the given configuration
     pub fn new(config: BaseConfig) -> Result<Self, ApiError> {
-        // First try the simple approach with rustls-tls
-        // Create identity from combined PEM certificate and key
-        let identity_str = format!("{}{}", config.mtls_cert, config.mtls_key);
-
-        let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
-            ApiError::SslConfig(format!(
-                "Failed to create identity from certificate and key: {e}"
-            ))
-        })?;
-
-        // Parse the CA certificate
+        // Parse the CA certificate (always required for server verification)
         let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
             .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {e}")))?;
 
-        // Build the reqwest client with mTLS configuration
-        let client = reqwest::ClientBuilder::new()
+        // Build the client with or without mTLS depending on configuration
+        let mut client_builder = reqwest::ClientBuilder::new()
             .use_rustls_tls()
-            .identity(identity)
-            .add_root_certificate(cert_der)
+            .add_root_certificate(cert_der);
+
+        // Add mTLS identity if both cert and key are provided
+        if let (Some(cert), Some(key)) = (&config.mtls_cert, &config.mtls_key) {
+            let identity_str = format!("{cert}{key}");
+            let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
+                ApiError::SslConfig(format!(
+                    "Failed to create identity from certificate and key: {e}"
+                ))
+            })?;
+            client_builder = client_builder.identity(identity);
+        }
+
+        let client = client_builder
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
@@ -233,6 +264,44 @@ impl Http1Client {
 
         Ok(result)
     }
+
+    pub async fn send_request_with_auth<T, R>(
+        &self,
+        endpoint: &str,
+        request_body: &T,
+        auth_header: &str,
+    ) -> Result<R, ApiError>
+    where
+        T: Serialize,
+        R: for<'de> Deserialize<'de>,
+    {
+        let base_url = self.config.get_base_url();
+        let url = format!("https://{base_url}/{endpoint}");
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", auth_header)
+            .json(request_body)
+            .send()
+            .await
+            .map_err(ApiError::HttpClient)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP error: {status} - {error_text}"
+            )));
+        }
+
+        let result = response
+            .json::<R>()
+            .await
+            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {e}")))?;
+
+        Ok(result)
+    }
 }
 
 /// HTTP/3 client implementation (only available with the "http3" feature)
@@ -248,26 +317,28 @@ pub struct Http3Client {
 impl Http3Client {
     /// Create a new HTTP/3 client with the given configuration
     pub fn new(config: BaseConfig) -> Result<Self, ApiError> {
-        // First try the simple approach with rustls-tls
-        // Create identity from combined PEM certificate and key
-        let identity_str = format!("{}{}", config.mtls_cert, config.mtls_key);
-
-        let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
-            ApiError::SslConfig(format!(
-                "Failed to create identity from certificate and key: {e}"
-            ))
-        })?;
-
-        // Parse the CA certificate
+        // Parse the CA certificate (always required for server verification)
         let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
             .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {e}")))?;
 
-        // Build the reqwest client with mTLS configuration
-        let client = reqwest::ClientBuilder::new()
+        // Build the client with or without mTLS depending on configuration
+        let mut client_builder = reqwest::ClientBuilder::new()
             .use_rustls_tls()
             .http3_prior_knowledge()
-            .identity(identity)
-            .add_root_certificate(cert_der)
+            .add_root_certificate(cert_der);
+
+        // Add mTLS identity if both cert and key are provided
+        if let (Some(cert), Some(key)) = (&config.mtls_cert, &config.mtls_key) {
+            let identity_str = format!("{}{}", cert, key);
+            let identity = reqwest::Identity::from_pem(identity_str.as_bytes()).map_err(|e| {
+                ApiError::SslConfig(format!(
+                    "Failed to create identity from certificate and key: {e}"
+                ))
+            })?;
+            client_builder = client_builder.identity(identity);
+        }
+
+        let client = client_builder
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
@@ -287,6 +358,45 @@ impl Http3Client {
             .client
             .post(&url)
             .version(http::Version::HTTP_3)
+            .json(request_body)
+            .send()
+            .await
+            .map_err(ApiError::HttpClient)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP error: {status} - {error_text}"
+            )));
+        }
+
+        let result = response
+            .json::<R>()
+            .await
+            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {e}")))?;
+
+        Ok(result)
+    }
+
+    pub async fn send_request_with_auth<T, R>(
+        &self,
+        endpoint: &str,
+        request_body: &T,
+        auth_header: &str,
+    ) -> Result<R, ApiError>
+    where
+        T: Serialize,
+        R: for<'de> Deserialize<'de>,
+    {
+        let base_url = self.config.get_base_url();
+        let url = format!("https://{base_url}/{endpoint}");
+
+        let response = self
+            .client
+            .post(&url)
+            .version(http::Version::HTTP_3)
+            .header("Authorization", auth_header)
             .json(request_body)
             .send()
             .await
@@ -333,8 +443,8 @@ impl HessraClientBuilder {
             config: BaseConfig {
                 base_url: String::new(),
                 port: None,
-                mtls_key: String::new(),
-                mtls_cert: String::new(),
+                mtls_key: None,
+                mtls_cert: None,
                 server_ca: String::new(),
                 public_key: None,
                 personal_keypair: None,
@@ -365,14 +475,14 @@ impl HessraClientBuilder {
     /// Set the mTLS private key for the client
     /// PEM formatted string
     pub fn mtls_key(mut self, mtls_key: impl Into<String>) -> Self {
-        self.config.mtls_key = mtls_key.into();
+        self.config.mtls_key = Some(mtls_key.into());
         self
     }
 
     /// Set the mTLS certificate for the client
     /// PEM formatted string
     pub fn mtls_cert(mut self, mtls_cert: impl Into<String>) -> Self {
-        self.config.mtls_cert = mtls_cert.into();
+        self.config.mtls_cert = Some(mtls_cert.into());
         self
     }
 
@@ -578,6 +688,45 @@ impl HessraClient {
         Ok(response)
     }
 
+    /// Request a token for a resource using an identity token for authentication
+    /// The identity token will be sent in the Authorization header as a Bearer token
+    /// Returns the full TokenResponse which may include pending signoffs for multi-party tokens
+    pub async fn request_token_with_identity(
+        &self,
+        resource: String,
+        operation: String,
+        identity_token: String,
+    ) -> Result<TokenResponse, ApiError> {
+        let request = TokenRequest {
+            resource,
+            operation,
+        };
+
+        let response = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request_with_auth::<_, TokenResponse>(
+                        "request_token",
+                        &request,
+                        &format!("Bearer {identity_token}"),
+                    )
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request_with_auth::<_, TokenResponse>(
+                        "request_token",
+                        &request,
+                        &format!("Bearer {identity_token}"),
+                    )
+                    .await?
+            }
+        };
+
+        Ok(response)
+    }
+
     /// Request a token for a resource (legacy method)
     /// This method returns just the token string for backward compatibility
     pub async fn request_token_simple(
@@ -754,6 +903,61 @@ impl HessraClient {
 
         Ok(response.public_key)
     }
+
+    /// Request a new identity token from the authorization service
+    /// Requires mTLS authentication
+    pub async fn request_identity_token(
+        &self,
+        identifier: Option<String>,
+    ) -> Result<IdentityTokenResponse, ApiError> {
+        let request = IdentityTokenRequest { identifier };
+
+        let response = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request::<_, IdentityTokenResponse>("request_identity_token", &request)
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request::<_, IdentityTokenResponse>("request_identity_token", &request)
+                    .await?
+            }
+        };
+
+        Ok(response)
+    }
+
+    /// Refresh an existing identity token
+    /// Can use either mTLS or identity token authentication
+    /// For token-only auth, identifier is required
+    pub async fn refresh_identity_token(
+        &self,
+        current_token: String,
+        identifier: Option<String>,
+    ) -> Result<IdentityTokenResponse, ApiError> {
+        let request = RefreshIdentityTokenRequest {
+            current_token,
+            identifier,
+        };
+
+        let response = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request::<_, IdentityTokenResponse>("refresh_identity_token", &request)
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request::<_, IdentityTokenResponse>("refresh_identity_token", &request)
+                    .await?
+            }
+        };
+
+        Ok(response)
+    }
 }
 
 #[cfg(test)]
@@ -766,8 +970,8 @@ mod tests {
         let config = BaseConfig {
             base_url: "test.hessra.net".to_string(),
             port: Some(443),
-            mtls_key: "".to_string(),
-            mtls_cert: "".to_string(),
+            mtls_key: None,
+            mtls_cert: None,
             server_ca: "".to_string(),
             public_key: None,
             personal_keypair: None,
@@ -781,8 +985,8 @@ mod tests {
         let config = BaseConfig {
             base_url: "test.hessra.net".to_string(),
             port: None,
-            mtls_key: "".to_string(),
-            mtls_cert: "".to_string(),
+            mtls_key: None,
+            mtls_cert: None,
             server_ca: "".to_string(),
             public_key: None,
             personal_keypair: None,
@@ -806,8 +1010,8 @@ mod tests {
 
         assert_eq!(builder.config.base_url, "test.hessra.net");
         assert_eq!(builder.config.port, Some(443));
-        assert_eq!(builder.config.mtls_cert, "CERT");
-        assert_eq!(builder.config.mtls_key, "KEY");
+        assert_eq!(builder.config.mtls_cert, Some("CERT".to_string()));
+        assert_eq!(builder.config.mtls_key, Some("KEY".to_string()));
         assert_eq!(builder.config.server_ca, "CA");
         assert_eq!(builder.config.public_key, Some("PUBKEY".to_string()));
         assert_eq!(builder.config.personal_keypair, Some("KEYPAIR".to_string()));
