@@ -12,7 +12,7 @@ categories = ["authentication", "api-bindings", "web-programming"]
 readme = "README.md"
 
 [dependencies]
-hessra-config = { path = "../hessra-config", version = "0.2.0" }
+hessra-config = { path = "../hessra-config", version = "0.3.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
