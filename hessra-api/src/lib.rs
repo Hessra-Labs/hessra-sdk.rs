@@ -359,7 +359,6 @@ impl Http3Client {
         let response = self
             .client
             .post(&url)
-            .version(http::Version::HTTP_3)
             .json(request_body)
             .send()
             .await
@@ -397,7 +396,6 @@ impl Http3Client {
         let response = self
             .client
             .post(&url)
-            .version(http::Version::HTTP_3)
             .header("Authorization", auth_header)
             .json(request_body)
             .send()
@@ -639,7 +637,6 @@ impl HessraClient {
         // Make the request
         let response = client
             .get(&url)
-            .version(http::Version::HTTP_3)
             .send()
             .await
             .map_err(ApiError::HttpClient)?;
@@ -884,7 +881,6 @@ impl HessraClient {
                 let response = client
                     .client
                     .get(&full_url)
-                    .version(http::Version::HTTP_3)
                     .send()
                     .await
                     .map_err(ApiError::HttpClient)?;
