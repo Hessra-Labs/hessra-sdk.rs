@@ -577,7 +577,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hessra-api"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -591,7 +591,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-config"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -619,11 +619,13 @@ dependencies = [
 
 [[package]]
 name = "hessra-sdk"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "hessra-api",
  "hessra-config",
  "hessra-token",
+ "hessra-token-core",
+ "hessra-token-identity",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -632,11 +634,48 @@ dependencies = [
 
 [[package]]
 name = "hessra-token"
-version = "0.5.0"
+version = "0.6.0"
+dependencies = [
+ "hessra-token-authz",
+ "hessra-token-core",
+ "serde_json",
+]
+
+[[package]]
+name = "hessra-token-authz"
+version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "biscuit-auth",
  "chrono",
+ "hessra-token-core",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tracing",
+]
+
+[[package]]
+name = "hessra-token-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "biscuit-auth",
+ "chrono",
+ "hex",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "hessra-token-identity"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "biscuit-auth",
+ "chrono",
+ "hessra-token-core",
  "hex",
  "serde",
  "serde_json",
@@ -1522,9 +1561,9 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "reqwest"
-version = "0.12.22"
+version = "0.12.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc931937e6ca3a06e3b6c0aa7841849b160a90351d6ab467a8b9b9959767531"
+checksum = "d429f34c8092b2d42c7c93cec323bb4adeb7c67698f70839adec842ec10c7ceb"
 dependencies = [
  "base64 0.22.1",
  "bytes",
