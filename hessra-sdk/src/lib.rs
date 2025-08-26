@@ -54,7 +54,8 @@ pub use hessra_token::{
 
 // Re-export identity token functionality
 pub use hessra_token_identity::{
-    add_identity_attenuation_to_token, create_identity_token, verify_identity_token,
+    add_identity_attenuation_to_token, create_identity_token, create_short_lived_identity_token,
+    verify_identity_token,
 };
 
 pub use hessra_config::{ConfigError, HessraConfig, Protocol};
@@ -274,17 +275,41 @@ impl Hessra {
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
 
+    /// Apply JIT attenuation to an identity token for secure transmission
+    /// Creates a short-lived (5 second) version of the token
+    fn apply_jit_attenuation(&self, identity_token: String) -> String {
+        // Only apply JIT attenuation if we have a public key configured
+        if let Some(ref public_key_pem) = self.config.public_key {
+            // Parse the public key
+            if let Ok(public_key) = PublicKey::from_pem(public_key_pem.as_str()) {
+                // Apply JIT attenuation for 5-second expiry
+                if let Ok(attenuated_token) =
+                    create_short_lived_identity_token(identity_token.clone(), public_key)
+                {
+                    return attenuated_token;
+                }
+            }
+        }
+        // If attenuation fails or public key is not configured, return the original token
+        identity_token
+    }
+
     /// Request a token for a resource using an identity token for authentication
     /// This method should be used when you have a delegated identity token
     /// and want to request authorization tokens as that delegated identity
+    /// The identity token will be automatically attenuated with a 5-second expiry for security
     pub async fn request_token_with_identity(
         &self,
         resource: impl Into<String>,
         operation: impl Into<String>,
         identity_token: impl Into<String>,
     ) -> Result<TokenResponse, SdkError> {
+        let token = identity_token.into();
+        // Apply JIT attenuation to the identity token
+        let attenuated_token = self.apply_jit_attenuation(token);
+
         self.client
-            .request_token_with_identity(resource.into(), operation.into(), identity_token.into())
+            .request_token_with_identity(resource.into(), operation.into(), attenuated_token)
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
