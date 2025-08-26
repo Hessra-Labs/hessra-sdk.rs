@@ -603,7 +603,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-py"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hessra-api",
  "hessra-config",
@@ -620,7 +620,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-sdk"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "hessra-api",
  "hessra-config",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-token-identity"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "biscuit-auth",

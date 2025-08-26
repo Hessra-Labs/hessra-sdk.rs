@@ -14,7 +14,7 @@ exclude = ["hessra-pgrx/hessra_authz", "hessra-py"]
 resolver = "2"
 
 [workspace.package]
-version = "0.9.0"
+version = "0.10.1"
 edition = "2021"
 authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Rust SDK for Hessra authentication services"
