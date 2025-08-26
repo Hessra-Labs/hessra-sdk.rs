@@ -609,6 +609,7 @@ dependencies = [
  "hessra-config",
  "hessra-sdk",
  "hessra-token",
+ "hessra-token-identity",
  "pyo3",
  "pyo3-build-config",
  "serde",

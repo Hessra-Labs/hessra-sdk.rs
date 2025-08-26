@@ -7,6 +7,7 @@ use tokio::runtime::Runtime;
 
 use crate::config::PyHessraConfig;
 use crate::error::HessraPyResult;
+use crate::identity::PyIdentityTokenResponse;
 
 #[pyclass(name = "HessraClient")]
 pub struct PyHessraClient {
@@ -176,6 +177,90 @@ impl PyHessraClient {
                     .verify_service_chain_token_remote(token, subject, resource, component)
                     .await
             })
+            .map_err(Into::into)
+    }
+
+    pub fn request_identity_token(
+        &self,
+        identifier: Option<String>,
+    ) -> HessraPyResult<PyIdentityTokenResponse> {
+        let inner = Arc::clone(&self.inner);
+        let runtime = Arc::clone(&self.runtime);
+
+        let response =
+            runtime.block_on(async move { inner.request_identity_token(identifier).await })?;
+        Ok(response.into())
+    }
+
+    pub fn refresh_identity_token(
+        &self,
+        current_token: String,
+        identifier: Option<String>,
+    ) -> HessraPyResult<PyIdentityTokenResponse> {
+        let inner = Arc::clone(&self.inner);
+        let runtime = Arc::clone(&self.runtime);
+
+        let response = runtime.block_on(async move {
+            inner
+                .refresh_identity_token(current_token, identifier)
+                .await
+        })?;
+        Ok(response.into())
+    }
+
+    pub fn request_token_with_identity(
+        &self,
+        resource: String,
+        operation: String,
+        identity_token: String,
+    ) -> HessraPyResult<String> {
+        let inner = Arc::clone(&self.inner);
+        let runtime = Arc::clone(&self.runtime);
+
+        runtime
+            .block_on(async move {
+                let response = inner
+                    .request_token_with_identity(resource, operation, identity_token)
+                    .await?;
+                response
+                    .token
+                    .ok_or_else(|| hessra_sdk::SdkError::Generic("No token returned".to_string()))
+            })
+            .map_err(Into::into)
+    }
+
+    pub fn verify_identity_token_local(
+        &self,
+        token: String,
+        identity: String,
+    ) -> HessraPyResult<()> {
+        self.inner
+            .verify_identity_token_local(token, identity)
+            .map_err(Into::into)
+    }
+
+    pub fn attenuate_identity_token(
+        &self,
+        token: String,
+        delegated_identity: String,
+        duration: Option<i64>,
+    ) -> HessraPyResult<String> {
+        // Default to 1 hour if not specified
+        let duration = duration.unwrap_or(3600);
+        self.inner
+            .attenuate_identity_token(token, delegated_identity, duration)
+            .map_err(Into::into)
+    }
+
+    pub fn create_identity_token_local(
+        &self,
+        subject: String,
+        duration: Option<i64>,
+    ) -> HessraPyResult<String> {
+        // Default to 1 hour if not specified
+        let duration = duration.unwrap_or(3600);
+        self.inner
+            .create_identity_token_local(subject, duration)
             .map_err(Into::into)
     }
 }
