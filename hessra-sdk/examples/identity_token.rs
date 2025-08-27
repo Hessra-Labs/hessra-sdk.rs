@@ -9,11 +9,11 @@
 use hessra_sdk::{Hessra, IdentityTokenResponse, Protocol};
 use std::error::Error;
 
-static BASE_URL: &str = "localhost";
-static PORT: u16 = 4433;
+static BASE_URL: &str = "test.hessra.net";
+static PORT: u16 = 443;
 static MTLS_CERT: &str = include_str!("../../certs/client.crt");
 static MTLS_KEY: &str = include_str!("../../certs/client.key");
-static SERVER_CA: &str = include_str!("../../certs/ca.crt");
+static SERVER_CA: &str = include_str!("../../certs/ca-2030.pem");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -49,10 +49,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             // 2. Verify the identity token locally
             println!("\n=== Verifying Identity Token Locally ===");
-            match sdk.verify_identity_token_local(token, id) {
-                Ok(_) => println!("Identity token verified successfully!"),
-                Err(e) => println!("Identity token verification failed: {}", e),
-            }
+            sdk.verify_identity_token_local(token, id)?;
+            println!("Identity token verified successfully!");
 
             // 3. Attenuate the token by delegating to a new identity
             println!("\n=== Attenuating Identity Token ===");
@@ -69,10 +67,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             );
 
             // Verify the attenuated token
-            match sdk.verify_identity_token_local(&attenuated_token, &delegated_identity) {
-                Ok(_) => println!("Attenuated token verified successfully!"),
-                Err(e) => println!("Attenuated token verification failed: {}", e),
-            }
+            sdk.verify_identity_token_local(&attenuated_token, &delegated_identity)?;
+            println!("Attenuated token verified successfully!");
 
             // 3a. Use the delegated identity token to request an authorization token as agent1
             println!("\n=== Using Delegated Identity Token for Authorization ===");

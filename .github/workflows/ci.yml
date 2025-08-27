@@ -277,6 +277,9 @@ jobs:
       - name: Run service_chain.rs
         run: cargo run --example service_chain --manifest-path hessra-sdk/Cargo.toml
 
+      - name: Run identity_token.rs
+        run: cargo run --example identity_token --manifest-path hessra-sdk/Cargo.toml
+
   python-integration-tests:
     name: Python Integration Tests (hessra-py)
     runs-on: ubuntu-latest
