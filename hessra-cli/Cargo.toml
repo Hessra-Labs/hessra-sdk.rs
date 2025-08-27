@@ -1,0 +1,53 @@
+[package]
+name = "hessra-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jake Valentic <jake@hessra.net>"]
+description = "Command-line interface for Hessra authentication and identity management"
+license = "Apache-2.0"
+repository = "https://github.com/hessra/hessra-sdk.rs"
+keywords = ["hessra", "cli", "authentication", "identity", "mtls"]
+categories = ["command-line-utilities", "authentication"]
+
+[[bin]]
+name = "hessra"
+path = "src/main.rs"
+
+[dependencies]
+# Core dependencies
+hessra-sdk = { path = "../hessra-sdk", version = "0.10.1" }
+hessra-config = { path = "../hessra-config", version = "0.3.0" }
+
+# CLI and async
+clap = { version = "4.5", features = ["derive", "env"] }
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = "1.0"
+
+# Terminal output
+colored = "3"
+indicatif = "0.18"
+dialoguer = "0.12"
+
+# File and config management
+directories = "6.0"
+base64 = { workspace = true }
+
+# Optional: secure credential storage
+keyring = { version = "3.0", optional = true }
+
+[features]
+default = []
+secure-storage = ["keyring"]
+
+[dev-dependencies]
+tempfile = "3.8"
+assert_cmd = "2.0"
+predicates = "3.0"
