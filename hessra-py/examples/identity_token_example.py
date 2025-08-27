@@ -65,7 +65,7 @@ def main():
         identity_response = client.request_identity_token(
             identifier="urn:hessra:test:user"
         )
-        print(f"✓ Identity token received")
+        print("✓ Identity token received")
         print(f"   Message: {identity_response.response_msg}")
         print(f"   Identity: {identity_response.identity}")
         print(f"   Expires in: {identity_response.expires_in} seconds")
@@ -149,7 +149,7 @@ def main():
                 refreshed_response = client.refresh_identity_token(
                     current_token=identity_token, identifier="urn:hessra:test:user"
                 )
-                print(f"✓ Identity token refreshed")
+                print("✓ Identity token refreshed")
                 print(f"   Message: {refreshed_response.response_msg}")
                 print(f"   Expires in: {refreshed_response.expires_in} seconds")
             except Exception as e:
