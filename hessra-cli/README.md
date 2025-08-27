@@ -13,7 +13,7 @@ cargo install hessra
 ### From Source
 
 ```bash
-cargo install --path hessra-cli
+cargo install --path hessra
 ```
 
 ### Development Build

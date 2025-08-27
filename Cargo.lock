@@ -958,22 +958,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
-name = "hessra-api"
-version = "0.5.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "hessra-config",
- "http",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.12",
- "tokio",
-]
-
-[[package]]
-name = "hessra-cli"
+name = "hessra"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -994,6 +979,21 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "toml",
+]
+
+[[package]]
+name = "hessra-api"
+version = "0.5.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "hessra-config",
+ "http",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
 ]
 
 [[package]]
