@@ -47,7 +47,14 @@ impl PyHessraClient {
     #[classmethod]
     pub fn builder(_cls: &Bound<PyType>) -> PyHessraClientBuilder {
         PyHessraClientBuilder {
-            inner: Hessra::builder(),
+            base_url: None,
+            port: None,
+            mtls_cert: None,
+            mtls_key: None,
+            server_ca: None,
+            protocol: None,
+            public_key: None,
+            personal_keypair: None,
         }
     }
 
@@ -266,67 +273,65 @@ impl PyHessraClient {
 }
 
 #[pyclass(name = "HessraClientBuilder")]
+#[derive(Clone)]
 pub struct PyHessraClientBuilder {
-    inner: hessra_sdk::HessraBuilder,
+    base_url: Option<String>,
+    port: Option<u16>,
+    mtls_cert: Option<String>,
+    mtls_key: Option<String>,
+    server_ca: Option<String>,
+    protocol: Option<String>,
+    public_key: Option<String>,
+    personal_keypair: Option<String>,
 }
 
 #[pymethods]
 impl PyHessraClientBuilder {
     pub fn base_url(&mut self, base_url: String) -> PyHessraClientBuilder {
-        let inner =
-            std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder()).base_url(base_url);
-        PyHessraClientBuilder { inner }
+        self.base_url = Some(base_url);
+        self.clone()
     }
 
     pub fn port(&mut self, port: u16) -> PyHessraClientBuilder {
-        let inner = std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder()).port(port);
-        PyHessraClientBuilder { inner }
+        self.port = Some(port);
+        self.clone()
     }
 
     pub fn mtls_key(&mut self, mtls_key: String) -> PyHessraClientBuilder {
-        let inner =
-            std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder()).mtls_key(mtls_key);
-        PyHessraClientBuilder { inner }
+        self.mtls_key = Some(mtls_key);
+        self.clone()
     }
 
     pub fn mtls_cert(&mut self, mtls_cert: String) -> PyHessraClientBuilder {
-        let inner =
-            std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder()).mtls_cert(mtls_cert);
-        PyHessraClientBuilder { inner }
+        self.mtls_cert = Some(mtls_cert);
+        self.clone()
     }
 
     pub fn server_ca(&mut self, server_ca: String) -> PyHessraClientBuilder {
-        let inner =
-            std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder()).server_ca(server_ca);
-        PyHessraClientBuilder { inner }
+        self.server_ca = Some(server_ca);
+        self.clone()
     }
 
     pub fn protocol(&mut self, protocol: String) -> HessraPyResult<PyHessraClientBuilder> {
-        use hessra_config::Protocol;
-
-        let proto = match protocol.as_str() {
-            "http1" => Protocol::Http1,
-            _ => {
-                return Err(crate::error::HessraPyError {
-                    inner: format!("Invalid protocol: {protocol}. Must be 'http1'"),
-                })
+        match protocol.as_str() {
+            "http1" => {
+                self.protocol = Some(protocol);
+                Ok(self.clone())
             }
-        };
-        let inner =
-            std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder()).protocol(proto);
-        Ok(PyHessraClientBuilder { inner })
+            _ => Err(crate::error::HessraPyError {
+                inner: format!("Invalid protocol: {protocol}. Must be 'http1'"),
+            }),
+        }
     }
 
     pub fn public_key(&mut self, public_key: String) -> PyHessraClientBuilder {
-        let inner = std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder())
-            .public_key(public_key);
-        PyHessraClientBuilder { inner }
+        self.public_key = Some(public_key);
+        self.clone()
     }
 
     pub fn personal_keypair(&mut self, keypair: String) -> PyHessraClientBuilder {
-        let inner = std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder())
-            .personal_keypair(keypair);
-        PyHessraClientBuilder { inner }
+        self.personal_keypair = Some(keypair);
+        self.clone()
     }
 
     pub fn build(&mut self) -> HessraPyResult<PyHessraClient> {
@@ -334,8 +339,49 @@ impl PyHessraClientBuilder {
             inner: format!("Failed to create async runtime: {e}"),
         })?);
 
-        let inner = std::mem::replace(&mut self.inner, hessra_sdk::Hessra::builder());
-        let hessra = inner.build()?;
+        let mut builder = hessra_sdk::Hessra::builder();
+        
+        if let Some(ref base_url) = self.base_url {
+            builder = builder.base_url(base_url.clone());
+        }
+        
+        if let Some(port) = self.port {
+            builder = builder.port(port);
+        }
+        
+        // Only set mTLS if provided - don't use dummy values
+        if let Some(ref cert) = self.mtls_cert {
+            builder = builder.mtls_cert(cert.clone());
+        }
+        
+        if let Some(ref key) = self.mtls_key {
+            builder = builder.mtls_key(key.clone());
+        }
+        
+        if let Some(ref ca) = self.server_ca {
+            builder = builder.server_ca(ca.clone());
+        }
+        
+        if let Some(ref proto) = self.protocol {
+            use hessra_config::Protocol;
+            let protocol = match proto.as_str() {
+                "http1" => Protocol::Http1,
+                _ => return Err(crate::error::HessraPyError {
+                    inner: format!("Invalid protocol: {proto}"),
+                }),
+            };
+            builder = builder.protocol(protocol);
+        }
+        
+        if let Some(ref public_key) = self.public_key {
+            builder = builder.public_key(public_key.clone());
+        }
+        
+        if let Some(ref keypair) = self.personal_keypair {
+            builder = builder.personal_keypair(keypair.clone());
+        }
+        
+        let hessra = builder.build()?;
 
         Ok(PyHessraClient {
             inner: Arc::new(hessra),
