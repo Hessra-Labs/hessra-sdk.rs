@@ -44,7 +44,23 @@ pub async fn handle_identity_command(
             ttl,
             from_token,
             save_as,
-        } => delegate(identity, ttl, from_token, save_as, json_output, verbose).await,
+            server,
+            port,
+            ca,
+        } => {
+            delegate(
+                identity,
+                ttl,
+                from_token,
+                save_as,
+                server,
+                port,
+                ca,
+                json_output,
+                verbose,
+            )
+            .await
+        }
 
         IdentityCommands::Verify {
             token_name,
@@ -209,11 +225,15 @@ async fn authenticate(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn delegate(
     identity: String,
     ttl: u64,
     from_token: String,
     save_as: String,
+    server: Option<String>,
+    port: u16,
+    ca_path: Option<PathBuf>,
     json_output: bool,
     verbose: bool,
 ) -> Result<()> {
@@ -238,27 +258,36 @@ async fn delegate(
 
     // We need to create an SDK instance to use the attenuation functionality
     // We need the public key for attenuation
-    let server = config
-        .default_server
-        .as_deref()
-        .unwrap_or("test.hessra.net");
-    let ca = if let Some(ca_path) = config.default_ca_path.as_ref() {
-        fs::read_to_string(ca_path).ok()
+
+    // Use provided server or fall back to config/default
+    let server = server
+        .or(config.default_server.clone())
+        .unwrap_or_else(|| "test.hessra.net".to_string());
+
+    // Use provided CA path or fall back to config
+    let ca_path = ca_path.or(config.default_ca_path.clone());
+
+    let ca = if let Some(ca_path) = ca_path.as_ref() {
+        Some(
+            fs::read_to_string(ca_path)
+                .map_err(|e| CliError::FileNotFound(format!("CA certificate file: {e}")))?,
+        )
     } else {
         None
     };
 
     // Fetch the public key from the server
     let public_key = if let Some(ca_cert) = ca.as_ref() {
-        hessra_sdk::fetch_public_key(server, Some(443), ca_cert).await?
+        hessra_sdk::fetch_public_key(&server, Some(port), ca_cert).await?
     } else {
         return Err(CliError::Config(
-            "CA certificate required for fetching public key".to_string(),
+            "CA certificate required for delegating tokens. Use --ca or set default_ca_path in config".to_string(),
         ));
     };
 
     let client = Hessra::builder()
-        .base_url(server)
+        .base_url(&server)
+        .port(port)
         .server_ca(ca.unwrap())
         .public_key(public_key)
         .build()?;

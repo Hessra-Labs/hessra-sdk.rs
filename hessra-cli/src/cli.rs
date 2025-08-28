@@ -86,6 +86,18 @@ pub enum IdentityCommands {
         /// Name to save the delegated token as
         #[arg(long)]
         save_as: String,
+
+        /// Server hostname or URL (uses config default if not specified)
+        #[arg(long, env = "HESSRA_SERVER")]
+        server: Option<String>,
+
+        /// Server port (default: 443)
+        #[arg(long, default_value = "443", env = "HESSRA_PORT")]
+        port: u16,
+
+        /// Path to CA certificate (uses config default if not specified)
+        #[arg(long, env = "HESSRA_CA")]
+        ca: Option<PathBuf>,
     },
 
     /// Verify an identity token
