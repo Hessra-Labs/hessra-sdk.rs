@@ -74,6 +74,43 @@ impl CliConfig {
     }
 }
 
+pub struct PublicKeyStorage;
+
+impl PublicKeyStorage {
+    pub fn save_public_key(server: &str, public_key: &str, config: &CliConfig) -> Result<PathBuf> {
+        let keys_dir = Self::keys_dir(config)?;
+        fs::create_dir_all(&keys_dir)?;
+
+        // Sanitize server name for filesystem
+        let sanitized_server = server
+            .replace("https://", "")
+            .replace("http://", "")
+            .replace(['/', ':'], "_");
+
+        let key_path = keys_dir.join(format!("{sanitized_server}.pub"));
+        fs::write(&key_path, public_key)?;
+        Ok(key_path)
+    }
+
+    pub fn load_public_key(server: &str, config: &CliConfig) -> Result<Option<String>> {
+        let sanitized_server = server
+            .replace("https://", "")
+            .replace("http://", "")
+            .replace(['/', ':'], "_");
+
+        let key_path = Self::keys_dir(config)?.join(format!("{sanitized_server}.pub"));
+        if key_path.exists() {
+            Ok(Some(fs::read_to_string(key_path)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn keys_dir(_config: &CliConfig) -> Result<PathBuf> {
+        Ok(CliConfig::config_dir()?.join("public_keys"))
+    }
+}
+
 pub struct TokenStorage;
 
 impl TokenStorage {

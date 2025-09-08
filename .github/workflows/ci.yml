@@ -99,6 +99,10 @@ jobs:
       - name: Run clippy for non-PGRX crates
         run: RUSTFLAGS='--cfg reqwest_unstable' cargo clippy --workspace --exclude hessra_authz --exclude hessra-py -- -D warnings
 
+      - name: Run clippy for hessra-cli
+        working-directory: hessra-cli
+        run: cargo clippy -- -D warnings
+
       - name: Run clippy for hessra-py crate
         working-directory: hessra-py
         run: cargo clippy -- -D warnings
@@ -279,6 +283,9 @@ jobs:
 
       - name: Run identity_token.rs
         run: cargo run --example identity_token --manifest-path hessra-sdk/Cargo.toml
+
+      - name: Run CLI integration test
+        run: cargo run --example cli_integration_test --manifest-path hessra-cli/Cargo.toml
 
   python-integration-tests:
     name: Python Integration Tests (hessra-py)

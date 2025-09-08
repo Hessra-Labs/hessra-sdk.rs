@@ -98,6 +98,10 @@ pub enum IdentityCommands {
         /// Path to CA certificate (uses config default if not specified)
         #[arg(long, env = "HESSRA_CA")]
         ca: Option<PathBuf>,
+
+        /// Public key to use for delegation (bypasses server communication)
+        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        public_key: Option<String>,
     },
 
     /// Verify an identity token

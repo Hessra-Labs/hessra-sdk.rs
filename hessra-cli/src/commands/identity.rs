@@ -1,5 +1,5 @@
 use crate::cli::IdentityCommands;
-use crate::config::{CliConfig, TokenStorage};
+use crate::config::{CliConfig, PublicKeyStorage, TokenStorage};
 use crate::error::{CliError, Result};
 use colored::Colorize;
 use dialoguer::Input;
@@ -47,6 +47,7 @@ pub async fn handle_identity_command(
             server,
             port,
             ca,
+            public_key,
         } => {
             delegate(
                 identity,
@@ -56,6 +57,7 @@ pub async fn handle_identity_command(
                 server,
                 port,
                 ca,
+                public_key,
                 json_output,
                 verbose,
             )
@@ -171,6 +173,14 @@ async fn authenticate(
     // Setup (fetch public key)
     client.setup().await?;
 
+    // Save the public key for future use
+    if let Ok(public_key) = hessra_sdk::fetch_public_key(&server, Some(port), &ca).await {
+        PublicKeyStorage::save_public_key(&server, &public_key, &config)?;
+        if verbose && !json_output {
+            println!("  {} Public key cached for {server}", "✓".green());
+        }
+    }
+
     // Request identity token
     let ttl_str = ttl.map(|t| t.to_string());
     let response = client.request_identity_token(ttl_str).await?;
@@ -234,6 +244,7 @@ async fn delegate(
     server: Option<String>,
     port: u16,
     ca_path: Option<PathBuf>,
+    public_key_provided: Option<String>,
     json_output: bool,
     verbose: bool,
 ) -> Result<()> {
@@ -256,41 +267,80 @@ async fn delegate(
         None
     };
 
-    // We need to create an SDK instance to use the attenuation functionality
-    // We need the public key for attenuation
-
-    // Use provided server or fall back to config/default
+    // Determine server to use for key caching
     let server = server
         .or(config.default_server.clone())
         .unwrap_or_else(|| "test.hessra.net".to_string());
 
-    // Use provided CA path or fall back to config
-    let ca_path = ca_path.or(config.default_ca_path.clone());
-
-    let ca = if let Some(ca_path) = ca_path.as_ref() {
-        Some(
-            fs::read_to_string(ca_path)
-                .map_err(|e| CliError::FileNotFound(format!("CA certificate file: {e}")))?,
-        )
+    // Try to get the public key in order of priority:
+    // 1. Provided via --public-key flag
+    // 2. Cached public key for the server
+    // 3. Fetch from server using CA certificate
+    let public_key = if let Some(pk) = public_key_provided {
+        if verbose && !json_output {
+            println!("  Using provided public key");
+        }
+        pk
+    } else if let Some(pk) = PublicKeyStorage::load_public_key(&server, &config)? {
+        if verbose && !json_output {
+            println!("  Using cached public key for {server}");
+        }
+        pk
     } else {
-        None
+        // Need to fetch from server
+        let ca_path_resolved = ca_path.or(config.default_ca_path.clone());
+
+        let ca = if let Some(ca_path) = ca_path_resolved.as_ref() {
+            Some(
+                fs::read_to_string(ca_path)
+                    .map_err(|e| CliError::FileNotFound(format!("CA certificate file: {e}")))?,
+            )
+        } else {
+            None
+        };
+
+        if let Some(ca_cert) = ca.as_ref() {
+            if verbose && !json_output {
+                println!("  Fetching public key from {server}");
+            }
+            let fetched_key = hessra_sdk::fetch_public_key(&server, Some(port), ca_cert).await?;
+
+            // Cache the fetched key for future use
+            PublicKeyStorage::save_public_key(&server, &fetched_key, &config)?;
+            if verbose && !json_output {
+                println!("  {} Public key cached for {server}", "✓".green());
+            }
+
+            fetched_key
+        } else {
+            return Err(CliError::Config(
+                "Public key required for delegating tokens. Provide --public-key, or --ca to fetch from server, or ensure a cached key exists".to_string(),
+            ));
+        }
     };
 
-    // Fetch the public key from the server
-    let public_key = if let Some(ca_cert) = ca.as_ref() {
-        hessra_sdk::fetch_public_key(&server, Some(port), ca_cert).await?
-    } else {
-        return Err(CliError::Config(
-            "CA certificate required for delegating tokens. Use --ca or set default_ca_path in config".to_string(),
-        ));
-    };
-
-    let client = Hessra::builder()
+    // Build client with the public key
+    let mut builder = Hessra::builder()
         .base_url(&server)
         .port(port)
-        .server_ca(ca.unwrap())
-        .public_key(public_key)
-        .build()?;
+        .public_key(public_key);
+
+    // Add CA if available, otherwise use a dummy one (required by SDK even for local operations)
+    // The SDK requires a valid PEM format even for local attenuation where it's not used
+    // Using ISRG Root X1 certificate as a well-known valid CA
+    const DUMMY_CA: &str = include_str!("../../../certs/ca-2030.pem");
+
+    if let Some(ca_path) = config.default_ca_path.clone() {
+        if let Ok(ca) = fs::read_to_string(ca_path) {
+            builder = builder.server_ca(&ca);
+        } else {
+            builder = builder.server_ca(DUMMY_CA);
+        }
+    } else {
+        builder = builder.server_ca(DUMMY_CA);
+    }
+
+    let client = builder.build()?;
 
     // Attenuate the token locally
     let delegated_token = client.attenuate_identity_token(&token, &identity, ttl as i64)?;
@@ -360,19 +410,33 @@ async fn verify(
     };
 
     // For verification, we need the public key
-    // If server is provided, fetch it; otherwise try to use cached/configured one
-    let mut builder = Hessra::builder();
+    // Try to use cached public key if available
+    let default_server = "test.hessra.net".to_string();
+    let server_name = server
+        .as_ref()
+        .or(config.default_server.as_ref())
+        .unwrap_or(&default_server);
 
-    if let Some(server) = server.as_ref().or(config.default_server.as_ref()) {
-        builder = builder.base_url(server);
-        // We might need CA for server verification
-        if let Some(ca_path) = config.default_ca_path.as_ref() {
-            let ca = fs::read_to_string(ca_path)?;
+    let mut builder = Hessra::builder().base_url(server_name);
+
+    // Try to load cached public key
+    if let Some(public_key) = PublicKeyStorage::load_public_key(server_name, &config)? {
+        builder = builder.public_key(public_key);
+        if verbose && !json_output {
+            println!("  Using cached public key for {server_name}");
+        }
+    }
+
+    // Add CA if available, otherwise use dummy (SDK requires it)
+    const DUMMY_CA: &str = include_str!("../../../certs/ca-2030.pem");
+    if let Some(ca_path) = config.default_ca_path.as_ref() {
+        if let Ok(ca) = fs::read_to_string(ca_path) {
             builder = builder.server_ca(&ca);
+        } else {
+            builder = builder.server_ca(DUMMY_CA);
         }
     } else {
-        // For local verification, we need a dummy base_url
-        builder = builder.base_url("dummy");
+        builder = builder.server_ca(DUMMY_CA);
     }
 
     let client = builder.build()?;
