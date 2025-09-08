@@ -83,9 +83,13 @@ pub enum IdentityCommands {
         #[arg(long, default_value = "default")]
         from_token: String,
 
-        /// Name to save the delegated token as
+        /// Name to save the delegated token as (optional - if not provided, token is only output to stdout)
         #[arg(long)]
-        save_as: String,
+        save_as: Option<String>,
+
+        /// Output only the token without any formatting (useful for piping)
+        #[arg(long)]
+        token_only: bool,
 
         /// Server hostname or URL (uses config default if not specified)
         #[arg(long, env = "HESSRA_SERVER")]

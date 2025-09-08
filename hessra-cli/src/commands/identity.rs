@@ -44,6 +44,7 @@ pub async fn handle_identity_command(
             ttl,
             from_token,
             save_as,
+            token_only,
             server,
             port,
             ca,
@@ -54,6 +55,7 @@ pub async fn handle_identity_command(
                 ttl,
                 from_token,
                 save_as,
+                token_only,
                 server,
                 port,
                 ca,
@@ -240,7 +242,8 @@ async fn delegate(
     identity: String,
     ttl: u64,
     from_token: String,
-    save_as: String,
+    save_as: Option<String>,
+    token_only: bool,
     server: Option<String>,
     port: u16,
     ca_path: Option<PathBuf>,
@@ -253,7 +256,7 @@ async fn delegate(
     // Load the source token
     let token = TokenStorage::load_token(&from_token, &config)?;
 
-    let progress = if !json_output {
+    let progress = if !json_output && !token_only {
         let pb = ProgressBar::new_spinner();
         pb.set_style(
             ProgressStyle::default_spinner()
@@ -277,12 +280,12 @@ async fn delegate(
     // 2. Cached public key for the server
     // 3. Fetch from server using CA certificate
     let public_key = if let Some(pk) = public_key_provided {
-        if verbose && !json_output {
+        if verbose && !json_output && !token_only {
             println!("  Using provided public key");
         }
         pk
     } else if let Some(pk) = PublicKeyStorage::load_public_key(&server, &config)? {
-        if verbose && !json_output {
+        if verbose && !json_output && !token_only {
             println!("  Using cached public key for {server}");
         }
         pk
@@ -300,14 +303,14 @@ async fn delegate(
         };
 
         if let Some(ca_cert) = ca.as_ref() {
-            if verbose && !json_output {
+            if verbose && !json_output && !token_only {
                 println!("  Fetching public key from {server}");
             }
             let fetched_key = hessra_sdk::fetch_public_key(&server, Some(port), ca_cert).await?;
 
             // Cache the fetched key for future use
             PublicKeyStorage::save_public_key(&server, &fetched_key, &config)?;
-            if verbose && !json_output {
+            if verbose && !json_output && !token_only {
                 println!("  {} Public key cached for {server}", "✓".green());
             }
 
@@ -345,32 +348,61 @@ async fn delegate(
     // Attenuate the token locally
     let delegated_token = client.attenuate_identity_token(&token, &identity, ttl as i64)?;
 
-    // Save the delegated token
-    let token_path = TokenStorage::save_token(&save_as, &delegated_token, &config)?;
+    // Save the delegated token if requested
+    let token_saved = if let Some(ref name) = save_as {
+        let path = TokenStorage::save_token(name, &delegated_token, &config)?;
+        Some(path)
+    } else {
+        None
+    };
 
     if let Some(pb) = progress {
         pb.finish_and_clear();
     }
 
-    if json_output {
-        let output = json!({
+    // Handle output based on mode
+    if token_only {
+        // In token-only mode, just output the raw token (perfect for piping)
+        println!("{delegated_token}");
+    } else if json_output {
+        let mut output = json!({
             "success": true,
+            "token": delegated_token,
             "delegated_identity": identity,
             "ttl": ttl,
             "from_token": from_token,
-            "saved_as": save_as,
-            "token_path": token_path,
+            "saved": token_saved.is_some(),
         });
+
+        if let Some(ref name) = save_as {
+            output["saved_as"] = json!(name);
+        }
+        if let Some(ref path) = token_saved {
+            output["token_path"] = json!(path);
+        }
+
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
+        // Normal output mode
         println!("{}", "✓ Delegated identity token created!".green());
         println!("  Delegated to: {}", identity.bright_cyan());
         println!("  TTL: {ttl} seconds");
         println!("  From token: {from_token}");
-        println!("  Saved as: {}", save_as.bright_yellow());
-        if verbose {
-            println!("  Token path: {}", token_path.display());
+
+        if let Some(ref name) = save_as {
+            println!("  Saved as: {}", name.bright_yellow());
+            if verbose {
+                if let Some(ref path) = token_saved {
+                    println!("  Token path: {}", path.display());
+                }
+            }
+        } else {
+            println!("  Status: {}", "Not saved (output only)".yellow());
         }
+
+        // Always show the token in normal mode (not truncated)
+        println!("\n{}", "Token:".bright_cyan());
+        println!("{delegated_token}");
     }
 
     Ok(())
