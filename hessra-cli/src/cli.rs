@@ -152,7 +152,53 @@ pub enum IdentityCommands {
     },
 
     /// List all saved tokens
-    List,
+    List {
+        /// Show detailed information for each token
+        #[arg(long)]
+        details: bool,
+    },
+
+    /// Inspect a token to see its contents
+    Inspect {
+        /// Name of saved token to inspect
+        #[arg(long, conflicts_with = "token_file")]
+        token_name: Option<String>,
+
+        /// Path to token file to inspect
+        #[arg(long, conflicts_with = "token_name")]
+        token_file: Option<PathBuf>,
+
+        /// Show verbose output including raw Biscuit content
+        #[arg(short, long)]
+        verbose: bool,
+
+        /// Server hostname for public key (uses config default if not specified)
+        #[arg(long, env = "HESSRA_SERVER")]
+        server: Option<String>,
+
+        /// Server public key (base64 encoded)
+        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        public_key: Option<String>,
+    },
+
+    /// Remove expired tokens from storage
+    Prune {
+        /// Perform a dry run without actually deleting tokens
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Force deletion without confirmation
+        #[arg(short, long)]
+        force: bool,
+
+        /// Server hostname for public key (uses config default if not specified)
+        #[arg(long, env = "HESSRA_SERVER")]
+        server: Option<String>,
+
+        /// Server public key (base64 encoded)
+        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        public_key: Option<String>,
+    },
 
     /// Delete a saved token
     Delete {

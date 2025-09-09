@@ -1,8 +1,9 @@
 use crate::cli::IdentityCommands;
 use crate::config::{CliConfig, PublicKeyStorage, TokenStorage};
 use crate::error::{CliError, Result};
+use chrono::{DateTime, Utc};
 use colored::Colorize;
-use dialoguer::Input;
+use dialoguer::{Confirm, Input};
 use hessra_sdk::{Hessra, IdentityTokenResponse, Protocol};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::json;
@@ -90,7 +91,32 @@ pub async fn handle_identity_command(
             port,
         } => refresh(token_name, save_as, server, port, json_output, verbose).await,
 
-        IdentityCommands::List => list_tokens(json_output).await,
+        IdentityCommands::List { details } => list_tokens(json_output, details).await,
+
+        IdentityCommands::Inspect {
+            token_name,
+            token_file,
+            verbose: inspect_verbose,
+            server,
+            public_key,
+        } => {
+            inspect_token(
+                token_name,
+                token_file,
+                server,
+                public_key,
+                inspect_verbose,
+                json_output,
+            )
+            .await
+        }
+
+        IdentityCommands::Prune {
+            dry_run,
+            force,
+            server,
+            public_key,
+        } => prune_tokens(dry_run, force, server, public_key, json_output).await,
 
         IdentityCommands::Delete { token_name } => delete_token(token_name, json_output).await,
     }
@@ -642,11 +668,54 @@ async fn refresh(
     }
 }
 
-async fn list_tokens(json_output: bool) -> Result<()> {
+async fn list_tokens(json_output: bool, details: bool) -> Result<()> {
     let config = CliConfig::load()?;
     let tokens = TokenStorage::list_tokens(&config)?;
 
-    if json_output {
+    if details {
+        // Load config for public key access
+        let mut token_details = Vec::new();
+
+        for token_name in &tokens {
+            match get_token_info(token_name, &config).await {
+                Ok(info) => token_details.push(info),
+                Err(_) => {
+                    token_details.push(json!({
+                        "name": token_name,
+                        "error": "Failed to inspect token"
+                    }));
+                }
+            }
+        }
+
+        if json_output {
+            let output = json!({
+                "tokens": token_details,
+                "count": tokens.len(),
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            println!("{}", "Saved tokens:".bright_cyan());
+            for detail in token_details {
+                if let Some(name) = detail.get("name").and_then(|v| v.as_str()) {
+                    print!("  • {name}");
+                    if let Some(identity) = detail.get("identity").and_then(|v| v.as_str()) {
+                        print!(" ({})", identity.dimmed());
+                    }
+                    if let Some(status) = detail.get("status").and_then(|v| v.as_str()) {
+                        if status == "expired" {
+                            print!(" {}", "[EXPIRED]".red());
+                        } else if let Some(expires_in) =
+                            detail.get("expires_in_human").and_then(|v| v.as_str())
+                        {
+                            print!(" - expires {}", expires_in.yellow());
+                        }
+                    }
+                    println!();
+                }
+            }
+        }
+    } else if json_output {
         let output = json!({
             "tokens": tokens,
             "count": tokens.len(),
@@ -676,6 +745,403 @@ async fn delete_token(token_name: String, json_output: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
         println!("{} Token '{token_name}' deleted.", "✓".green());
+    }
+
+    Ok(())
+}
+
+async fn get_token_info(token_name: &str, config: &CliConfig) -> Result<serde_json::Value> {
+    let token = TokenStorage::load_token(token_name, config)?;
+
+    // Try to get public key from config or cache
+    let server = config
+        .default_server
+        .as_deref()
+        .unwrap_or("test.hessra.net");
+    let public_key = PublicKeyStorage::load_public_key(server, config)?;
+
+    if let Some(public_key_str) = public_key {
+        match inspect_token_contents(&token, &public_key_str) {
+            Ok((identity, expiry, status, expires_in_human)) => Ok(json!({
+                "name": token_name,
+                "identity": identity,
+                "expiry": expiry,
+                "status": status,
+                "expires_in_human": expires_in_human,
+            })),
+            Err(_) => Ok(json!({
+                "name": token_name,
+                "error": "Invalid or corrupted token"
+            })),
+        }
+    } else {
+        Ok(json!({
+            "name": token_name,
+            "error": "No public key available"
+        }))
+    }
+}
+
+fn inspect_token_contents(
+    token: &str,
+    public_key_str: &str,
+) -> Result<(String, Option<i64>, String, String)> {
+    use biscuit_auth::macros::authorizer;
+    use biscuit_auth::{Biscuit, PublicKey};
+
+    // Parse public key from PEM format
+    let public_key = PublicKey::from_pem(public_key_str)
+        .map_err(|e| CliError::Token(format!("Invalid public key: {e}")))?;
+
+    // Parse token
+    let biscuit = Biscuit::from_base64(token, public_key)
+        .map_err(|e| CliError::Token(format!("Failed to parse token: {e}")))?;
+
+    // Extract information from the token by building an authorizer
+    let now = Utc::now().timestamp();
+
+    // Try to extract facts using an authorizer
+    let authorizer = authorizer!(
+        r#"
+            time({now});
+            allow if true;
+        "#
+    );
+
+    let mut authorizer = authorizer
+        .build(&biscuit)
+        .map_err(|e| CliError::Token(format!("Failed to build authorizer: {e}")))?;
+
+    // Query for subject fact
+    let subjects: Vec<(String,)> = authorizer
+        .query("data($name) <- subject($name)")
+        .unwrap_or_default();
+
+    let identity = subjects
+        .first()
+        .map(|(s,)| s.clone())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Try to extract expiry from checks in the token's datalog
+    let token_content = biscuit.print();
+    let expiry = extract_expiry_from_content(&token_content);
+
+    // Check if token is expired
+    let (status, expires_in_human) = if let Some(exp) = expiry {
+        if exp < now {
+            (
+                "expired".to_string(),
+                format!("{} ago", format_duration(now - exp)),
+            )
+        } else {
+            (
+                "valid".to_string(),
+                format!("in {}", format_duration(exp - now)),
+            )
+        }
+    } else {
+        ("unknown".to_string(), "unknown".to_string())
+    };
+
+    Ok((identity, expiry, status, expires_in_human))
+}
+
+fn extract_expiry_from_content(content: &str) -> Option<i64> {
+    // Look for check constraints with time comparisons
+    // Pattern: "check if time($time), $time < NUMBER"
+    for line in content.lines() {
+        if line.contains("check if") && line.contains("time") && line.contains("<") {
+            // Try to extract the number after <
+            if let Some(pos) = line.rfind('<') {
+                let after_lt = &line[pos + 1..].trim();
+                // Find the number, it might be followed by comma, semicolon or other chars
+                let number_str = after_lt
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit() || *c == '-')
+                    .collect::<String>();
+
+                if let Ok(timestamp) = number_str.parse::<i64>() {
+                    return Some(timestamp);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn format_duration(seconds: i64) -> String {
+    let seconds = seconds.abs();
+    if seconds < 60 {
+        format!("{seconds} seconds")
+    } else if seconds < 3600 {
+        format!("{} minutes", seconds / 60)
+    } else if seconds < 86400 {
+        format!("{} hours", seconds / 3600)
+    } else {
+        format!("{} days", seconds / 86400)
+    }
+}
+
+async fn inspect_token(
+    token_name: Option<String>,
+    token_file: Option<PathBuf>,
+    server: Option<String>,
+    public_key: Option<String>,
+    verbose: bool,
+    json_output: bool,
+) -> Result<()> {
+    let config = CliConfig::load()?;
+
+    // Load the token
+    let (token, source) = if let Some(name) = token_name {
+        (
+            TokenStorage::load_token(&name, &config)?,
+            format!("saved token '{name}'"),
+        )
+    } else if let Some(path) = token_file {
+        (fs::read_to_string(path)?, "token file".to_string())
+    } else {
+        // Default to "default" token if it exists
+        if TokenStorage::token_exists("default", &config) {
+            (
+                TokenStorage::load_token("default", &config)?,
+                "saved token 'default'".to_string(),
+            )
+        } else {
+            return Err(CliError::Validation(
+                "No token specified. Use --token-name or --token-file".into(),
+            ));
+        }
+    };
+
+    // Get public key
+    let server = server
+        .or_else(|| config.default_server.clone())
+        .unwrap_or_else(|| "test.hessra.net".to_string());
+
+    let public_key_str = if let Some(pk) = public_key {
+        pk
+    } else if let Some(pk) = PublicKeyStorage::load_public_key(&server, &config)? {
+        pk
+    } else {
+        return Err(CliError::Config(
+            "No public key available. Run 'hessra identity authenticate' first or provide --public-key".into(),
+        ));
+    };
+
+    // Parse and inspect the token
+    use biscuit_auth::{Biscuit, PublicKey};
+
+    // Parse public key from PEM format
+    let public_key = PublicKey::from_pem(&public_key_str)
+        .map_err(|e| CliError::Token(format!("Invalid public key: {e}")))?;
+
+    let biscuit = Biscuit::from_base64(&token, public_key)
+        .map_err(|e| CliError::Token(format!("Failed to parse token: {e}")))?;
+
+    // Get token info
+    let (identity, expiry, status, expires_in_human) =
+        inspect_token_contents(&token, &public_key_str)?;
+
+    if json_output {
+        let mut output = json!({
+            "source": source,
+            "identity": identity,
+            "status": status,
+            "expiry": expiry,
+            "expires_in_human": expires_in_human,
+        });
+
+        if verbose {
+            output["content"] = json!(biscuit.print());
+        }
+
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        println!("{} Token: {}", "✓".green().bold(), source);
+        println!("  Identity: {identity}");
+        let status_colored = if status == "expired" {
+            status.red().to_string()
+        } else {
+            status.green().to_string()
+        };
+        println!("  Status: {status_colored}");
+
+        if let Some(exp) = expiry {
+            let dt = DateTime::from_timestamp(exp, 0)
+                .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                .unwrap_or_else(|| "invalid date".to_string());
+            println!("  Expires: {dt} ({expires_in_human})");
+        }
+
+        if verbose {
+            println!("\n{}", "Biscuit content:".bright_cyan());
+            println!("{}", biscuit.print());
+        }
+    }
+
+    Ok(())
+}
+
+async fn prune_tokens(
+    dry_run: bool,
+    force: bool,
+    server: Option<String>,
+    public_key: Option<String>,
+    json_output: bool,
+) -> Result<()> {
+    let config = CliConfig::load()?;
+    let tokens = TokenStorage::list_tokens(&config)?;
+
+    if tokens.is_empty() {
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "checked": 0,
+                    "expired": 0,
+                    "removed": 0,
+                    "message": "No tokens found"
+                }))?
+            );
+        } else {
+            println!("No saved tokens found.");
+        }
+        return Ok(());
+    }
+
+    // Get public key
+    let server = server
+        .or_else(|| config.default_server.clone())
+        .unwrap_or_else(|| "test.hessra.net".to_string());
+
+    let public_key_str = if let Some(pk) = public_key {
+        pk
+    } else if let Some(pk) = PublicKeyStorage::load_public_key(&server, &config)? {
+        pk
+    } else {
+        return Err(CliError::Config(
+            "No public key available. Run 'hessra identity authenticate' first or provide --public-key".into(),
+        ));
+    };
+
+    // Check each token
+    let mut expired_tokens = Vec::new();
+    let mut errors = Vec::new();
+
+    for token_name in &tokens {
+        match TokenStorage::load_token(token_name, &config) {
+            Ok(token) => match inspect_token_contents(&token, &public_key_str) {
+                Ok((_, _, status, expires_in)) => {
+                    if status == "expired" {
+                        expired_tokens.push((token_name.clone(), expires_in));
+                    }
+                }
+                Err(_) => {
+                    errors.push(token_name.clone());
+                }
+            },
+            Err(_) => {
+                errors.push(token_name.clone());
+            }
+        }
+    }
+
+    if expired_tokens.is_empty() {
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "checked": tokens.len(),
+                    "expired": 0,
+                    "removed": 0,
+                    "errors": errors,
+                    "message": "No expired tokens found"
+                }))?
+            );
+        } else {
+            println!("Scanned {} tokens, none are expired.", tokens.len());
+        }
+        return Ok(());
+    }
+
+    // Display what will be removed
+    if !json_output {
+        println!(
+            "Found {} tokens, {} are expired",
+            tokens.len(),
+            expired_tokens.len()
+        );
+        println!("\n{}", "Expired tokens:".yellow());
+        for (name, expires_in) in &expired_tokens {
+            println!("  - {name} (expired {expires_in})");
+        }
+    }
+
+    if dry_run {
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "checked": tokens.len(),
+                    "expired": expired_tokens.len(),
+                    "would_remove": expired_tokens.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+                    "dry_run": true,
+                }))?
+            );
+        } else {
+            println!("\n{} Dry run - no tokens were deleted", "ℹ".blue());
+        }
+        return Ok(());
+    }
+
+    // Ask for confirmation if not forced
+    let should_remove = if force {
+        true
+    } else if json_output {
+        // In JSON mode, require --force flag
+        false
+    } else {
+        Confirm::new()
+            .with_prompt(format!("Remove {} expired tokens?", expired_tokens.len()))
+            .default(false)
+            .interact()
+            .map_err(|e| CliError::Io(std::io::Error::other(e)))?
+    };
+
+    if should_remove {
+        let mut removed = 0;
+        for (name, _) in &expired_tokens {
+            if TokenStorage::delete_token(name, &config).is_ok() {
+                removed += 1;
+            }
+        }
+
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "checked": tokens.len(),
+                    "expired": expired_tokens.len(),
+                    "removed": removed,
+                    "success": true,
+                }))?
+            );
+        } else {
+            println!("{} Removed {} expired tokens", "✓".green(), removed);
+        }
+    } else if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "checked": tokens.len(),
+                "expired": expired_tokens.len(),
+                "removed": 0,
+                "cancelled": true,
+            }))?
+        );
+    } else {
+        println!("Operation cancelled.");
     }
 
     Ok(())

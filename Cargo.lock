@@ -964,6 +964,8 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "base64 0.22.1",
+ "biscuit-auth",
+ "chrono",
  "clap",
  "colored",
  "dialoguer",

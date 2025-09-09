@@ -88,7 +88,44 @@ hessra identity refresh --token-name default --save-as refreshed
 #### List Saved Tokens
 
 ```bash
+# Simple list
 hessra identity list
+
+# List with details (shows identity and expiry status)
+hessra identity list --details
+```
+
+#### Inspect Token
+
+View detailed information about a token including identity, expiry, and status:
+
+```bash
+# Inspect a saved token
+hessra identity inspect --token-name default
+
+# Inspect with verbose output (shows full Biscuit content)
+hessra identity inspect --token-name default --verbose
+
+# Inspect token from file
+hessra identity inspect --token-file /path/to/token
+
+# JSON output for scripting
+hessra identity inspect --token-name default --json
+```
+
+#### Prune Expired Tokens
+
+Remove expired tokens from storage:
+
+```bash
+# Interactive mode (asks for confirmation)
+hessra identity prune
+
+# Dry run to see what would be deleted
+hessra identity prune --dry-run
+
+# Force deletion without confirmation
+hessra identity prune --force
 ```
 
 #### Delete Token
@@ -104,6 +141,7 @@ hessra identity delete old-token
 Request an authorization token for a specific resource and operation:
 
 Using mTLS authentication:
+
 ```bash
 hessra authorize request \
   --resource resource1 \
@@ -114,6 +152,7 @@ hessra authorize request \
 ```
 
 Using a saved identity token:
+
 ```bash
 hessra authorize request \
   --resource resource1 \
@@ -123,6 +162,7 @@ hessra authorize request \
 ```
 
 Automatically use default identity token if available:
+
 ```bash
 hessra authorize request \
   --resource resource1 \
@@ -131,6 +171,7 @@ hessra authorize request \
 ```
 
 Output just the token for piping:
+
 ```bash
 # Use in environment variable
 export AUTH_TOKEN=$(hessra authorize request \
