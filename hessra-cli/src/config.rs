@@ -155,4 +155,12 @@ impl TokenStorage {
         }
         Ok(tokens)
     }
+
+    pub fn token_exists(name: &str, config: &CliConfig) -> bool {
+        config
+            .token_dir()
+            .ok()
+            .map(|dir| dir.join(format!("{name}.token")).exists())
+            .unwrap_or(false)
+    }
 }

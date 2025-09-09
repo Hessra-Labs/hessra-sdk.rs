@@ -170,10 +170,14 @@ async fn authenticate(
         .mtls_cert(&cert)
         .mtls_key(&key)
         .server_ca(&ca)
-        .build()?;
+        .build()
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
 
     // Setup (fetch public key)
-    client.setup().await?;
+    client
+        .setup()
+        .await
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
 
     // Save the public key for future use
     if let Ok(public_key) = hessra_sdk::fetch_public_key(&server, Some(port), &ca).await {
@@ -185,7 +189,10 @@ async fn authenticate(
 
     // Request identity token
     let ttl_str = ttl.map(|t| t.to_string());
-    let response = client.request_identity_token(ttl_str).await?;
+    let response = client
+        .request_identity_token(ttl_str)
+        .await
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
 
     if let Some(pb) = progress {
         pb.finish_and_clear();
@@ -306,7 +313,9 @@ async fn delegate(
             if verbose && !json_output && !token_only {
                 println!("  Fetching public key from {server}");
             }
-            let fetched_key = hessra_sdk::fetch_public_key(&server, Some(port), ca_cert).await?;
+            let fetched_key = hessra_sdk::fetch_public_key(&server, Some(port), ca_cert)
+                .await
+                .map_err(|e| CliError::Sdk(e.to_string()))?;
 
             // Cache the fetched key for future use
             PublicKeyStorage::save_public_key(&server, &fetched_key, &config)?;
@@ -343,10 +352,12 @@ async fn delegate(
         builder = builder.server_ca(DUMMY_CA);
     }
 
-    let client = builder.build()?;
+    let client = builder.build().map_err(|e| CliError::Sdk(e.to_string()))?;
 
     // Attenuate the token locally
-    let delegated_token = client.attenuate_identity_token(&token, &identity, ttl as i64)?;
+    let delegated_token = client
+        .attenuate_identity_token(&token, &identity, ttl as i64)
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
 
     // Save the delegated token if requested
     let token_saved = if let Some(ref name) = save_as {
@@ -471,7 +482,7 @@ async fn verify(
         builder = builder.server_ca(DUMMY_CA);
     }
 
-    let client = builder.build()?;
+    let client = builder.build().map_err(|e| CliError::Sdk(e.to_string()))?;
 
     // Try to extract identity from token if not provided
     let identity = if let Some(id) = identity {
@@ -568,11 +579,17 @@ async fn refresh(
         builder = builder.server_ca(&ca);
     }
 
-    let mut client = builder.build()?;
-    client.setup().await?;
+    let mut client = builder.build().map_err(|e| CliError::Sdk(e.to_string()))?;
+    client
+        .setup()
+        .await
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
 
     // Refresh the token
-    let response = client.refresh_identity_token(&token, None).await?;
+    let response = client
+        .refresh_identity_token(&token, None)
+        .await
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
 
     if let Some(pb) = progress {
         pb.finish_and_clear();

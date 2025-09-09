@@ -25,6 +25,9 @@ async fn run() -> Result<()> {
         Commands::Identity { command } => {
             commands::handle_identity_command(command, cli.json, cli.verbose).await
         }
+        Commands::Authorize { command } => {
+            commands::handle_authorize_command(command, cli.json).await
+        }
         Commands::Config { command } => handle_config_command(command, cli.json).await,
     }
 }

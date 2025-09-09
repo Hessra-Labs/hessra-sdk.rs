@@ -97,6 +97,74 @@ hessra identity list
 hessra identity delete old-token
 ```
 
+### Authorization Operations
+
+#### Request Authorization Token
+
+Request an authorization token for a specific resource and operation:
+
+Using mTLS authentication:
+```bash
+hessra authorize request \
+  --resource resource1 \
+  --operation read \
+  --cert ~/.hessra/client.crt \
+  --key ~/.hessra/client.key \
+  --server test.hessra.net
+```
+
+Using a saved identity token:
+```bash
+hessra authorize request \
+  --resource resource1 \
+  --operation read \
+  --identity-token default \
+  --server test.hessra.net
+```
+
+Automatically use default identity token if available:
+```bash
+hessra authorize request \
+  --resource resource1 \
+  --operation write \
+  --server test.hessra.net
+```
+
+Output just the token for piping:
+```bash
+# Use in environment variable
+export AUTH_TOKEN=$(hessra authorize request \
+  --resource resource1 \
+  --operation read \
+  --token-only)
+
+# Pipe to another command
+hessra authorize request \
+  --resource resource1 \
+  --operation read \
+  --token-only | curl -H "Authorization: Bearer $(cat)" ...
+```
+
+#### Verify Authorization Token
+
+Verify an authorization token:
+
+```bash
+# Pipe token from another command
+hessra authorize request --resource resource1 --operation read --token-only | \
+  hessra authorize verify \
+    --subject "uri:urn:test:user" \
+    --resource resource1 \
+    --operation read
+
+# Or provide token directly
+hessra authorize verify \
+  --token "EtQBCmEK..." \
+  --subject "uri:urn:test:user" \
+  --resource resource1 \
+  --operation read
+```
+
 ### Configuration Management
 
 #### Initialize Configuration

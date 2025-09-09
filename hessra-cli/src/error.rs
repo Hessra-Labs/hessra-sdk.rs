@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum CliError {
     #[error("SDK error: {0}")]
-    Sdk(#[from] hessra_sdk::SdkError),
+    Sdk(String),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -22,6 +22,15 @@ pub enum CliError {
 
     #[error("Authentication failed: {0}")]
     AuthenticationFailed(String),
+
+    #[error("Authorization failed: {0}")]
+    Authorization(String),
+
+    #[error("Verification failed: {0}")]
+    Verification(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

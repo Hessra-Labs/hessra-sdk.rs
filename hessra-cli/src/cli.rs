@@ -29,6 +29,12 @@ pub enum Commands {
         command: IdentityCommands,
     },
 
+    /// Authorization token operations
+    Authorize {
+        #[command(subcommand)]
+        command: AuthorizeCommands,
+    },
+
     /// Configuration management
     Config {
         #[command(subcommand)]
@@ -152,6 +158,87 @@ pub enum IdentityCommands {
     Delete {
         /// Name of the token to delete
         token_name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizeCommands {
+    /// Request an authorization token for a resource
+    Request {
+        /// Resource to request access for
+        #[arg(short, long)]
+        resource: String,
+
+        /// Operation to perform (e.g., read, write, delete)
+        #[arg(short, long)]
+        operation: String,
+
+        /// Name of saved identity token to use for authentication
+        #[arg(short = 'i', long)]
+        identity_token: Option<String>,
+
+        /// Path to identity token file
+        #[arg(short = 't', long, conflicts_with = "identity_token")]
+        token_file: Option<PathBuf>,
+
+        /// Output only the token without any formatting (useful for piping)
+        #[arg(long)]
+        token_only: bool,
+
+        /// Path to client certificate for mTLS (used if no identity token)
+        #[arg(long, env = "HESSRA_CERT")]
+        cert: Option<PathBuf>,
+
+        /// Path to client private key for mTLS (used if no identity token)
+        #[arg(long, env = "HESSRA_KEY")]
+        key: Option<PathBuf>,
+
+        /// Path to CA certificate
+        #[arg(long, env = "HESSRA_CA")]
+        ca: Option<PathBuf>,
+
+        /// Server hostname or URL
+        #[arg(short, long, env = "HESSRA_SERVER")]
+        server: Option<String>,
+
+        /// Server port
+        #[arg(short = 'p', long, default_value = "443", env = "HESSRA_PORT")]
+        port: u16,
+
+        /// Server public key (base64 encoded) - for offline verification
+        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        public_key: Option<String>,
+    },
+
+    /// Verify an authorization token
+    Verify {
+        /// The authorization token to verify (reads from stdin if not provided)
+        #[arg(long)]
+        token: Option<String>,
+
+        /// Subject identifier to verify against
+        #[arg(short, long)]
+        subject: String,
+
+        /// Resource identifier to verify against
+        #[arg(short, long)]
+        resource: String,
+
+        /// Operation to verify
+        #[arg(short, long)]
+        operation: String,
+
+        /// Server hostname or URL (uses config default if not specified)
+        #[arg(long, env = "HESSRA_SERVER")]
+        server: Option<String>,
+
+        /// Server port
+        #[arg(long, default_value = "443", env = "HESSRA_PORT")]
+        port: u16,
+
+        /// Server public key (base64 encoded) - for offline verification
+        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        public_key: Option<String>,
     },
 }
 
