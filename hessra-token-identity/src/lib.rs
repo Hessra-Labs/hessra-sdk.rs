@@ -6,7 +6,7 @@ mod verify;
 pub use attenuate::add_identity_attenuation_to_token;
 pub use jit::create_short_lived_identity_token;
 pub use mint::{create_identity_biscuit, create_identity_token, create_raw_identity_biscuit};
-pub use verify::verify_identity_token;
+pub use verify::{verify_bearer_token, verify_identity_token};
 
 #[cfg(test)]
 mod tests {
@@ -28,6 +28,12 @@ mod tests {
         assert!(
             verify_identity_token(token.clone(), public_key, subject.clone()).is_ok(),
             "Verification should succeed with exact identity match"
+        );
+
+        // Should pass verification as a bearer token
+        assert!(
+            verify_bearer_token(token.clone(), public_key).is_ok(),
+            "Verification should succeed as a bearer token"
         );
 
         // Should fail with different identity
@@ -92,6 +98,12 @@ mod tests {
             )
             .is_ok(),
             "Delegated identity should verify"
+        );
+
+        // Delegated identities don't work as bearer tokens
+        assert!(
+            verify_bearer_token(attenuated_token.clone(), public_key).is_err(),
+            "Delegated identity should not verify as a bearer token"
         );
 
         // Different branch should fail
