@@ -1,9 +1,11 @@
 mod attenuate;
+mod inspect;
 mod jit;
 mod mint;
 mod verify;
 
 pub use attenuate::add_identity_attenuation_to_token;
+pub use inspect::{inspect_identity_token, InspectResult};
 pub use jit::create_short_lived_identity_token;
 pub use mint::{create_identity_biscuit, create_identity_token, create_raw_identity_biscuit};
 pub use verify::{verify_bearer_token, verify_identity_token};
