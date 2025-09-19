@@ -43,6 +43,7 @@
 
 mod attest;
 mod mint;
+mod revocation;
 mod verify;
 
 // Re-export all authorization-specific functionality
@@ -55,6 +56,7 @@ pub use mint::{
     create_service_chain_biscuit, create_service_chain_token, create_service_chain_token_with_time,
     create_token, create_token_with_time,
 };
+pub use revocation::{get_authorization_revocation_id, get_authorization_revocation_id_from_bytes};
 pub use verify::{
     biscuit_key_from_string, verify_biscuit_local, verify_service_chain_biscuit_local,
     verify_service_chain_token_local, verify_token_local, ServiceNode,

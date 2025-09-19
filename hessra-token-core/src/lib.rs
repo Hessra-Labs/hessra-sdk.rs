@@ -11,10 +11,14 @@
 //! - Biscuit type re-exports
 
 pub mod error;
+pub mod revocation;
 pub mod time;
 pub mod utils;
 
 pub use error::TokenError;
+pub use revocation::{
+    get_authority_revocation_id, get_block_revocation_id, get_revocation_ids, RevocationId,
+};
 pub use time::TokenTimeConfig;
 pub use utils::{decode_token, encode_token, parse_token, public_key_from_pem_file};
 
