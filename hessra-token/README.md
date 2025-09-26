@@ -269,7 +269,7 @@ To compile with WebAssembly support, enable the `wasm` feature:
 
 ```toml
 [dependencies]
-hessra-token = { version = "0.5", features = ["wasm"] }
+hessra-token = { version = "0.6", features = ["wasm"] }
 ```
 
 ## Lower-level API

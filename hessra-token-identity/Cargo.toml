@@ -1,6 +1,6 @@
 [package]
 name = "hessra-token-identity"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["Jake Valentic <jake@hessra.net>"]
@@ -12,7 +12,7 @@ categories = ["authentication", "api-bindings", "web-programming"]
 readme = "README.md"
 
 [dependencies]
-hessra-token-core = { path = "../hessra-token-core", version = "0.1.0" }
+hessra-token-core = { path = "../hessra-token-core", version = "0.2.0" }
 biscuit-auth = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
