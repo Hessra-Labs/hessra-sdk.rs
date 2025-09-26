@@ -366,7 +366,7 @@ async fn delegate(
     // Add CA if available, otherwise use a dummy one (required by SDK even for local operations)
     // The SDK requires a valid PEM format even for local attenuation where it's not used
     // Using ISRG Root X1 certificate as a well-known valid CA
-    const DUMMY_CA: &str = include_str!("../../../certs/ca-2030.pem");
+    const DUMMY_CA: &str = include_str!("../../certs/ca-2030.pem");
 
     if let Some(ca_path) = config.default_ca_path.clone() {
         if let Ok(ca) = fs::read_to_string(ca_path) {
@@ -497,7 +497,7 @@ async fn verify(
     }
 
     // Add CA if available, otherwise use dummy (SDK requires it)
-    const DUMMY_CA: &str = include_str!("../../../certs/ca-2030.pem");
+    const DUMMY_CA: &str = include_str!("../../certs/ca-2030.pem");
     if let Some(ca_path) = config.default_ca_path.as_ref() {
         if let Ok(ca) = fs::read_to_string(ca_path) {
             builder = builder.server_ca(&ca);

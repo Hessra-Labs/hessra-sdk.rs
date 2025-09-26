@@ -456,6 +456,6 @@ fn ca_cert_or_default(ca: Option<&std::path::Path>) -> Result<String> {
         Ok(fs::read_to_string(ca_path)?)
     } else {
         // Use the default CA certificate that's bundled with the CLI
-        Ok(include_str!("../../../certs/ca-2030.pem").to_string())
+        Ok(include_str!("../../certs/ca-2030.pem").to_string())
     }
 }
