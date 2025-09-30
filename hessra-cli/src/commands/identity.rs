@@ -1,9 +1,9 @@
 use crate::cli::IdentityCommands;
-use crate::config::{CliConfig, PublicKeyStorage, TokenStorage};
+use crate::config::{CliConfig, PublicKeyStorage, ServerConfig, TokenStorage};
 use crate::error::{CliError, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
-use dialoguer::{Confirm, Input};
+use dialoguer::Confirm;
 use hessra_sdk::{Hessra, IdentityTokenResponse, Protocol};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::json;
@@ -50,6 +50,7 @@ pub async fn handle_identity_command(
             port,
             ca,
             public_key,
+            public_key_file,
         } => {
             delegate(
                 identity,
@@ -61,6 +62,7 @@ pub async fn handle_identity_command(
                 port,
                 ca,
                 public_key,
+                public_key_file,
                 json_output,
                 verbose,
             )
@@ -99,12 +101,14 @@ pub async fn handle_identity_command(
             verbose: inspect_verbose,
             server,
             public_key,
+            public_key_file,
         } => {
             inspect_token(
                 token_name,
                 token_file,
                 server,
                 public_key,
+                public_key_file,
                 inspect_verbose,
                 json_output,
             )
@@ -116,7 +120,18 @@ pub async fn handle_identity_command(
             force,
             server,
             public_key,
-        } => prune_tokens(dry_run, force, server, public_key, json_output).await,
+            public_key_file,
+        } => {
+            prune_tokens(
+                dry_run,
+                force,
+                server,
+                public_key,
+                public_key_file,
+                json_output,
+            )
+            .await
+        }
 
         IdentityCommands::Delete { token_name } => delete_token(token_name, json_output).await,
     }
@@ -136,43 +151,101 @@ async fn authenticate(
 ) -> Result<()> {
     let config = CliConfig::load()?;
 
-    // Resolve parameters with config defaults or prompts
-    let server = server
-        .or(config.default_server.clone())
-        .or_else(|| {
-            if !json_output {
-                Input::new()
-                    .with_prompt("Server hostname")
-                    .default("test.hessra.net".to_string())
-                    .interact()
-                    .ok()
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| CliError::InvalidInput("Server hostname is required".to_string()))?;
+    // Resolve server from parameter or config
+    let server = config.resolve_server(server)?;
 
+    // Try to load server config for cert/key paths and port
+    let server_config = ServerConfig::load(&server).ok();
+    let resolved_port = server_config.as_ref().map(|c| c.port).unwrap_or(port);
+
+    // Resolve cert and key paths
     let cert_path = cert_path
+        .or_else(|| server_config.as_ref().and_then(|c| c.cert_path.clone()))
         .or(config.default_cert_path.clone())
         .ok_or_else(|| {
-            CliError::InvalidInput("Certificate path is required (--cert)".to_string())
+            CliError::InvalidInput(
+                "Certificate path is required (--cert). Run: hessra config init".to_string(),
+            )
         })?;
 
     let key_path = key_path
+        .or_else(|| server_config.as_ref().and_then(|c| c.key_path.clone()))
         .or(config.default_key_path.clone())
-        .ok_or_else(|| CliError::InvalidInput("Key path is required (--key)".to_string()))?;
+        .ok_or_else(|| {
+            CliError::InvalidInput(
+                "Key path is required (--key). Run: hessra config init".to_string(),
+            )
+        })?;
 
-    let ca_path = ca_path
-        .or(config.default_ca_path.clone())
-        .ok_or_else(|| CliError::InvalidInput("CA path is required (--ca)".to_string()))?;
+    // Try to load CA cert from server directory first, then fall back to provided path
+    let ca = if let Some(provided_ca_path) = ca_path {
+        fs::read_to_string(&provided_ca_path)
+            .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+    } else {
+        let server_ca_path = ServerConfig::ca_cert_path(&server)?;
+        if server_ca_path.exists() {
+            if verbose && !json_output {
+                println!("  Using CA cert from: {}", server_ca_path.display());
+            }
+            fs::read_to_string(&server_ca_path)
+                .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+        } else {
+            // CA cert doesn't exist - try to fetch it automatically
+            if !json_output {
+                println!(
+                    "  Fetching CA certificate from {}...",
+                    server.bright_white()
+                );
+            }
 
-    // Load certificates
+            match hessra_sdk::fetch_ca_cert(&server, Some(resolved_port)).await {
+                Ok(ca_cert) => {
+                    // Save the fetched CA cert
+                    if let Some(parent) = server_ca_path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::write(&server_ca_path, &ca_cert)?;
+
+                    // Create a basic server config if it doesn't exist
+                    if server_config.is_none() {
+                        let mut new_config = ServerConfig::new(server.clone(), resolved_port);
+                        // Store the cert/key paths if provided
+                        new_config.cert_path = cert_path.clone().into();
+                        new_config.key_path = key_path.clone().into();
+                        new_config.save()?;
+
+                        if !json_output {
+                            println!(
+                                "  {} Server configuration created for {}",
+                                "✓".green(),
+                                server.bright_white()
+                            );
+                        }
+                    }
+
+                    if !json_output {
+                        println!("  {} CA certificate fetched and cached", "✓".green());
+                    }
+
+                    ca_cert
+                }
+                Err(e) => {
+                    return Err(CliError::Config(format!(
+                        "CA certificate not found for server '{server}' and auto-fetch failed: {e}\n\n\
+                        Either:\n\
+                        1. Run: hessra init {server} --cert <cert> --key <key> --set-default\n\
+                        2. Or provide CA manually: --ca <path_to_ca.crt>"
+                    )));
+                }
+            }
+        }
+    };
+
+    // Load mTLS cert and key
     let cert = fs::read_to_string(&cert_path)
         .map_err(|e| CliError::FileNotFound(format!("Certificate file: {e}")))?;
     let key = fs::read_to_string(&key_path)
         .map_err(|e| CliError::FileNotFound(format!("Key file: {e}")))?;
-    let ca = fs::read_to_string(&ca_path)
-        .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?;
 
     let progress = if !json_output {
         let pb = ProgressBar::new_spinner();
@@ -191,7 +264,7 @@ async fn authenticate(
     // Build SDK client
     let mut client = Hessra::builder()
         .base_url(&server)
-        .port(port)
+        .port(resolved_port)
         .protocol(Protocol::Http1)
         .mtls_cert(&cert)
         .mtls_key(&key)
@@ -206,7 +279,7 @@ async fn authenticate(
         .map_err(|e| CliError::Sdk(e.to_string()))?;
 
     // Save the public key for future use
-    if let Ok(public_key) = hessra_sdk::fetch_public_key(&server, Some(port), &ca).await {
+    if let Ok(public_key) = hessra_sdk::fetch_public_key(&server, Some(resolved_port), &ca).await {
         PublicKeyStorage::save_public_key(&server, &public_key, &config)?;
         if verbose && !json_output {
             println!("  {} Public key cached for {server}", "✓".green());
@@ -231,12 +304,14 @@ async fn authenticate(
             expires_in: Some(expires),
             ..
         } => {
-            // Save token
-            let token_path = TokenStorage::save_token(&save_as, &token, &config)?;
+            // Save token to server-specific directory
+            let token_path =
+                TokenStorage::save_token_for_server(&server, &save_as, &token, &config)?;
 
             if json_output {
                 let output = json!({
                     "success": true,
+                    "server": server,
                     "identity": identity,
                     "expires_in": expires,
                     "token_saved_as": save_as,
@@ -245,6 +320,7 @@ async fn authenticate(
                 println!("{}", serde_json::to_string_pretty(&output)?);
             } else {
                 println!("{}", "✓ Authentication successful!".green());
+                println!("  Server: {}", server.bright_white());
                 println!("  Identity: {}", identity.bright_cyan());
                 println!("  Expires in: {expires} seconds");
                 println!("  Token saved as: {}", save_as.bright_yellow());
@@ -281,13 +357,17 @@ async fn delegate(
     port: u16,
     ca_path: Option<PathBuf>,
     public_key_provided: Option<String>,
+    public_key_file: Option<PathBuf>,
     json_output: bool,
     verbose: bool,
 ) -> Result<()> {
     let config = CliConfig::load()?;
 
-    // Load the source token
-    let token = TokenStorage::load_token(&from_token, &config)?;
+    // Resolve server from parameter or config
+    let server = config.resolve_server(server)?;
+
+    // Load the source token from server-specific directory
+    let token = TokenStorage::load_token_for_server(&server, &from_token, &config)?;
 
     let progress = if !json_output && !token_only {
         let pb = ProgressBar::new_spinner();
@@ -303,43 +383,56 @@ async fn delegate(
         None
     };
 
-    // Determine server to use for key caching
-    let server = server
-        .or(config.default_server.clone())
-        .unwrap_or_else(|| "test.hessra.net".to_string());
-
     // Try to get the public key in order of priority:
-    // 1. Provided via --public-key flag
-    // 2. Cached public key for the server
-    // 3. Fetch from server using CA certificate
+    // 1. Provided via --public-key flag (PEM content directly)
+    // 2. Provided via --public-key-file flag (read from file)
+    // 3. Cached public key from server directory
+    // 4. Fetch from server using CA certificate from server directory
     let public_key = if let Some(pk) = public_key_provided {
         if verbose && !json_output && !token_only {
-            println!("  Using provided public key");
+            println!("  Using provided public key (PEM content)");
         }
         pk
-    } else if let Some(pk) = PublicKeyStorage::load_public_key(&server, &config)? {
+    } else if let Some(pk_path) = public_key_file {
         if verbose && !json_output && !token_only {
-            println!("  Using cached public key for {server}");
+            println!("  Reading public key from file: {}", pk_path.display());
         }
-        pk
+        fs::read_to_string(&pk_path).map_err(|e| {
+            CliError::FileNotFound(format!("Public key file {}: {e}", pk_path.display()))
+        })?
     } else {
-        // Need to fetch from server
-        let ca_path_resolved = ca_path.or(config.default_ca_path.clone());
-
-        let ca = if let Some(ca_path) = ca_path_resolved.as_ref() {
-            Some(
-                fs::read_to_string(ca_path)
-                    .map_err(|e| CliError::FileNotFound(format!("CA certificate file: {e}")))?,
-            )
+        // Try to load from server directory
+        let server_pubkey_path = ServerConfig::public_key_path(&server)?;
+        if server_pubkey_path.exists() {
+            if verbose && !json_output && !token_only {
+                println!("  Using cached public key for {server}");
+            }
+            fs::read_to_string(&server_pubkey_path)
+                .map_err(|e| CliError::FileNotFound(format!("Public key file: {e}")))?
         } else {
-            None
-        };
+            // Try to fetch from server using CA cert
+            let server_config = ServerConfig::load(&server).ok();
+            let resolved_port = server_config.as_ref().map(|c| c.port).unwrap_or(port);
 
-        if let Some(ca_cert) = ca.as_ref() {
+            let ca = if let Some(provided_ca_path) = ca_path {
+                fs::read_to_string(&provided_ca_path)
+                    .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+            } else {
+                let server_ca_path = ServerConfig::ca_cert_path(&server)?;
+                if server_ca_path.exists() {
+                    fs::read_to_string(&server_ca_path)
+                        .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+                } else {
+                    return Err(CliError::Config(format!(
+                        "Public key not found for server '{server}'. Run: hessra config refresh {server}"
+                    )));
+                }
+            };
+
             if verbose && !json_output && !token_only {
                 println!("  Fetching public key from {server}");
             }
-            let fetched_key = hessra_sdk::fetch_public_key(&server, Some(port), ca_cert)
+            let fetched_key = hessra_sdk::fetch_public_key(&server, Some(resolved_port), &ca)
                 .await
                 .map_err(|e| CliError::Sdk(e.to_string()))?;
 
@@ -350,10 +443,6 @@ async fn delegate(
             }
 
             fetched_key
-        } else {
-            return Err(CliError::Config(
-                "Public key required for delegating tokens. Provide --public-key, or --ca to fetch from server, or ensure a cached key exists".to_string(),
-            ));
         }
     };
 
@@ -385,9 +474,9 @@ async fn delegate(
         .attenuate_identity_token(&token, &identity, ttl as i64)
         .map_err(|e| CliError::Sdk(e.to_string()))?;
 
-    // Save the delegated token if requested
+    // Save the delegated token if requested to server-specific directory
     let token_saved = if let Some(ref name) = save_as {
-        let path = TokenStorage::save_token(name, &delegated_token, &config)?;
+        let path = TokenStorage::save_token_for_server(&server, name, &delegated_token, &config)?;
         Some(path)
     } else {
         None
@@ -404,6 +493,7 @@ async fn delegate(
     } else if json_output {
         let mut output = json!({
             "success": true,
+            "server": server,
             "token": delegated_token,
             "delegated_identity": identity,
             "ttl": ttl,
@@ -422,6 +512,7 @@ async fn delegate(
     } else {
         // Normal output mode
         println!("{}", "✓ Delegated identity token created!".green());
+        println!("  Server: {}", server.bright_white());
         println!("  Delegated to: {}", identity.bright_cyan());
         println!("  TTL: {ttl} seconds");
         println!("  From token: {from_token}");
@@ -887,6 +978,7 @@ async fn inspect_token(
     token_file: Option<PathBuf>,
     server: Option<String>,
     public_key: Option<String>,
+    public_key_file: Option<PathBuf>,
     verbose: bool,
     json_output: bool,
 ) -> Result<()> {
@@ -921,11 +1013,15 @@ async fn inspect_token(
 
     let public_key_str = if let Some(pk) = public_key {
         pk
+    } else if let Some(pk_path) = public_key_file {
+        fs::read_to_string(&pk_path).map_err(|e| {
+            CliError::FileNotFound(format!("Public key file {}: {e}", pk_path.display()))
+        })?
     } else if let Some(pk) = PublicKeyStorage::load_public_key(&server, &config)? {
         pk
     } else {
         return Err(CliError::Config(
-            "No public key available. Run 'hessra identity authenticate' first or provide --public-key".into(),
+            "No public key available. Provide one of:\n  --public-key <PEM_CONTENT>\n  --public-key-file <PATH>\nOr run 'hessra identity authenticate' first to cache the public key".into(),
         ));
     };
 
@@ -988,6 +1084,7 @@ async fn prune_tokens(
     force: bool,
     server: Option<String>,
     public_key: Option<String>,
+    public_key_file: Option<PathBuf>,
     json_output: bool,
 ) -> Result<()> {
     let config = CliConfig::load()?;
@@ -1017,11 +1114,15 @@ async fn prune_tokens(
 
     let public_key_str = if let Some(pk) = public_key {
         pk
+    } else if let Some(pk_path) = public_key_file {
+        fs::read_to_string(&pk_path).map_err(|e| {
+            CliError::FileNotFound(format!("Public key file {}: {e}", pk_path.display()))
+        })?
     } else if let Some(pk) = PublicKeyStorage::load_public_key(&server, &config)? {
         pk
     } else {
         return Err(CliError::Config(
-            "No public key available. Run 'hessra identity authenticate' first or provide --public-key".into(),
+            "No public key available. Provide one of:\n  --public-key <PEM_CONTENT>\n  --public-key-file <PATH>\nOr run 'hessra identity authenticate' first to cache the public key".into(),
         ));
     };
 

@@ -129,6 +129,13 @@ pub struct PublicKeyResponse {
     pub public_key: String,
 }
 
+/// Response from a CA certificate request
+#[derive(Serialize, Deserialize)]
+pub struct CaCertResponse {
+    pub response_msg: String,
+    pub ca_cert_pem: String,
+}
+
 /// Request payload for verifying a service chain token
 #[derive(Serialize, Deserialize)]
 pub struct VerifyServiceChainTokenRequest {
@@ -207,14 +214,19 @@ pub struct Http1Client {
 impl Http1Client {
     /// Create a new HTTP/1.1 client with the given configuration
     pub fn new(config: BaseConfig) -> Result<Self, ApiError> {
-        // Parse the CA certificate (always required for server verification)
-        let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
-            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {e}")))?;
+        // Parse the CA certificate chain (may contain root + intermediates + leaf)
+        let certs =
+            reqwest::Certificate::from_pem_bundle(config.server_ca.as_bytes()).map_err(|e| {
+                ApiError::SslConfig(format!("Failed to parse CA certificate chain: {e}"))
+            })?;
 
         // Build the client with or without mTLS depending on configuration
-        let mut client_builder = reqwest::ClientBuilder::new()
-            .use_rustls_tls()
-            .add_root_certificate(cert_der);
+        let mut client_builder = reqwest::ClientBuilder::new().use_rustls_tls();
+
+        // Add all certificates from the chain as trusted roots
+        for cert in certs {
+            client_builder = client_builder.add_root_certificate(cert);
+        }
 
         // Add mTLS identity if both cert and key are provided
         if let (Some(cert), Some(key)) = (&config.mtls_cert, &config.mtls_key) {
@@ -319,15 +331,21 @@ pub struct Http3Client {
 impl Http3Client {
     /// Create a new HTTP/3 client with the given configuration
     pub fn new(config: BaseConfig) -> Result<Self, ApiError> {
-        // Parse the CA certificate (always required for server verification)
-        let cert_der = reqwest::Certificate::from_pem(config.server_ca.as_bytes())
-            .map_err(|e| ApiError::SslConfig(format!("Failed to parse CA certificate: {e}")))?;
+        // Parse the CA certificate chain (may contain root + intermediates + leaf)
+        let certs =
+            reqwest::Certificate::from_pem_bundle(config.server_ca.as_bytes()).map_err(|e| {
+                ApiError::SslConfig(format!("Failed to parse CA certificate chain: {e}"))
+            })?;
 
         // Build the client with or without mTLS depending on configuration
         let mut client_builder = reqwest::ClientBuilder::new()
             .use_rustls_tls()
-            .http3_prior_knowledge()
-            .add_root_certificate(cert_der);
+            .http3_prior_knowledge();
+
+        // Add all certificates from the chain as trusted roots
+        for cert in certs {
+            client_builder = client_builder.add_root_certificate(cert);
+        }
 
         // Add mTLS identity if both cert and key are provided
         if let (Some(cert), Some(key)) = (&config.mtls_cert, &config.mtls_key) {
@@ -568,12 +586,15 @@ impl HessraClient {
 
         // Create a regular reqwest client (no mTLS)
         let cert_pem = server_ca.as_bytes();
-        let cert_der = reqwest::Certificate::from_pem(cert_pem)
+        let certs = reqwest::Certificate::from_pem_bundle(cert_pem)
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
-        let client = reqwest::ClientBuilder::new()
-            .use_rustls_tls()
-            .add_root_certificate(cert_der)
+        let mut client_builder = reqwest::ClientBuilder::new().use_rustls_tls();
+        for cert in certs {
+            client_builder = client_builder.add_root_certificate(cert);
+        }
+
+        let client = client_builder
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
@@ -607,6 +628,72 @@ impl HessraClient {
         Ok(result.public_key)
     }
 
+    /// Fetch the CA certificate from the Hessra service without authentication
+    ///
+    /// This function makes an unauthenticated request to the `/ca_cert` endpoint
+    /// to retrieve the server's CA certificate in PEM format. This is useful for
+    /// bootstrapping trust when setting up a new client.
+    ///
+    /// # Bootstrap Trust Considerations
+    ///
+    /// This function uses the system CA store for the initial connection. If the
+    /// server uses a self-signed certificate, consider using `fetch_ca_cert_insecure`
+    /// instead (with appropriate warnings to users).
+    pub async fn fetch_ca_cert(
+        base_url: impl Into<String>,
+        port: Option<u16>,
+    ) -> Result<String, ApiError> {
+        let base_url = base_url.into();
+
+        // Create a reqwest client using system CA store
+        let client = reqwest::ClientBuilder::new()
+            .use_rustls_tls()
+            .build()
+            .map_err(|e| ApiError::SslConfig(e.to_string()))?;
+
+        // Format the URL
+        let url = match port {
+            Some(port) => format!("https://{base_url}:{port}/ca_cert"),
+            None => format!("https://{base_url}/ca_cert"),
+        };
+
+        // Make the request
+        let response = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(ApiError::HttpClient)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(ApiError::InvalidResponse(format!(
+                "HTTP error: {status} - {error_text}"
+            )));
+        }
+
+        // Parse the response
+        let result = response
+            .json::<CaCertResponse>()
+            .await
+            .map_err(|e| ApiError::InvalidResponse(format!("Failed to parse response: {e}")))?;
+
+        // Validate it's a non-empty PEM certificate
+        if result.ca_cert_pem.is_empty() {
+            return Err(ApiError::InvalidResponse(
+                "Server returned empty CA certificate".to_string(),
+            ));
+        }
+
+        if !result.ca_cert_pem.contains("-----BEGIN CERTIFICATE-----") {
+            return Err(ApiError::InvalidResponse(
+                "Server returned invalid PEM format".to_string(),
+            ));
+        }
+
+        Ok(result.ca_cert_pem)
+    }
+
     #[cfg(feature = "http3")]
     pub async fn fetch_public_key_http3(
         base_url: impl Into<String>,
@@ -618,13 +705,17 @@ impl HessraClient {
 
         // Create a regular reqwest client (no mTLS)
         let cert_pem = server_ca.as_bytes();
-        let cert_der = reqwest::Certificate::from_pem(cert_pem)
+        let certs = reqwest::Certificate::from_pem_bundle(cert_pem)
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
-        let client = reqwest::ClientBuilder::new()
+        let mut client_builder = reqwest::ClientBuilder::new()
             .use_rustls_tls()
-            .add_root_certificate(cert_der)
-            .http3_prior_knowledge()
+            .http3_prior_knowledge();
+        for cert in certs {
+            client_builder = client_builder.add_root_certificate(cert);
+        }
+
+        let client = client_builder
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 

@@ -23,6 +23,36 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Initialize configuration for a Hessra server (alias for 'config init')
+    Init {
+        /// Server hostname (e.g., test.hessra.net)
+        server: Option<String>,
+
+        /// Server port
+        #[arg(short, long, default_value = "443")]
+        port: u16,
+
+        /// Path to mTLS client certificate
+        #[arg(long)]
+        cert: Option<PathBuf>,
+
+        /// Path to mTLS client key
+        #[arg(long)]
+        key: Option<PathBuf>,
+
+        /// Set as default server
+        #[arg(long)]
+        set_default: bool,
+
+        /// Skip fetching CA cert and public key
+        #[arg(long)]
+        skip_fetch: bool,
+
+        /// Overwrite existing configuration
+        #[arg(long)]
+        force: bool,
+    },
+
     /// Identity token management
     Identity {
         #[command(subcommand)]
@@ -109,9 +139,13 @@ pub enum IdentityCommands {
         #[arg(long, env = "HESSRA_CA")]
         ca: Option<PathBuf>,
 
-        /// Public key to use for delegation (bypasses server communication)
-        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        /// Public key PEM content to use for delegation (bypasses server communication)
+        #[arg(long, env = "HESSRA_PUBLIC_KEY", conflicts_with = "public_key_file")]
         public_key: Option<String>,
+
+        /// Path to public key file to use for delegation (bypasses server communication)
+        #[arg(long, conflicts_with = "public_key")]
+        public_key_file: Option<PathBuf>,
     },
 
     /// Verify an identity token
@@ -176,9 +210,13 @@ pub enum IdentityCommands {
         #[arg(long, env = "HESSRA_SERVER")]
         server: Option<String>,
 
-        /// Server public key (base64 encoded)
-        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        /// Server public key PEM content
+        #[arg(long, env = "HESSRA_PUBLIC_KEY", conflicts_with = "public_key_file")]
         public_key: Option<String>,
+
+        /// Path to public key file
+        #[arg(long, conflicts_with = "public_key")]
+        public_key_file: Option<PathBuf>,
     },
 
     /// Remove expired tokens from storage
@@ -195,9 +233,13 @@ pub enum IdentityCommands {
         #[arg(long, env = "HESSRA_SERVER")]
         server: Option<String>,
 
-        /// Server public key (base64 encoded)
-        #[arg(long, env = "HESSRA_PUBLIC_KEY")]
+        /// Server public key PEM content
+        #[arg(long, env = "HESSRA_PUBLIC_KEY", conflicts_with = "public_key_file")]
         public_key: Option<String>,
+
+        /// Path to public key file
+        #[arg(long, conflicts_with = "public_key")]
+        public_key_file: Option<PathBuf>,
     },
 
     /// Delete a saved token
@@ -290,10 +332,68 @@ pub enum AuthorizeCommands {
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
-    /// Initialize configuration with default values
+    /// Initialize configuration for a Hessra server
     Init {
+        /// Server hostname (e.g., test.hessra.net)
+        server: Option<String>,
+
+        /// Server port
+        #[arg(short, long, default_value = "443")]
+        port: u16,
+
+        /// Path to mTLS client certificate
+        #[arg(long)]
+        cert: Option<PathBuf>,
+
+        /// Path to mTLS client key
+        #[arg(long)]
+        key: Option<PathBuf>,
+
+        /// Set as default server
+        #[arg(long)]
+        set_default: bool,
+
+        /// Skip fetching CA cert and public key
+        #[arg(long)]
+        skip_fetch: bool,
+
         /// Overwrite existing configuration
         #[arg(long)]
+        force: bool,
+    },
+
+    /// List all configured servers
+    List {
+        /// Show detailed information for each server
+        #[arg(long)]
+        details: bool,
+    },
+
+    /// Show configuration for a specific server
+    Show {
+        /// Server hostname
+        server: String,
+    },
+
+    /// Switch default server
+    Switch {
+        /// Server hostname to set as default
+        server: String,
+    },
+
+    /// Refresh CA cert and public key from server
+    Refresh {
+        /// Server hostname
+        server: String,
+    },
+
+    /// Remove a server configuration
+    Remove {
+        /// Server hostname
+        server: String,
+
+        /// Skip confirmation prompt
+        #[arg(short, long)]
         force: bool,
     },
 

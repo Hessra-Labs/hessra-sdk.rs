@@ -927,6 +927,22 @@ pub async fn fetch_public_key_http3(
         .map_err(|e| SdkError::Generic(e.to_string()))
 }
 
+/// Fetch a CA certificate from the Hessra service
+///
+/// This is a convenience function that makes an unauthenticated request to the
+/// `/ca_cert` endpoint to retrieve the server's CA certificate in PEM format.
+/// This is useful for bootstrapping trust when setting up a new client.
+///
+/// Uses the system CA store for the initial connection.
+pub async fn fetch_ca_cert(
+    base_url: impl Into<String>,
+    port: Option<u16>,
+) -> Result<String, SdkError> {
+    HessraClient::fetch_ca_cert(base_url, port)
+        .await
+        .map_err(|e| SdkError::Generic(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
