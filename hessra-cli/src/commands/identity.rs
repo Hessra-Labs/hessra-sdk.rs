@@ -546,13 +546,16 @@ async fn verify(
 ) -> Result<()> {
     let config = CliConfig::load()?;
 
-    // Load token from either name or file
+    // Resolve server for loading token and public key
+    let server = config.resolve_server(server)?;
+
+    // Load token from either name or file (server-specific directory)
     let token = if let Some(name) = token_name {
-        TokenStorage::load_token(&name, &config)?
+        TokenStorage::load_token_for_server(&server, &name, &config)?
     } else if let Some(path) = token_file {
         fs::read_to_string(path)?
     } else {
-        TokenStorage::load_token("default", &config)?
+        TokenStorage::load_token_for_server(&server, "default", &config)?
     };
 
     let progress = if !json_output {
@@ -570,32 +573,32 @@ async fn verify(
     };
 
     // For verification, we need the public key
-    // Try to use cached public key if available
-    let default_server = "test.hessra.net".to_string();
-    let server_name = server
-        .as_ref()
-        .or(config.default_server.as_ref())
-        .unwrap_or(&default_server);
+    let mut builder = Hessra::builder().base_url(&server);
 
-    let mut builder = Hessra::builder().base_url(server_name);
-
-    // Try to load cached public key
-    if let Some(public_key) = PublicKeyStorage::load_public_key(server_name, &config)? {
+    // Try to load cached public key from server directory
+    let server_pubkey_path = ServerConfig::public_key_path(&server)?;
+    if server_pubkey_path.exists() {
+        let public_key = fs::read_to_string(&server_pubkey_path)
+            .map_err(|e| CliError::FileNotFound(format!("Public key file: {e}")))?;
         builder = builder.public_key(public_key);
         if verbose && !json_output {
-            println!("  Using cached public key for {server_name}");
-        }
-    }
-
-    // Add CA if available, otherwise use dummy (SDK requires it)
-    const DUMMY_CA: &str = include_str!("../../certs/ca-2030.pem");
-    if let Some(ca_path) = config.default_ca_path.as_ref() {
-        if let Ok(ca) = fs::read_to_string(ca_path) {
-            builder = builder.server_ca(&ca);
-        } else {
-            builder = builder.server_ca(DUMMY_CA);
+            println!("  Using cached public key for {server}");
         }
     } else {
+        return Err(CliError::Config(format!(
+            "Public key not found for server '{server}'. Run: hessra config refresh {server}"
+        )));
+    }
+
+    // Load CA cert from server directory
+    let server_ca_path = ServerConfig::ca_cert_path(&server)?;
+    if server_ca_path.exists() {
+        let ca = fs::read_to_string(&server_ca_path)
+            .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?;
+        builder = builder.server_ca(&ca);
+    } else {
+        // Use dummy CA if not available (SDK requires it but doesn't use it for verification)
+        const DUMMY_CA: &str = include_str!("../../certs/ca-2030.pem");
         builder = builder.server_ca(DUMMY_CA);
     }
 
@@ -661,12 +664,13 @@ async fn refresh(
 ) -> Result<()> {
     let config = CliConfig::load()?;
 
-    // Load the token to refresh
-    let token = TokenStorage::load_token(&token_name, &config)?;
+    // Resolve server for loading token and refreshing
+    let resolved_server = config.resolve_server(server)?;
 
-    let server = server
-        .or(config.default_server.clone())
-        .ok_or_else(|| CliError::InvalidInput("Server is required for refresh".to_string()))?;
+    // Load the token to refresh from server-specific directory
+    let token = TokenStorage::load_token_for_server(&resolved_server, &token_name, &config)?;
+
+    let server = resolved_server;
 
     let port = port.unwrap_or(443);
 
@@ -719,9 +723,10 @@ async fn refresh(
             expires_in: Some(expires),
             ..
         } => {
-            // Save the refreshed token
+            // Save the refreshed token to server-specific directory
             let save_name = save_as.unwrap_or(token_name);
-            let token_path = TokenStorage::save_token(&save_name, &new_token, &config)?;
+            let token_path =
+                TokenStorage::save_token_for_server(&server, &save_name, &new_token, &config)?;
 
             if json_output {
                 let output = json!({
@@ -761,14 +766,17 @@ async fn refresh(
 
 async fn list_tokens(json_output: bool, details: bool) -> Result<()> {
     let config = CliConfig::load()?;
-    let tokens = TokenStorage::list_tokens(&config)?;
+
+    // Resolve server to list tokens from server-specific directory
+    let server = config.resolve_server(None)?;
+    let tokens = TokenStorage::list_tokens_for_server(&server, &config)?;
 
     if details {
         // Load config for public key access
         let mut token_details = Vec::new();
 
         for token_name in &tokens {
-            match get_token_info(token_name, &config).await {
+            match get_token_info(token_name, &server, &config).await {
                 Ok(info) => token_details.push(info),
                 Err(_) => {
                     token_details.push(json!({
@@ -826,30 +834,45 @@ async fn list_tokens(json_output: bool, details: bool) -> Result<()> {
 
 async fn delete_token(token_name: String, json_output: bool) -> Result<()> {
     let config = CliConfig::load()?;
-    TokenStorage::delete_token(&token_name, &config)?;
+
+    // Resolve server to delete from server-specific directory
+    let server = config.resolve_server(None)?;
+
+    TokenStorage::delete_token_for_server(&server, &token_name, &config)?;
 
     if json_output {
         let output = json!({
             "success": true,
+            "server": server,
             "deleted": token_name,
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
     } else {
-        println!("{} Token '{token_name}' deleted.", "✓".green());
+        println!(
+            "{} Token '{token_name}' deleted from {server}.",
+            "✓".green(),
+            server = server.bright_white()
+        );
     }
 
     Ok(())
 }
 
-async fn get_token_info(token_name: &str, config: &CliConfig) -> Result<serde_json::Value> {
-    let token = TokenStorage::load_token(token_name, config)?;
+async fn get_token_info(
+    token_name: &str,
+    server: &str,
+    config: &CliConfig,
+) -> Result<serde_json::Value> {
+    let token = TokenStorage::load_token_for_server(server, token_name, config)?;
 
-    // Try to get public key from config or cache
-    let server = config
-        .default_server
-        .as_deref()
-        .unwrap_or("test.hessra.net");
-    let public_key = PublicKeyStorage::load_public_key(server, config)?;
+    // Try to get public key from server directory
+    let server_pubkey_path = ServerConfig::public_key_path(server)?;
+    let public_key = if server_pubkey_path.exists() {
+        Some(fs::read_to_string(&server_pubkey_path).ok())
+    } else {
+        None
+    }
+    .flatten();
 
     if let Some(public_key_str) = public_key {
         match inspect_token_contents(&token, &public_key_str) {
@@ -984,19 +1007,22 @@ async fn inspect_token(
 ) -> Result<()> {
     let config = CliConfig::load()?;
 
-    // Load the token
+    // Resolve server for loading token and public key
+    let resolved_server = config.resolve_server(server)?;
+
+    // Load the token from server-specific directory
     let (token, source) = if let Some(name) = token_name {
         (
-            TokenStorage::load_token(&name, &config)?,
+            TokenStorage::load_token_for_server(&resolved_server, &name, &config)?,
             format!("saved token '{name}'"),
         )
     } else if let Some(path) = token_file {
         (fs::read_to_string(path)?, "token file".to_string())
     } else {
         // Default to "default" token if it exists
-        if TokenStorage::token_exists("default", &config) {
+        if TokenStorage::token_exists_for_server(&resolved_server, "default") {
             (
-                TokenStorage::load_token("default", &config)?,
+                TokenStorage::load_token_for_server(&resolved_server, "default", &config)?,
                 "saved token 'default'".to_string(),
             )
         } else {
@@ -1006,10 +1032,8 @@ async fn inspect_token(
         }
     };
 
-    // Get public key
-    let server = server
-        .or_else(|| config.default_server.clone())
-        .unwrap_or_else(|| "test.hessra.net".to_string());
+    // Use resolved server for public key lookup
+    let server = resolved_server;
 
     let public_key_str = if let Some(pk) = public_key {
         pk
@@ -1088,7 +1112,10 @@ async fn prune_tokens(
     json_output: bool,
 ) -> Result<()> {
     let config = CliConfig::load()?;
-    let tokens = TokenStorage::list_tokens(&config)?;
+
+    // Resolve server to prune tokens from server-specific directory
+    let resolved_server = config.resolve_server(server)?;
+    let tokens = TokenStorage::list_tokens_for_server(&resolved_server, &config)?;
 
     if tokens.is_empty() {
         if json_output {
@@ -1107,10 +1134,8 @@ async fn prune_tokens(
         return Ok(());
     }
 
-    // Get public key
-    let server = server
-        .or_else(|| config.default_server.clone())
-        .unwrap_or_else(|| "test.hessra.net".to_string());
+    // Use resolved server for public key
+    let server = resolved_server;
 
     let public_key_str = if let Some(pk) = public_key {
         pk
@@ -1126,12 +1151,12 @@ async fn prune_tokens(
         ));
     };
 
-    // Check each token
+    // Check each token from server-specific directory
     let mut expired_tokens = Vec::new();
     let mut errors = Vec::new();
 
     for token_name in &tokens {
-        match TokenStorage::load_token(token_name, &config) {
+        match TokenStorage::load_token_for_server(&server, token_name, &config) {
             Ok(token) => match inspect_token_contents(&token, &public_key_str) {
                 Ok((_, _, status, expires_in)) => {
                     if status == "expired" {
@@ -1213,7 +1238,7 @@ async fn prune_tokens(
     if should_remove {
         let mut removed = 0;
         for (name, _) in &expired_tokens {
-            if TokenStorage::delete_token(name, &config).is_ok() {
+            if TokenStorage::delete_token_for_server(&server, name, &config).is_ok() {
                 removed += 1;
             }
         }

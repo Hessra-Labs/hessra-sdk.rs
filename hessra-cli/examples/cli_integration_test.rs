@@ -2,11 +2,14 @@
 //!
 //! This example tests the CLI functionality against the live test.hessra.net service.
 //! It verifies:
+//! - Server initialization and configuration
 //! - Authentication and identity token creation
-//! - Public key caching
-//! - Token delegation with cached keys
+//! - Automatic CA certificate fetching
+//! - Server-specific public key and token storage
+//! - Token delegation with server-aware caching
 //! - Token verification
 //! - Token management (list, delete)
+//! - Server management commands
 
 use anyhow::Result;
 use std::fs;
@@ -16,10 +19,8 @@ use std::process::Command;
 // Test certificates for mTLS authentication
 static MTLS_CERT: &str = include_str!("../../certs/client.crt");
 static MTLS_KEY: &str = include_str!("../../certs/client.key");
-static SERVER_CA: &str = include_str!("../../certs/ca-2030.pem");
 
 const TEST_SERVER: &str = "test.hessra.net";
-const TEST_PORT: u16 = 443;
 
 fn run_hessra_command(args: &[&str]) -> Result<(String, String, bool)> {
     let output = Command::new("cargo")
@@ -34,29 +35,32 @@ fn run_hessra_command(args: &[&str]) -> Result<(String, String, bool)> {
     Ok((stdout, stderr, success))
 }
 
-fn setup_test_certificates() -> Result<(PathBuf, PathBuf, PathBuf)> {
+fn setup_test_certificates() -> Result<(PathBuf, PathBuf)> {
     let temp_dir = std::env::temp_dir().join("hessra_cli_test");
     fs::create_dir_all(&temp_dir)?;
 
     let cert_path = temp_dir.join("client.crt");
     let key_path = temp_dir.join("client.key");
-    let ca_path = temp_dir.join("ca.crt");
 
     fs::write(&cert_path, MTLS_CERT)?;
     fs::write(&key_path, MTLS_KEY)?;
-    fs::write(&ca_path, SERVER_CA)?;
 
-    Ok((cert_path, key_path, ca_path))
+    Ok((cert_path, key_path))
 }
 
 fn cleanup_test_tokens() -> Result<()> {
-    // Clean up any test tokens from previous runs
+    // Clean up any test tokens from previous runs (server-specific directory)
     let home = directories::BaseDirs::new()
         .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-    let tokens_dir = home.home_dir().join(".hessra").join("tokens");
+    let server_tokens_dir = home
+        .home_dir()
+        .join(".hessra")
+        .join("servers")
+        .join(TEST_SERVER)
+        .join("tokens");
 
-    if tokens_dir.exists() {
-        for entry in fs::read_dir(&tokens_dir)? {
+    if server_tokens_dir.exists() {
+        for entry in fs::read_dir(&server_tokens_dir)? {
             let entry = entry?;
             let path = entry.path();
             if let Some(name) = path.file_name() {
@@ -74,19 +78,30 @@ fn cleanup_test_tokens() -> Result<()> {
 fn verify_public_key_cached(server: &str) -> Result<bool> {
     let home = directories::BaseDirs::new()
         .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-    let keys_dir = home.home_dir().join(".hessra").join("public_keys");
 
-    if !keys_dir.exists() {
-        return Ok(false);
-    }
+    // New server-based path
+    let pubkey_path = home
+        .home_dir()
+        .join(".hessra")
+        .join("servers")
+        .join(server)
+        .join("public_key.pem");
 
-    let sanitized_server = server
-        .replace("https://", "")
-        .replace("http://", "")
-        .replace(['/', ':'], "_");
+    Ok(pubkey_path.exists())
+}
 
-    let key_file = keys_dir.join(format!("{}.pub", sanitized_server));
-    Ok(key_file.exists())
+fn verify_ca_cert_cached(server: &str) -> Result<bool> {
+    let home = directories::BaseDirs::new()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+
+    let ca_path = home
+        .home_dir()
+        .join(".hessra")
+        .join("servers")
+        .join(server)
+        .join("ca.crt");
+
+    Ok(ca_path.exists())
 }
 
 #[tokio::main]
@@ -95,24 +110,54 @@ async fn main() -> Result<()> {
 
     // Setup
     println!("Setting up test environment...");
-    let (cert_path, key_path, ca_path) = setup_test_certificates()?;
+    let (cert_path, key_path) = setup_test_certificates()?;
     cleanup_test_tokens()?;
 
-    // Test 1: Authenticate and get identity token
-    println!("\n1. Testing authentication with mTLS...");
+    // Test 0: Server initialization
+    println!("\n0. Testing server initialization...");
     let (stdout, stderr, success) = run_hessra_command(&[
-        "identity",
-        "authenticate",
-        "--server",
+        "init",
         TEST_SERVER,
-        "--port",
-        &TEST_PORT.to_string(),
         "--cert",
         cert_path.to_str().unwrap(),
         "--key",
         key_path.to_str().unwrap(),
-        "--ca",
-        ca_path.to_str().unwrap(),
+        "--set-default",
+        "--force", // Overwrite if exists
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Server initialization failed!");
+        eprintln!("stderr: {}", stderr);
+        eprintln!("stdout: {}", stdout);
+    }
+
+    assert!(success, "Server initialization should succeed");
+    assert!(
+        stdout.contains("\"success\": true"),
+        "Should indicate success"
+    );
+    println!("✓ Server initialization successful");
+
+    // Verify CA cert was fetched and cached
+    let ca_cached = verify_ca_cert_cached(TEST_SERVER)?;
+    assert!(ca_cached, "CA certificate should be cached");
+    println!("✓ CA certificate fetched and cached");
+
+    // Verify public key was fetched and cached
+    let key_cached = verify_public_key_cached(TEST_SERVER)?;
+    assert!(key_cached, "Public key should be cached");
+    println!("✓ Public key fetched and cached");
+
+    // Test 1: Authenticate and get identity token (no --ca needed!)
+    println!("\n1. Testing authentication with auto-resolved server...");
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "identity",
+        "authenticate",
+        // No --server needed (uses default)
+        // No --cert/--key needed (uses server config)
+        // No --ca needed (auto-loaded from server directory)
         "--save-as",
         "test_main",
         "--json",
@@ -130,21 +175,17 @@ async fn main() -> Result<()> {
         "Should indicate success"
     );
     assert!(
+        stdout.contains("\"server\": \"test.hessra.net\""),
+        "Should show correct server"
+    );
+    assert!(
         stdout.contains("uri:urn:test:argo-cli0"),
         "Should have correct identity"
     );
-    println!("✓ Authentication successful");
+    println!("✓ Authentication successful (all parameters auto-resolved!)");
 
-    // Verify public key was cached
-    let key_cached = verify_public_key_cached(TEST_SERVER)?;
-    assert!(
-        key_cached,
-        "Public key should be cached after authentication"
-    );
-    println!("✓ Public key cached successfully");
-
-    // Test 2: Delegate token using cached public key (no CA needed)
-    println!("\n2. Testing delegation with cached public key...");
+    // Test 2: Delegate token using server-aware cached public key
+    println!("\n2. Testing delegation with server-aware cached public key...");
     let (stdout, stderr, success) = run_hessra_command(&[
         "identity",
         "delegate",
@@ -154,16 +195,15 @@ async fn main() -> Result<()> {
         "test_main",
         "--save-as",
         "test_delegated",
-        "--server",
-        TEST_SERVER,
-        "--port",
-        &TEST_PORT.to_string(),
+        // No --server needed (uses default)
+        // No --ca needed (auto-loaded from server directory)
+        // No --public-key needed (auto-loaded from server directory)
         "--json",
-        // Note: NOT providing --ca, should use cached key
     ])?;
 
     if !success {
         eprintln!("Delegation stderr: {}", stderr);
+        eprintln!("Delegation stdout: {}", stdout);
     }
     assert!(success, "Delegation should succeed with cached key");
     assert!(
@@ -171,10 +211,14 @@ async fn main() -> Result<()> {
         "Delegation should indicate success"
     );
     assert!(
+        stdout.contains("\"server\": \"test.hessra.net\""),
+        "Should show correct server"
+    );
+    assert!(
         stdout.contains("uri:urn:test:argo-cli0:agent1"),
         "Should have delegated identity"
     );
-    println!("✓ Delegation successful using cached public key");
+    println!("✓ Delegation successful using server-aware cached public key");
 
     // Test 3: Verify the delegated token
     println!("\n3. Testing token verification...");
@@ -185,6 +229,7 @@ async fn main() -> Result<()> {
         "test_delegated",
         "--identity",
         "uri:urn:test:argo-cli0:agent1",
+        // No --server needed (uses default)
         "--json",
     ])?;
 
@@ -198,8 +243,8 @@ async fn main() -> Result<()> {
     assert!(stdout.contains("\"valid\": true"), "Token should be valid");
     println!("✓ Token verification successful");
 
-    // Test 4: List tokens
-    println!("\n4. Testing token listing...");
+    // Test 4: List tokens (server-aware)
+    println!("\n4. Testing server-aware token listing...");
     let (stdout, _stderr, success) = run_hessra_command(&["identity", "list", "--json"])?;
 
     assert!(success, "List should succeed");
@@ -210,78 +255,146 @@ async fn main() -> Result<()> {
     );
     println!("✓ Token listing successful");
 
-    // Test 5: Test delegation with explicit public key via environment variable
-    println!("\n5. Testing delegation with explicit public key (via environment variable)...");
+    // Test 5: Server management - list servers
+    println!("\n5. Testing server management commands...");
+    let (stdout, _stderr, success) = run_hessra_command(&["config", "list", "--json"])?;
 
-    // The --public-key flag also supports the HESSRA_PUBLIC_KEY environment variable
-    // This is more practical for public keys which contain newlines
-    // We've already tested the cached key functionality, so this test is optional
-    println!("  (Skipping - public key env var is already supported via HESSRA_PUBLIC_KEY)");
+    assert!(success, "Server list should succeed");
+    assert!(stdout.contains(TEST_SERVER), "Should list test.hessra.net");
+    println!("✓ Server list successful");
 
-    // Test 6: Delete tokens
-    println!("\n6. Testing token deletion...");
+    // Test 6: Server management - show server details
+    println!("\n6. Testing server details command...");
+    let (stdout, _stderr, success) =
+        run_hessra_command(&["config", "show", TEST_SERVER, "--json"])?;
+
+    assert!(success, "Server show should succeed");
+    assert!(stdout.contains("\"hostname\""), "Should show hostname");
+    assert!(
+        stdout.contains("\"ca_cert_exists\": true"),
+        "Should confirm CA cert exists"
+    );
+    assert!(
+        stdout.contains("\"public_key_exists\": true"),
+        "Should confirm public key exists"
+    );
+    assert!(
+        stdout.contains("\"is_default\": true"),
+        "Should be marked as default"
+    );
+    println!("✓ Server details successful");
+
+    // Test 7: Delete delegated token
+    println!("\n7. Testing token deletion...");
     let (_stdout, _stderr, success) =
         run_hessra_command(&["identity", "delete", "test_delegated", "--json"])?;
 
     assert!(success, "Delete should succeed");
     println!("✓ Token deletion successful");
 
-    // Verify token was deleted
+    // Verify token was deleted from server-specific directory
     let (stdout, _stderr, success) = run_hessra_command(&["identity", "list", "--json"])?;
     assert!(success, "List should succeed");
     assert!(
         !stdout.contains("\"test_delegated\""),
         "Deleted token should not be listed"
     );
+    println!("✓ Verified token removed from server-specific storage");
 
-    // Test 7: Test fallback to fetching public key when not cached
-    println!("\n7. Testing fallback to fetching public key...");
+    // Test 8: Test CA auto-fetch on fresh server
+    println!("\n8. Testing CA auto-fetch on authentication...");
 
-    // Remove cached public key
+    // Remove the server's CA cert to simulate fresh state
     let home = directories::BaseDirs::new()
         .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
-    let keys_dir = home.home_dir().join(".hessra").join("public_keys");
-    if keys_dir.exists() {
-        fs::remove_dir_all(&keys_dir)?;
+    let ca_path = home
+        .home_dir()
+        .join(".hessra")
+        .join("servers")
+        .join(TEST_SERVER)
+        .join("ca.crt");
+
+    if ca_path.exists() {
+        fs::remove_file(&ca_path)?;
     }
 
-    // Try delegation with CA provided (should fetch and cache)
-    let (stdout, _stderr, success) = run_hessra_command(&[
+    // Authenticate - should auto-fetch CA
+    let (stdout, stderr, success) = run_hessra_command(&[
         "identity",
-        "delegate",
-        "--identity",
-        "uri:urn:test:argo-cli0:agent3",
-        "--from-token",
-        "test_main",
+        "authenticate",
         "--save-as",
-        "test_delegated_fetched",
-        "--server",
-        TEST_SERVER,
-        "--port",
-        &TEST_PORT.to_string(),
-        "--ca",
-        ca_path.to_str().unwrap(),
-        "--verbose",
+        "test_auto_ca",
         "--json",
     ])?;
 
-    assert!(success, "Delegation with CA should succeed");
-    assert!(
-        stdout.contains("\"success\": true"),
-        "Should indicate success"
-    );
+    if !success {
+        eprintln!("Auto-fetch CA failed!");
+        eprintln!("stderr: {}", stderr);
+        eprintln!("stdout: {}", stdout);
+    }
+
+    assert!(success, "Authentication with auto-fetch CA should succeed");
+
+    // Verify CA was re-fetched
+    let ca_cached = verify_ca_cert_cached(TEST_SERVER)?;
+    assert!(ca_cached, "CA certificate should be auto-fetched");
+    println!("✓ CA certificate auto-fetch successful");
+
+    // Test 9: Test fallback to fetching public key when removed
+    println!("\n9. Testing auto-fetch public key on delegation...");
+
+    // Remove cached public key
+    let pubkey_path = home
+        .home_dir()
+        .join(".hessra")
+        .join("servers")
+        .join(TEST_SERVER)
+        .join("public_key.pem");
+
+    if pubkey_path.exists() {
+        fs::remove_file(&pubkey_path)?;
+    }
+
+    // Try delegation - should auto-fetch public key using cached CA
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "identity",
+        "delegate",
+        "--identity",
+        "uri:urn:test:argo-cli0:agent2",
+        "--from-token",
+        "test_main",
+        "--save-as",
+        "test_auto_pubkey",
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Auto-fetch pubkey failed!");
+        eprintln!("stderr: {}", stderr);
+        eprintln!("stdout: {}", stdout);
+    }
+
+    assert!(success, "Delegation with auto-fetch pubkey should succeed");
 
     // Verify key was re-cached
     let key_cached = verify_public_key_cached(TEST_SERVER)?;
-    assert!(key_cached, "Public key should be re-cached after fetching");
-    println!("✓ Fallback to fetching public key successful");
+    assert!(key_cached, "Public key should be auto-fetched");
+    println!("✓ Public key auto-fetch successful");
 
     // Cleanup
-    println!("\n8. Cleaning up test artifacts...");
+    println!("\n10. Cleaning up test artifacts...");
     cleanup_test_tokens()?;
     fs::remove_dir_all(cert_path.parent().unwrap())?;
     println!("✓ Cleanup complete");
 
     println!("\n=== All tests passed! ===");
+    println!("\nKey improvements demonstrated:");
+    println!("  ✓ Server-aware storage (tokens and keys isolated per server)");
+    println!("  ✓ Automatic CA certificate fetching");
+    println!("  ✓ Automatic public key fetching");
+    println!("  ✓ Server config auto-resolution (no repetitive parameters)");
+    println!("  ✓ Default server support (minimal command arguments)");
+    println!("  ✓ Server management commands (list, show, switch)");
+
     Ok(())
 }

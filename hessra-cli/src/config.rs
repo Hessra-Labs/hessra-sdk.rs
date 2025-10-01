@@ -81,7 +81,7 @@ impl CliConfig {
         }
     }
 
-    pub fn ensure_token_dir(&self) -> Result<()> {
+    pub fn _ensure_token_dir(&self) -> Result<()> {
         let token_dir = self.token_dir()?;
         if !token_dir.exists() {
             fs::create_dir_all(&token_dir)?;
@@ -356,8 +356,8 @@ impl TokenStorage {
     }
 
     // Legacy methods (for backward compatibility)
-    pub fn save_token(name: &str, token: &str, config: &CliConfig) -> Result<PathBuf> {
-        config.ensure_token_dir()?;
+    pub fn _save_token(name: &str, token: &str, config: &CliConfig) -> Result<PathBuf> {
+        config._ensure_token_dir()?;
         let token_path = config.token_dir()?.join(format!("{name}.token"));
         fs::write(&token_path, token)?;
         Ok(token_path)
@@ -371,7 +371,7 @@ impl TokenStorage {
         Ok(fs::read_to_string(token_path)?)
     }
 
-    pub fn delete_token(name: &str, config: &CliConfig) -> Result<()> {
+    pub fn _delete_token(name: &str, config: &CliConfig) -> Result<()> {
         let token_path = config.token_dir()?.join(format!("{name}.token"));
         if token_path.exists() {
             fs::remove_file(token_path)?;
@@ -379,7 +379,7 @@ impl TokenStorage {
         Ok(())
     }
 
-    pub fn list_tokens(config: &CliConfig) -> Result<Vec<String>> {
+    pub fn _list_tokens(config: &CliConfig) -> Result<Vec<String>> {
         let token_dir = config.token_dir()?;
         if !token_dir.exists() {
             return Ok(vec![]);
