@@ -140,7 +140,7 @@ To use HTTP/3, enable the `http3` feature in your Cargo.toml:
 
 ```toml
 [dependencies]
-hessra-api = { version = "0.5.0", features = ["http3"] }
+hessra-api = { version = "0.5.1", features = ["http3"] }
 ```
 
 Then create a client with the HTTP/3 protocol:

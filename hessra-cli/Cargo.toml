@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core dependencies
-hessra-sdk = { path = "../hessra-sdk", version = "0.10.1" }
+hessra-sdk = { path = "../hessra-sdk", version = "0.10.2" }
 hessra-config = { path = "../hessra-config", version = "0.3.0" }
 
 # CLI and async
