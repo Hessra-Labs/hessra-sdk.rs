@@ -33,7 +33,7 @@ async fn run() -> Result<()> {
             skip_fetch,
             force,
         } => {
-            init_server(
+            init_server_interactive(
                 server,
                 port,
                 cert,
@@ -66,7 +66,7 @@ async fn handle_config_command(command: ConfigCommands, json_output: bool) -> Re
             skip_fetch,
             force,
         } => {
-            init_server(
+            init_server_direct(
                 server,
                 port,
                 cert,
@@ -252,8 +252,196 @@ async fn handle_config_command(command: ConfigCommands, json_output: bool) -> Re
     Ok(())
 }
 
+/// Interactive wizard for `hessra init`
 #[allow(clippy::too_many_arguments)]
-async fn init_server(
+async fn init_server_interactive(
+    server: Option<String>,
+    port: u16,
+    cert_path: Option<std::path::PathBuf>,
+    key_path: Option<std::path::PathBuf>,
+    set_default: bool,
+    skip_fetch: bool,
+    force: bool,
+    json_output: bool,
+) -> Result<()> {
+    use config::TokenStorage;
+    use dialoguer::{Confirm, Input};
+
+    // JSON mode doesn't make sense for interactive wizard
+    if json_output {
+        return init_server_direct(
+            server,
+            port,
+            cert_path,
+            key_path,
+            set_default,
+            skip_fetch,
+            force,
+            json_output,
+        )
+        .await;
+    }
+
+    // Step 1: Display logo
+    let logo = include_str!("../resources/hessra_unicode_logo.txt");
+    println!("{logo}");
+    println!("{}\n", "Welcome to Hessra!".bright_cyan().bold());
+
+    // Step 2: Scan existing configuration
+    let config_dir = CliConfig::config_dir()?;
+    let has_config = config_dir.exists();
+    let global_config = CliConfig::load().unwrap_or_default();
+    let servers = ServerConfig::list_servers().unwrap_or_default();
+
+    if has_config && !servers.is_empty() {
+        // Existing configuration - show summary
+        println!("{}", "Current Configuration:".bright_white().bold());
+        println!(
+            "  Configured servers: {}",
+            servers.join(", ").bright_yellow()
+        );
+
+        if let Some(ref default_server) = global_config.default_server {
+            println!("  Default server: {}", default_server.bright_green().bold());
+        } else {
+            println!("  Default server: {}", "(not set)".dimmed());
+        }
+
+        // Show token counts per server
+        for server_name in &servers {
+            let token_count = TokenStorage::list_tokens_for_server(server_name, &global_config)
+                .unwrap_or_default()
+                .len();
+            if token_count > 0 {
+                println!(
+                    "  {}: {} token{}",
+                    server_name.bright_white(),
+                    token_count,
+                    if token_count == 1 { "" } else { "s" }
+                );
+            }
+        }
+
+        println!();
+
+        // Ask if they want to add a new server
+        let add_server = Confirm::new()
+            .with_prompt("Would you like to configure a new server?")
+            .default(false)
+            .interact()
+            .map_err(|e| error::CliError::Io(std::io::Error::other(e)))?;
+
+        if !add_server {
+            println!("\n{} Setup complete!", "✓".green());
+            return Ok(());
+        }
+
+        println!();
+    } else {
+        // New user
+        println!(
+            "{}",
+            "It looks like this is your first time using Hessra.".dimmed()
+        );
+        println!("{}\n", "Let's get you set up!\n".dimmed());
+    }
+
+    // Step 3: Get server hostname
+    let server_hostname = if let Some(s) = server {
+        s
+    } else {
+        Input::new()
+            .with_prompt("Enter your Hessra server hostname")
+            .default("test.hessra.net".to_string())
+            .interact_text()
+            .map_err(|e| error::CliError::Io(std::io::Error::other(e)))?
+    };
+
+    // Check if already configured
+    if ServerConfig::exists(&server_hostname) && !force {
+        println!(
+            "{} Server '{}' is already configured.",
+            "!".yellow(),
+            server_hostname
+        );
+        println!("Use --force to overwrite or run: hessra config show {server_hostname}");
+        return Ok(());
+    }
+
+    // Step 4: Ask about default server
+    let make_default = if !set_default {
+        let prompt_text = if let Some(ref current_default) = global_config.default_server {
+            format!(
+                "Set '{server_hostname}' as default server? (current default: {current_default})"
+            )
+        } else {
+            format!("Set '{server_hostname}' as default server?")
+        };
+
+        Confirm::new()
+            .with_prompt(prompt_text)
+            .default(global_config.default_server.is_none())
+            .interact()
+            .map_err(|e| error::CliError::Io(std::io::Error::other(e)))?
+    } else {
+        set_default
+    };
+
+    println!("\n{}", "Initializing server configuration...".bright_cyan());
+
+    // Call the direct init function to do the actual work
+    init_server_direct(
+        Some(server_hostname.clone()),
+        port,
+        cert_path.clone(),
+        key_path.clone(),
+        make_default,
+        skip_fetch,
+        force,
+        false, // Never JSON for interactive
+    )
+    .await?;
+
+    // Step 5: Provide next steps with copy-paste commands
+    println!("\n{}", "Next Steps:".bright_cyan().bold());
+
+    let is_test_server = server_hostname == "test.hessra.net";
+
+    if is_test_server {
+        println!("{}", "  Get your first identity token:".bright_white());
+        // Use the built-in certs for test.hessra.net
+        println!("{}", "  Run this command:".dimmed());
+        println!();
+        println!(
+            "    {}",
+            "hessra identity authenticate --server test.hessra.net --cert ./certs/client.crt --key ./certs/client.key"
+                .bright_green()
+        );
+    } else {
+        println!("{}", "  Get your first identity token:".bright_white());
+        println!(
+            "{}",
+            "  Run this command with your certificate paths:".dimmed()
+        );
+        println!();
+        println!(
+            "    {}",
+            format!("hessra identity authenticate --server {server_hostname} --cert <path_to_cert> --key <path_to_key>")
+            .bright_green()
+        );
+    }
+
+    println!();
+    println!(
+        "{}",
+        "  For more information, visit: https://docs.hessra.net".dimmed()
+    );
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn init_server_direct(
     server: Option<String>,
     port: u16,
     cert_path: Option<std::path::PathBuf>,
