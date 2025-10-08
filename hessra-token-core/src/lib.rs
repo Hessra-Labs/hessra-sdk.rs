@@ -8,13 +8,18 @@
 //! - Token encoding/decoding utilities
 //! - Time configuration for token validity
 //! - Common error types
+//! - Token classification and analysis
 //! - Biscuit type re-exports
 
+pub mod classifier;
 pub mod error;
 pub mod revocation;
 pub mod time;
 pub mod utils;
 
+pub use classifier::{
+    classify_token, BlockMetadata, BlockType, TokenClassification, TokenStructure, TokenType,
+};
 pub use error::TokenError;
 pub use revocation::{
     get_authority_revocation_id, get_block_revocation_id, get_revocation_ids, RevocationId,
