@@ -8,7 +8,10 @@ mod verify;
 pub use attenuate::add_identity_attenuation_to_token;
 pub use inspect::{inspect_identity_token, InspectResult};
 pub use jit::create_short_lived_identity_token;
-pub use mint::{create_identity_biscuit, create_identity_token, create_raw_identity_biscuit};
+pub use mint::{
+    create_identity_biscuit, create_identity_token, create_raw_identity_biscuit,
+    create_sealed_identity_token,
+};
 pub use revocation::{
     get_active_identity_revocation, get_identity_revocations, IdentityRevocation,
 };
@@ -414,5 +417,39 @@ mod tests {
             verify_identity_token(token, public_key, ":something".to_string()).is_ok(),
             "Identity starting with : would match empty identity's hierarchy check"
         );
+    }
+
+    #[test]
+    fn test_sealed_identity_token_cant_be_delegated() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let result = create_sealed_identity_token(
+            "urn:hessra:alice".to_string(),
+            keypair,
+            TokenTimeConfig::default(),
+        );
+
+        assert!(
+            result.is_ok(),
+            "Should be able to create token with empty identity"
+        );
+
+        let token = result.unwrap();
+
+        assert!(
+            verify_identity_token(token.clone(), public_key, "urn:hessra:alice".to_string())
+                .is_ok(),
+            "Empty identity should verify against empty identity token"
+        );
+
+        // Try to delegate the sealed token and see that it fails
+        assert!(add_identity_attenuation_to_token(
+            token,
+            "urn:hessra:alice:computer".to_string(),
+            public_key,
+            TokenTimeConfig::default(),
+        )
+        .is_err());
     }
 }

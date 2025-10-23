@@ -55,3 +55,15 @@ pub fn create_identity_token(
     let token = biscuit.to_base64()?;
     Ok(token)
 }
+
+/// Creates a sealed (non-delegatable) identity token.
+pub fn create_sealed_identity_token(
+    subject: String,
+    key: KeyPair,
+    time_config: TokenTimeConfig,
+) -> Result<String, Box<dyn Error>> {
+    let biscuit = create_raw_identity_biscuit(subject, key, time_config)?;
+    let biscuit = biscuit.seal()?;
+    let token = biscuit.to_base64()?;
+    Ok(token)
+}
