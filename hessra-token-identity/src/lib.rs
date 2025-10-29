@@ -9,8 +9,8 @@ pub use attenuate::add_identity_attenuation_to_token;
 pub use inspect::{inspect_identity_token, InspectResult};
 pub use jit::create_short_lived_identity_token;
 pub use mint::{
-    create_identity_biscuit, create_identity_token, create_raw_identity_biscuit,
-    create_sealed_identity_token,
+    create_domain_restricted_identity_token, create_identity_token,
+    create_non_delegatable_identity_token, HessraIdentity,
 };
 pub use revocation::{
     get_active_identity_revocation, get_identity_revocations, IdentityRevocation,
@@ -28,9 +28,10 @@ mod tests {
         let keypair = KeyPair::new();
         let public_key = keypair.public();
 
-        // Test 1: Create and verify token with exact match
+        // Test 1: Create and verify non-delegatable realm identity token with exact match
         let subject = "urn:hessra:alice".to_string();
-        let token = create_identity_token(subject.clone(), keypair, TokenTimeConfig::default())
+        let token = HessraIdentity::new(subject.clone(), TokenTimeConfig::default())
+            .issue(&keypair)
             .expect("Failed to create identity token");
 
         // Should pass with exact identity
@@ -51,17 +52,39 @@ mod tests {
             "Verification should fail with different identity"
         );
 
-        // With the current implementation, more specific identities DO work without explicit attenuation
-        // because the base token check allows: $a == {subject} || $a.starts_with({subject} + ":")
-        // This might not be ideal - consider making base token more restrictive
+        // Non-delegatable realm identity: hierarchical identities should NOT work
+        // because the base token only allows exact match: $a == {subject}
         assert!(
             verify_identity_token(
                 token.clone(),
                 public_key,
                 "urn:hessra:alice:agent".to_string()
             )
+            .is_err(),
+            "Hierarchical identity should fail for non-delegatable realm identity"
+        );
+
+        // Test 2: Create and verify delegatable realm identity token
+        let delegatable_token = HessraIdentity::new(subject.clone(), TokenTimeConfig::default())
+            .delegatable(true)
+            .issue(&keypair)
+            .expect("Failed to create delegatable identity token");
+
+        // Exact identity should work
+        assert!(
+            verify_identity_token(delegatable_token.clone(), public_key, subject.clone()).is_ok(),
+            "Exact identity should work with delegatable token"
+        );
+
+        // Hierarchical identities should work with delegatable tokens
+        assert!(
+            verify_identity_token(
+                delegatable_token.clone(),
+                public_key,
+                "urn:hessra:alice:agent".to_string()
+            )
             .is_ok(),
-            "More specific identity works due to hierarchical check in base token"
+            "Hierarchical identity should work with delegatable realm identity"
         );
     }
 
@@ -70,11 +93,12 @@ mod tests {
         let keypair = KeyPair::new();
         let public_key = keypair.public();
 
-        // Create base identity token
+        // Create base delegatable identity token
         let base_identity = "urn:hessra:alice".to_string();
-        let token =
-            create_identity_token(base_identity.clone(), keypair, TokenTimeConfig::default())
-                .expect("Failed to create identity token");
+        let token = HessraIdentity::new(base_identity.clone(), TokenTimeConfig::default())
+            .delegatable(true)
+            .issue(&keypair)
+            .expect("Failed to create delegatable identity token");
 
         // Attenuate to a more specific identity
         let delegated_identity = "urn:hessra:alice:laptop".to_string();
@@ -149,10 +173,11 @@ mod tests {
         let user_identity = "urn:hessra:company:dept_eng:alice".to_string();
         let device_identity = "urn:hessra:company:dept_eng:alice:laptop".to_string();
 
-        // Create base token for organization
-        let token =
-            create_identity_token(org_identity.clone(), keypair, TokenTimeConfig::default())
-                .expect("Failed to create org token");
+        // Create base delegatable token for organization
+        let token = HessraIdentity::new(org_identity.clone(), TokenTimeConfig::default())
+            .delegatable(true)
+            .issue(&keypair)
+            .expect("Failed to create delegatable org token");
 
         // First attenuation: org -> department
         let token = add_identity_attenuation_to_token(
@@ -242,9 +267,9 @@ mod tests {
 
         let expired_keypair = KeyPair::new();
         let expired_public_key = expired_keypair.public();
-        let expired_token =
-            create_identity_token(identity.clone(), expired_keypair, expired_config)
-                .expect("Failed to create expired token");
+        let expired_token = HessraIdentity::new(identity.clone(), expired_config)
+            .issue(&expired_keypair)
+            .expect("Failed to create expired token");
 
         // Should fail verification due to expiration
         assert!(
@@ -252,7 +277,7 @@ mod tests {
             "Expired token should fail verification"
         );
 
-        // Create valid base token with long duration
+        // Create valid base delegatable token with long duration
         let valid_config = TokenTimeConfig {
             start_time: None,
             duration: 3600, // 1 hour
@@ -260,27 +285,22 @@ mod tests {
 
         let valid_keypair = KeyPair::new();
         let valid_public_key = valid_keypair.public();
-        let valid_token = create_identity_token(identity.clone(), valid_keypair, valid_config)
-            .expect("Failed to create valid token");
+        let valid_token = HessraIdentity::new(identity.clone(), valid_config)
+            .delegatable(true)
+            .issue(&valid_keypair)
+            .expect("Failed to create valid delegatable token");
 
-        // Attenuate with already expired time
-        let attenuated_expired = add_identity_attenuation_to_token(
-            valid_token.clone(),
-            "urn:hessra:alice:laptop".to_string(),
-            valid_public_key, // Use the same public key that signed the token
-            expired_config,
-        )
-        .expect("Failed to attenuate token");
-
-        // Should fail even though base token is valid
+        // Attempt to attenuate with already expired time, this should fail because
+        // the attenuation call verifies that the token attenuation is possible.
         assert!(
-            verify_identity_token(
-                attenuated_expired,
-                valid_public_key,
-                "urn:hessra:alice:laptop".to_string()
+            add_identity_attenuation_to_token(
+                valid_token.clone(),
+                "urn:hessra:alice:laptop".to_string(),
+                valid_public_key, // Use the same public key that signed the token
+                expired_config,
             )
             .is_err(),
-            "Token with expired attenuation should fail"
+            "Attenuating a token with an expired time should fail"
         );
     }
 
@@ -303,9 +323,10 @@ mod tests {
             let keypair = KeyPair::new();
             let public_key = keypair.public();
 
-            let token =
-                create_identity_token(base.to_string(), keypair, TokenTimeConfig::default())
-                    .expect(&format!("Failed to create token for {}", base));
+            let token = HessraIdentity::new(base.to_string(), TokenTimeConfig::default())
+                .delegatable(true)
+                .issue(&keypair)
+                .expect(&format!("Failed to create delegatable token for {}", base));
 
             let attenuated = add_identity_attenuation_to_token(
                 token,
@@ -334,13 +355,12 @@ mod tests {
         let keypair = KeyPair::new();
         let public_key = keypair.public();
 
-        // Create token for alice
-        let alice_token = create_identity_token(
-            "urn:hessra:alice".to_string(),
-            keypair,
-            TokenTimeConfig::default(),
-        )
-        .expect("Failed to create alice token");
+        // Create delegatable token for alice
+        let alice_token =
+            HessraIdentity::new("urn:hessra:alice".to_string(), TokenTimeConfig::default())
+                .delegatable(true)
+                .issue(&keypair)
+                .expect("Failed to create delegatable alice token");
 
         // alice2 should not be able to verify (even though "alice" is a prefix of "alice2")
         assert!(
@@ -388,13 +408,14 @@ mod tests {
         let keypair = KeyPair::new();
         let public_key = keypair.public();
 
-        // Empty identity should be handled gracefully
-        let result = create_identity_token("".to_string(), keypair, TokenTimeConfig::default());
+        // Test 1: Non-delegatable empty identity
+        let result =
+            HessraIdentity::new("".to_string(), TokenTimeConfig::default()).issue(&keypair);
 
         // This should succeed in creation (empty string is valid)
         assert!(
             result.is_ok(),
-            "Should be able to create token with empty identity"
+            "Should be able to create non-delegatable token with empty identity"
         );
 
         let token = result.unwrap();
@@ -405,51 +426,34 @@ mod tests {
             "Empty identity should verify against empty identity token"
         );
 
-        // Non-empty identity that doesn't start with ":" should fail
+        // Non-empty identity should fail (non-delegatable requires exact match)
         assert!(
             verify_identity_token(token.clone(), public_key, "urn:hessra:anyone".to_string())
                 .is_err(),
-            "Non-empty identity should not verify against empty identity token"
-        );
-
-        // But something starting with ":" would pass due to starts_with check
-        assert!(
-            verify_identity_token(token, public_key, ":something".to_string()).is_ok(),
-            "Identity starting with : would match empty identity's hierarchy check"
-        );
-    }
-
-    #[test]
-    fn test_sealed_identity_token_cant_be_delegated() {
-        let keypair = KeyPair::new();
-        let public_key = keypair.public();
-
-        let result = create_sealed_identity_token(
-            "urn:hessra:alice".to_string(),
-            keypair,
-            TokenTimeConfig::default(),
+            "Non-empty identity should not verify against non-delegatable empty identity token"
         );
 
         assert!(
-            result.is_ok(),
-            "Should be able to create token with empty identity"
+            verify_identity_token(token, public_key, ":something".to_string()).is_err(),
+            "Identity starting with : should not match non-delegatable empty identity"
         );
 
-        let token = result.unwrap();
+        // Test 2: Delegatable empty identity
+        let delegatable_token = HessraIdentity::new("".to_string(), TokenTimeConfig::default())
+            .delegatable(true)
+            .issue(&keypair)
+            .expect("Failed to create delegatable empty identity token");
 
+        // Empty identity should work
         assert!(
-            verify_identity_token(token.clone(), public_key, "urn:hessra:alice".to_string())
-                .is_ok(),
-            "Empty identity should verify against empty identity token"
+            verify_identity_token(delegatable_token.clone(), public_key, "".to_string()).is_ok(),
+            "Empty identity should verify against delegatable empty identity token"
         );
 
-        // Try to delegate the sealed token and see that it fails
-        assert!(add_identity_attenuation_to_token(
-            token,
-            "urn:hessra:alice:computer".to_string(),
-            public_key,
-            TokenTimeConfig::default(),
-        )
-        .is_err());
+        // Something starting with ":" would pass due to starts_with check
+        assert!(
+            verify_identity_token(delegatable_token, public_key, ":something".to_string()).is_ok(),
+            "Identity starting with : would match delegatable empty identity's hierarchy check"
+        );
     }
 }

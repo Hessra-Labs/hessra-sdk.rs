@@ -192,7 +192,7 @@ fn extract_all_delegated_identities(biscuit: &Biscuit) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{add_identity_attenuation_to_token, create_identity_token};
+    use crate::{add_identity_attenuation_to_token, create_identity_token, HessraIdentity};
     use hessra_token_core::{KeyPair, TokenTimeConfig};
 
     #[test]
@@ -221,9 +221,10 @@ mod tests {
         let base_identity = "urn:hessra:alice".to_string();
         let delegated_identity = "urn:hessra:alice:laptop".to_string();
 
-        let token =
-            create_identity_token(base_identity.clone(), keypair, TokenTimeConfig::default())
-                .expect("Failed to create token");
+        let token = HessraIdentity::new(base_identity.clone(), TokenTimeConfig::default())
+            .delegatable(true)
+            .issue(&keypair)
+            .expect("Failed to create token");
 
         let delegated_token = add_identity_attenuation_to_token(
             token,
@@ -262,10 +263,11 @@ mod tests {
         let base_identity = "urn:hessra:alice".to_string();
         let delegated_identity = "urn:hessra:alice:laptop".to_string();
 
-        // Test with base token
-        let token =
-            create_identity_token(base_identity.clone(), keypair, TokenTimeConfig::default())
-                .expect("Failed to create token");
+        // Test with base, delegatable token
+        let token = HessraIdentity::new(base_identity.clone(), TokenTimeConfig::default())
+            .delegatable(true)
+            .issue(&keypair)
+            .expect("Failed to create token");
 
         let active_rev = get_active_identity_revocation(token.clone(), public_key)
             .expect("Failed to get active revocation");
@@ -297,9 +299,10 @@ mod tests {
         let user_identity = "urn:hessra:company:dept_eng:alice".to_string();
 
         // Create and delegate token through multiple levels
-        let token =
-            create_identity_token(org_identity.clone(), keypair, TokenTimeConfig::default())
-                .expect("Failed to create org token");
+        let token = HessraIdentity::new(org_identity.clone(), TokenTimeConfig::default())
+            .delegatable(true)
+            .issue(&keypair)
+            .expect("Failed to create org token");
 
         let token = add_identity_attenuation_to_token(
             token,

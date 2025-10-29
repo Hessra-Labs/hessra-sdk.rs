@@ -3,6 +3,8 @@ use biscuit::macros::block;
 use chrono::Utc;
 use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError, TokenTimeConfig};
 
+use crate::verify::verify_identity_token;
+
 pub fn add_identity_attenuation_to_token(
     token: String,
     identity: String,
@@ -15,6 +17,7 @@ pub fn add_identity_attenuation_to_token(
         .start_time
         .unwrap_or_else(|| Utc::now().timestamp());
     let expiration = start_time + time_config.duration;
+    let ident = identity.clone();
     let identity_block = block!(
         r#"
             check if actor($a), $a == {identity} || $a.starts_with({identity} + ":");
@@ -37,5 +40,10 @@ pub fn add_identity_attenuation_to_token(
     let token = attenuated_biscuit
         .to_base64()
         .map_err(TokenError::biscuit_error)?;
+
+    // Verifying the token after attenuating it ensures that the token *can* be attenuated.
+    verify_identity_token(token.clone(), public_key, ident).map_err(|e| {
+        TokenError::identity_error(format!("Failed to verify attenuated token: {e}"))
+    })?;
     Ok(token)
 }
