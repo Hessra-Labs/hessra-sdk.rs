@@ -52,7 +52,7 @@ pub fn get_identity_revocations(
     public_key: PublicKey,
 ) -> Result<Vec<IdentityRevocation>, TokenError> {
     // Parse the token
-    let biscuit = Biscuit::from_base64(&token, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from_base64(&token, public_key)?;
 
     // Get all revocation IDs
     let rev_ids = get_revocation_ids(&biscuit);
@@ -119,7 +119,7 @@ pub fn get_active_identity_revocation(
     revocations
         .into_iter()
         .last()
-        .ok_or_else(|| TokenError::identity_error("No identities found in token".to_string()))
+        .ok_or_else(|| TokenError::internal("No identities found in token".to_string()))
 }
 
 /// Extract the base identity (subject) from the authority block
@@ -138,7 +138,7 @@ fn extract_base_identity(biscuit: &Biscuit) -> Result<String, TokenError> {
         }
     }
 
-    Err(TokenError::identity_error(
+    Err(TokenError::internal(
         "No subject found in authority block".to_string(),
     ))
 }

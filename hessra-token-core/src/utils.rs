@@ -54,5 +54,5 @@ pub fn public_key_from_pem_file(path: &str) -> Result<PublicKey, TokenError> {
 ///
 /// The parsed Biscuit token or an error
 pub fn parse_token(token_string: &str, public_key: PublicKey) -> Result<Biscuit, TokenError> {
-    Biscuit::from_base64(token_string, public_key).map_err(TokenError::biscuit_error)
+    Ok(Biscuit::from_base64(token_string, public_key)?)
 }

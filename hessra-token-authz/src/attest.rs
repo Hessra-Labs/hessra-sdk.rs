@@ -26,11 +26,9 @@ pub fn add_service_node_attestation(
     service: &str,
     node_key: &KeyPair,
 ) -> Result<Vec<u8>, TokenError> {
-    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from(&token, public_key)?;
 
-    let third_party_request = biscuit
-        .third_party_request()
-        .map_err(TokenError::biscuit_error)?;
+    let third_party_request = biscuit.third_party_request()?;
     let service_name = service.to_string();
 
     let third_party_block = block!(
@@ -39,17 +37,12 @@ pub fn add_service_node_attestation(
         "#
     );
 
-    let third_party_block = third_party_request
-        .create_block(&node_key.private(), third_party_block)
-        .map_err(TokenError::biscuit_error)?;
+    let third_party_block =
+        third_party_request.create_block(&node_key.private(), third_party_block)?;
 
-    let attested_biscuit = biscuit
-        .append_third_party(node_key.public(), third_party_block)
-        .map_err(TokenError::biscuit_error)?;
+    let attested_biscuit = biscuit.append_third_party(node_key.public(), third_party_block)?;
 
-    let attested_token = attested_biscuit
-        .to_vec()
-        .map_err(TokenError::biscuit_error)?;
+    let attested_token = attested_biscuit.to_vec()?;
 
     Ok(attested_token)
 }
@@ -77,11 +70,9 @@ pub fn add_multi_party_attestation(
 ) -> Result<Vec<u8>, TokenError> {
     // Note that this deserializes a token and validates the signature using the root public key
     // so this effectively validates that the first party created and signed the token
-    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from(&token, public_key)?;
 
-    let third_party_request = biscuit
-        .third_party_request()
-        .map_err(TokenError::biscuit_error)?;
+    let third_party_request = biscuit.third_party_request()?;
 
     let third_party_block = block!(
         r#"
@@ -89,17 +80,12 @@ pub fn add_multi_party_attestation(
         "#
     );
 
-    let third_party_block = third_party_request
-        .create_block(&namespace_key.private(), third_party_block)
-        .map_err(TokenError::biscuit_error)?;
+    let third_party_block =
+        third_party_request.create_block(&namespace_key.private(), third_party_block)?;
 
-    let attested_biscuit = biscuit
-        .append_third_party(namespace_key.public(), third_party_block)
-        .map_err(TokenError::biscuit_error)?;
+    let attested_biscuit = biscuit.append_third_party(namespace_key.public(), third_party_block)?;
 
-    let attested_token = attested_biscuit
-        .to_vec()
-        .map_err(TokenError::biscuit_error)?;
+    let attested_token = attested_biscuit.to_vec()?;
 
     Ok(attested_token)
 }
@@ -148,7 +134,7 @@ pub fn add_multi_party_attestation_to_token(
     namespace: String,
     namespace_key: KeyPair,
 ) -> Result<String, TokenError> {
-    let biscuit = utils::decode_token(&token).map_err(TokenError::biscuit_error)?;
+    let biscuit = utils::decode_token(&token)?;
     let biscuit = add_multi_party_attestation(biscuit, public_key, namespace, namespace_key)?;
     let attested_token = utils::encode_token(&biscuit);
     Ok(attested_token)

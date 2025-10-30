@@ -3,7 +3,10 @@ extern crate biscuit_auth as biscuit;
 use biscuit::macros::{authorizer, check, fact};
 use biscuit::Algorithm;
 use chrono::Utc;
-use hessra_token_core::{Biscuit, PublicKey, TokenError};
+use hessra_token_core::{
+    parse_authorization_failure, parse_check_failure, Biscuit, PublicKey, ServiceChainFailure,
+    TokenError,
+};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -244,13 +247,21 @@ fn verify_raw_biscuit(
     operation: String,
     domain: Option<String>,
 ) -> Result<(), TokenError> {
-    let authz = build_base_authorizer(subject, resource, operation, domain)?;
-    if authz.build(&biscuit)?.authorize().is_ok() {
-        Ok(())
-    } else {
-        Err(TokenError::authorization_error(
-            "Token does not grant required access rights",
-        ))
+    let authz = build_base_authorizer(
+        subject.clone(),
+        resource.clone(),
+        operation.clone(),
+        domain.clone(),
+    )?;
+    match authz.build(&biscuit)?.authorize() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(convert_authorization_error(
+            e,
+            Some(&subject),
+            Some(&resource),
+            Some(&operation),
+            domain.as_deref(),
+        )),
     }
 }
 
@@ -370,13 +381,18 @@ fn verify_raw_service_chain_biscuit(
     component: Option<String>,
     domain: Option<String>,
 ) -> Result<(), TokenError> {
-    let mut authz = build_base_authorizer(subject, resource.clone(), operation, domain)?;
+    let mut authz = build_base_authorizer(
+        subject.clone(),
+        resource.clone(),
+        operation.clone(),
+        domain.clone(),
+    )?;
 
     let mut component_found = false;
     if component.is_none() {
         component_found = true;
     }
-    for service_node in service_nodes {
+    for service_node in &service_nodes {
         if let Some(ref component) = component {
             if component == &service_node.component {
                 component_found = true;
@@ -384,8 +400,8 @@ fn verify_raw_service_chain_biscuit(
             }
         }
         let service = resource.clone();
-        let node_name = service_node.component;
-        let node_key = biscuit_key_from_string(service_node.public_key)?;
+        let node_name = service_node.component.clone();
+        let node_key = biscuit_key_from_string(service_node.public_key.clone())?;
         authz = authz.check(check!(
             r#"
                 check if node({service}, {node_name}) trusting authority, {node_key};
@@ -393,21 +409,25 @@ fn verify_raw_service_chain_biscuit(
         ))?;
     }
 
-    if let Some(ref component) = component {
+    if let Some(ref component_name) = component {
         if !component_found {
-            return Err(TokenError::authorization_error(format!(
-                "Token does not grant required access rights. missing {}",
-                component.clone()
-            )));
+            return Err(TokenError::ServiceChainFailed {
+                component: component_name.clone(),
+                reason: ServiceChainFailure::ComponentNotFound,
+            });
         }
     }
 
-    if authz.build(&biscuit)?.authorize().is_ok() {
-        Ok(())
-    } else {
-        Err(TokenError::authorization_error(
-            "Token does not grant required access rights",
-        ))
+    match authz.build(&biscuit)?.authorize() {
+        Ok(_) => Ok(()),
+        Err(e) => Err(convert_service_chain_error(
+            e,
+            &subject,
+            &resource,
+            &operation,
+            service_nodes,
+            domain.as_deref(),
+        )),
     }
 }
 
@@ -443,4 +463,155 @@ pub fn verify_service_chain_token_local(
     )
     .with_service_chain(service_nodes, component)
     .verify()
+}
+
+/// Convert biscuit authorization errors to detailed authorization errors
+fn convert_authorization_error(
+    err: biscuit::error::Token,
+    subject: Option<&str>,
+    resource: Option<&str>,
+    operation: Option<&str>,
+    domain: Option<&str>,
+) -> TokenError {
+    use biscuit::error::{Logic, Token};
+
+    match err {
+        Token::FailedLogic(logic_err) => match &logic_err {
+            Logic::Unauthorized { checks, .. } | Logic::NoMatchingPolicy { checks } => {
+                // Try to parse each failed check for more specific errors
+                for failed_check in checks.iter() {
+                    let (block_id, check_id, rule) = match failed_check {
+                        biscuit::error::FailedCheck::Block(block_check) => (
+                            block_check.block_id,
+                            block_check.check_id,
+                            block_check.rule.clone(),
+                        ),
+                        biscuit::error::FailedCheck::Authorizer(auth_check) => {
+                            (0, auth_check.check_id, auth_check.rule.clone())
+                        }
+                    };
+
+                    // Try to parse the check for specific error types
+                    let parsed_error = parse_check_failure(block_id, check_id, &rule);
+
+                    // Enhance domain errors with context we have
+                    match parsed_error {
+                        TokenError::DomainMismatch {
+                            expected,
+                            block_id,
+                            check_id,
+                            ..
+                        } => {
+                            return TokenError::DomainMismatch {
+                                expected,
+                                provided: domain.map(|s| s.to_string()),
+                                block_id,
+                                check_id,
+                            };
+                        }
+                        TokenError::Expired { .. } => return parsed_error,
+                        _ => {}
+                    }
+                }
+
+                // Check if this looks like a rights denial (no matching policy)
+                if matches!(logic_err, Logic::NoMatchingPolicy { .. }) {
+                    return parse_authorization_failure(
+                        subject,
+                        resource,
+                        operation,
+                        &format!("{checks:?}"),
+                    );
+                }
+
+                // If we couldn't parse any specific error, use generic conversion
+                TokenError::from(Token::FailedLogic(logic_err))
+            }
+            other => TokenError::from(Token::FailedLogic(other.clone())),
+        },
+        other => TokenError::from(other),
+    }
+}
+
+/// Convert biscuit authorization errors to service chain specific errors
+fn convert_service_chain_error(
+    err: biscuit::error::Token,
+    subject: &str,
+    resource: &str,
+    operation: &str,
+    service_nodes: Vec<ServiceNode>,
+    domain: Option<&str>,
+) -> TokenError {
+    use biscuit::error::{Logic, Token};
+
+    match err {
+        Token::FailedLogic(logic_err) => match &logic_err {
+            Logic::Unauthorized { checks, .. } | Logic::NoMatchingPolicy { checks } => {
+                // Check if any failure is service chain related
+                for failed_check in checks.iter() {
+                    let (block_id, check_id, rule) = match failed_check {
+                        biscuit::error::FailedCheck::Block(block_check) => (
+                            block_check.block_id,
+                            block_check.check_id,
+                            block_check.rule.clone(),
+                        ),
+                        biscuit::error::FailedCheck::Authorizer(auth_check) => {
+                            (0, auth_check.check_id, auth_check.rule.clone())
+                        }
+                    };
+
+                    // Check if this is a service chain check (contains "node(")
+                    if rule.contains("node(") {
+                        // Try to extract component name from the rule
+                        for service_node in &service_nodes {
+                            if rule.contains(&service_node.component) {
+                                return TokenError::ServiceChainFailed {
+                                    component: service_node.component.clone(),
+                                    reason: ServiceChainFailure::MissingAttestation,
+                                };
+                            }
+                        }
+
+                        // Generic service chain failure
+                        return TokenError::ServiceChainFailed {
+                            component: resource.to_string(),
+                            reason: ServiceChainFailure::Other(
+                                "Service chain attestation check failed".to_string(),
+                            ),
+                        };
+                    }
+
+                    // Check for other specific error types
+                    let parsed_error = parse_check_failure(block_id, check_id, &rule);
+                    match parsed_error {
+                        TokenError::DomainMismatch {
+                            expected,
+                            block_id,
+                            check_id,
+                            ..
+                        } => {
+                            return TokenError::DomainMismatch {
+                                expected,
+                                provided: domain.map(|s| s.to_string()),
+                                block_id,
+                                check_id,
+                            };
+                        }
+                        TokenError::Expired { .. } => return parsed_error,
+                        _ => {}
+                    }
+                }
+
+                // Fallback to authorization error
+                parse_authorization_failure(
+                    Some(subject),
+                    Some(resource),
+                    Some(operation),
+                    &format!("{checks:?}"),
+                )
+            }
+            other => TokenError::from(Token::FailedLogic(other.clone())),
+        },
+        other => TokenError::from(other),
+    }
 }

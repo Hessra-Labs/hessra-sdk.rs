@@ -1,7 +1,7 @@
 extern crate biscuit_auth as biscuit;
 use biscuit::macros::{authorizer, fact};
 use chrono::Utc;
-use hessra_token_core::{Biscuit, PublicKey, TokenError};
+use hessra_token_core::{parse_check_failure, Biscuit, PublicKey, TokenError};
 
 /// Builder for verifying Hessra identity tokens with flexible configuration.
 ///
@@ -97,9 +97,13 @@ impl IdentityVerifier {
     /// - The identity doesn't match (if identity verification is enabled)
     /// - The domain doesn't match (if domain restriction is set on token)
     pub fn verify(self) -> Result<(), TokenError> {
-        let biscuit = Biscuit::from_base64(&self.token, self.public_key)
-            .map_err(TokenError::biscuit_error)?;
+        // Parse and verify the token
+        let biscuit = Biscuit::from_base64(&self.token, self.public_key)?;
         let now = Utc::now().timestamp();
+
+        // Store identity and domain for better error messages
+        let expected_identity = self.identity.clone();
+        let expected_domain = self.domain.clone();
 
         // Build the base authorizer depending on whether identity is specified
         let mut authz = if let Some(identity) = self.identity {
@@ -133,13 +137,16 @@ impl IdentityVerifier {
 
         let mut authz = authz
             .build(&biscuit)
-            .map_err(|e| TokenError::identity_error(format!("Failed to build authorizer: {e}")))?;
+            .map_err(|e| TokenError::internal(format!("Failed to build authorizer: {e}")))?;
 
+        // Perform authorization and convert errors to detailed types
         match authz.authorize() {
             Ok(_) => Ok(()),
-            Err(e) => Err(TokenError::identity_error(format!(
-                "Identity verification failed: {e}"
-            ))),
+            Err(e) => Err(convert_identity_verification_error(
+                e,
+                expected_identity,
+                expected_domain,
+            )),
         }
     }
 }
@@ -158,4 +165,93 @@ pub fn verify_identity_token(
     IdentityVerifier::new(token, public_key)
         .with_identity(identity)
         .verify()
+}
+
+/// Convert biscuit authorization errors to detailed identity verification errors
+fn convert_identity_verification_error(
+    err: biscuit::error::Token,
+    expected_identity: Option<String>,
+    expected_domain: Option<String>,
+) -> TokenError {
+    use biscuit::error::{Logic, Token};
+
+    match err {
+        Token::FailedLogic(logic_err) => match &logic_err {
+            Logic::Unauthorized { checks, .. } | Logic::NoMatchingPolicy { checks } => {
+                // Try to parse each failed check for more specific errors
+                for failed_check in checks.iter() {
+                    let (block_id, check_id, rule) = match failed_check {
+                        biscuit::error::FailedCheck::Block(block_check) => (
+                            block_check.block_id,
+                            block_check.check_id,
+                            block_check.rule.clone(),
+                        ),
+                        biscuit::error::FailedCheck::Authorizer(auth_check) => {
+                            (0, auth_check.check_id, auth_check.rule.clone())
+                        }
+                    };
+
+                    // Try to parse the check for specific error types
+                    let parsed_error = parse_check_failure(block_id, check_id, &rule);
+
+                    // Enhance errors with context we have
+                    let enhanced_error = match &parsed_error {
+                        TokenError::DomainMismatch {
+                            expected,
+                            block_id,
+                            check_id,
+                            ..
+                        } => TokenError::DomainMismatch {
+                            expected: expected.clone(),
+                            provided: expected_domain.clone(),
+                            block_id: *block_id,
+                            check_id: *check_id,
+                        },
+                        TokenError::IdentityMismatch { expected, .. } => {
+                            if let Some(identity) = &expected_identity {
+                                TokenError::IdentityMismatch {
+                                    expected: expected.clone(),
+                                    actual: identity.clone(),
+                                }
+                            } else {
+                                return parsed_error;
+                            }
+                        }
+                        TokenError::HierarchyViolation {
+                            expected,
+                            delegatable,
+                            block_id,
+                            check_id,
+                            ..
+                        } => {
+                            if let Some(identity) = &expected_identity {
+                                TokenError::HierarchyViolation {
+                                    expected: expected.clone(),
+                                    actual: identity.clone(),
+                                    delegatable: *delegatable,
+                                    block_id: *block_id,
+                                    check_id: *check_id,
+                                }
+                            } else {
+                                return parsed_error;
+                            }
+                        }
+                        // Return first specific error we find
+                        TokenError::Expired { .. } | TokenError::CheckFailed { .. } => {
+                            return parsed_error
+                        }
+                        // For other errors, continue to next check
+                        _ => continue,
+                    };
+
+                    return enhanced_error;
+                }
+
+                // If we couldn't parse any specific error, use generic conversion
+                TokenError::from(Token::FailedLogic(logic_err))
+            }
+            other => TokenError::from(Token::FailedLogic(other.clone())),
+        },
+        other => TokenError::from(other),
+    }
 }

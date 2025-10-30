@@ -24,7 +24,7 @@ pub fn create_short_lived_identity_token(
     public_key: PublicKey,
 ) -> Result<String, TokenError> {
     // Parse the original token
-    let biscuit = Biscuit::from_base64(&token, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from_base64(&token, public_key)?;
 
     // Generate a new ephemeral keypair for this attenuation
     let ephemeral_key = KeyPair::new();
@@ -41,24 +41,16 @@ pub fn create_short_lived_identity_token(
     );
 
     // Create a third-party request for the attenuation
-    let third_party_request = biscuit
-        .third_party_request()
-        .map_err(TokenError::biscuit_error)?;
+    let third_party_request = biscuit.third_party_request()?;
 
     // Create the block with the ephemeral key
-    let time_block = third_party_request
-        .create_block(&ephemeral_key.private(), time_block)
-        .map_err(TokenError::biscuit_error)?;
+    let time_block = third_party_request.create_block(&ephemeral_key.private(), time_block)?;
 
     // Append the third-party block to the biscuit
-    let attenuated_biscuit = biscuit
-        .append_third_party(ephemeral_key.public(), time_block)
-        .map_err(TokenError::biscuit_error)?;
+    let attenuated_biscuit = biscuit.append_third_party(ephemeral_key.public(), time_block)?;
 
     // Return the attenuated token as a base64 string
-    let token = attenuated_biscuit
-        .to_base64()
-        .map_err(TokenError::biscuit_error)?;
+    let token = attenuated_biscuit.to_base64()?;
 
     Ok(token)
 }

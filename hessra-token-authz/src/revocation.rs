@@ -26,7 +26,7 @@ pub fn get_authorization_revocation_id(
     public_key: PublicKey,
 ) -> Result<RevocationId, TokenError> {
     // Parse the token
-    let biscuit = Biscuit::from_base64(&token, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from_base64(&token, public_key)?;
 
     // Get the authority block's revocation ID
     get_authority_revocation_id(&biscuit).ok_or_else(|| {
@@ -51,7 +51,7 @@ pub fn get_authorization_revocation_id_from_bytes(
     public_key: PublicKey,
 ) -> Result<RevocationId, TokenError> {
     // Parse the token from bytes
-    let biscuit = Biscuit::from(&token_bytes, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from(&token_bytes, public_key)?;
 
     // Get the authority block's revocation ID
     get_authority_revocation_id(&biscuit).ok_or_else(|| {

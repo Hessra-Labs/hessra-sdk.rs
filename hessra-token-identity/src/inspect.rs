@@ -35,7 +35,7 @@ pub fn inspect_identity_token(
     token: String,
     public_key: PublicKey,
 ) -> Result<InspectResult, TokenError> {
-    let biscuit = Biscuit::from_base64(&token, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from_base64(&token, public_key)?;
     let now = Utc::now().timestamp();
 
     let authorizer = authorizer!(
@@ -48,16 +48,16 @@ pub fn inspect_identity_token(
 
     let mut authorizer = authorizer
         .build(&biscuit)
-        .map_err(|e| TokenError::identity_error(format!("Failed to build authorizer: {e}")))?;
+        .map_err(|e| TokenError::internal(format!("Failed to build authorizer: {e}")))?;
 
     let subjects: Vec<(String,)> = authorizer
         .query("data($name) <- subject($name)")
-        .map_err(|e| TokenError::identity_error(format!("Failed to query subject: {e}")))?;
+        .map_err(|e| TokenError::internal(format!("Failed to query subject: {e}")))?;
 
     let base_identity = subjects
         .first()
         .map(|(s,)| s.clone())
-        .ok_or_else(|| TokenError::identity_error("No subject found in token".to_string()))?;
+        .ok_or_else(|| TokenError::internal("No subject found in token".to_string()))?;
 
     // Check if token has attenuation blocks (is delegated)
     // A token is delegated if it has more than the authority block (block 0)

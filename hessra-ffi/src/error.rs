@@ -20,12 +20,43 @@ pub enum HessraResult {
 
 impl From<hessra_token::TokenError> for HessraResult {
     fn from(err: hessra_token::TokenError) -> Self {
+        use hessra_token::TokenError;
+
         match err {
-            hessra_token::TokenError::BiscuitError(_) => HessraResult::ERROR_INVALID_TOKEN,
-            hessra_token::TokenError::VerificationError(_) => {
+            // Signature and format errors
+            TokenError::InvalidSignature { .. }
+            | TokenError::UnknownPublicKey
+            | TokenError::DeserializationError { .. }
+            | TokenError::SerializationError { .. }
+            | TokenError::Base64DecodingError { .. }
+            | TokenError::UnsupportedVersion { .. } => HessraResult::ERROR_INVALID_TOKEN,
+
+            // Invalid key format
+            TokenError::InvalidKeyFormat { .. } => HessraResult::ERROR_INVALID_KEY,
+
+            // Verification failures
+            TokenError::Expired { .. }
+            | TokenError::DomainMismatch { .. }
+            | TokenError::CheckFailed { .. }
+            | TokenError::IdentityMismatch { .. }
+            | TokenError::HierarchyViolation { .. }
+            | TokenError::AttenuationFailed { .. }
+            | TokenError::BearerNotAllowed { .. }
+            | TokenError::RightsDenied { .. }
+            | TokenError::ServiceChainFailed { .. }
+            | TokenError::MultiPartyAttestationMissing { .. }
+            | TokenError::NoMatchingPolicy { .. }
+            | TokenError::PolicyMatchedButChecksFailed { .. } => {
                 HessraResult::ERROR_VERIFICATION_FAILED
             }
-            _ => HessraResult::ERROR_UNKNOWN,
+
+            // Execution errors
+            TokenError::ExecutionLimitReached { .. }
+            | TokenError::ExpressionError { .. }
+            | TokenError::InvalidBlockRule { .. } => HessraResult::ERROR_VERIFICATION_FAILED,
+
+            // Generic errors
+            TokenError::Internal(_) | TokenError::Generic(_) => HessraResult::ERROR_UNKNOWN,
         }
     }
 }

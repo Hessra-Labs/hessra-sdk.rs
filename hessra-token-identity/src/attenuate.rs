@@ -12,7 +12,7 @@ pub fn add_identity_attenuation_to_token(
     time_config: TokenTimeConfig,
 ) -> Result<String, TokenError> {
     let ephemeral_key = KeyPair::new();
-    let biscuit = Biscuit::from_base64(&token, public_key).map_err(TokenError::biscuit_error)?;
+    let biscuit = Biscuit::from_base64(&token, public_key)?;
     let start_time = time_config
         .start_time
         .unwrap_or_else(|| Utc::now().timestamp());
@@ -25,25 +25,20 @@ pub fn add_identity_attenuation_to_token(
         "#
     );
 
-    let third_party_request = biscuit
-        .third_party_request()
-        .map_err(TokenError::biscuit_error)?;
+    let third_party_request = biscuit.third_party_request()?;
 
-    let identity_block = third_party_request
-        .create_block(&ephemeral_key.private(), identity_block)
-        .map_err(TokenError::biscuit_error)?;
+    let identity_block =
+        third_party_request.create_block(&ephemeral_key.private(), identity_block)?;
 
-    let attenuated_biscuit = biscuit
-        .append_third_party(ephemeral_key.public(), identity_block)
-        .map_err(TokenError::biscuit_error)?;
+    let attenuated_biscuit = biscuit.append_third_party(ephemeral_key.public(), identity_block)?;
 
-    let token = attenuated_biscuit
-        .to_base64()
-        .map_err(TokenError::biscuit_error)?;
+    let token = attenuated_biscuit.to_base64()?;
 
     // Verifying the token after attenuating it ensures that the token *can* be attenuated.
     verify_identity_token(token.clone(), public_key, ident).map_err(|e| {
-        TokenError::identity_error(format!("Failed to verify attenuated token: {e}"))
+        TokenError::AttenuationFailed {
+            reason: format!("Failed to verify attenuated token: {e}"),
+        }
     })?;
     Ok(token)
 }

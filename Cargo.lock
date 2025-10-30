@@ -1086,6 +1086,7 @@ dependencies = [
  "biscuit-auth",
  "chrono",
  "hex",
+ "regex",
  "serde",
  "thiserror 2.0.12",
 ]

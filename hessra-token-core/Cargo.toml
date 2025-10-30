@@ -16,4 +16,5 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-hex = { workspace = true } 
+hex = { workspace = true }
+regex = { workspace = true }

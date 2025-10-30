@@ -14,16 +14,18 @@
 pub mod classifier;
 pub mod error;
 pub mod revocation;
+pub mod rule_parser;
 pub mod time;
 pub mod utils;
 
 pub use classifier::{
     classify_token, BlockMetadata, BlockType, TokenClassification, TokenStructure, TokenType,
 };
-pub use error::TokenError;
+pub use error::{CheckFailure, ServiceChainFailure, TokenError};
 pub use revocation::{
     get_authority_revocation_id, get_block_revocation_id, get_revocation_ids, RevocationId,
 };
+pub use rule_parser::{parse_authorization_failure, parse_check_failure};
 pub use time::TokenTimeConfig;
 pub use utils::{decode_token, encode_token, parse_token, public_key_from_pem_file};
 
