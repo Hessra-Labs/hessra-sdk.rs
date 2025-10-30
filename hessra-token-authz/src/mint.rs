@@ -1657,4 +1657,200 @@ mod tests {
             "Multi-party token should fail verification without domain fact or attestations"
         );
     }
+
+    #[test]
+    fn test_authorization_verifier_with_domain() {
+        use crate::verify::AuthorizationVerifier;
+
+        let subject = "alice".to_string();
+        let resource = "resource1".to_string();
+        let operation = "read".to_string();
+        let domain = "myapp.hessra.dev".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create basic authorization token with domain restriction
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .domain_restricted(domain.clone())
+        .issue(&keypair)
+        .expect("Failed to create domain-restricted token");
+
+        // Verify with matching domain using builder - should succeed
+        assert!(
+            AuthorizationVerifier::new(
+                token.clone(),
+                public_key,
+                subject.clone(),
+                resource.clone(),
+                operation.clone(),
+            )
+            .with_domain(domain.clone())
+            .verify()
+            .is_ok(),
+            "Token should verify with correct domain using builder"
+        );
+
+        // Verify without domain context - should fail
+        assert!(
+            AuthorizationVerifier::new(
+                token.clone(),
+                public_key,
+                subject.clone(),
+                resource.clone(),
+                operation.clone(),
+            )
+            .verify()
+            .is_err(),
+            "Token should fail verification without domain context"
+        );
+
+        // Verify with wrong domain - should fail
+        assert!(
+            AuthorizationVerifier::new(
+                token.clone(),
+                public_key,
+                subject.clone(),
+                resource.clone(),
+                operation.clone(),
+            )
+            .with_domain("wrongdomain.com".to_string())
+            .verify()
+            .is_err(),
+            "Token should fail verification with wrong domain"
+        );
+
+        // Test with non-domain-restricted token - extra domain context shouldn't break it
+        let regular_token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .issue(&keypair)
+        .expect("Failed to create regular token");
+
+        // Regular token should pass with or without domain context
+        assert!(
+            AuthorizationVerifier::new(
+                regular_token.clone(),
+                public_key,
+                subject.clone(),
+                resource.clone(),
+                operation.clone(),
+            )
+            .verify()
+            .is_ok(),
+            "Regular token should verify without domain context"
+        );
+
+        assert!(
+            AuthorizationVerifier::new(regular_token, public_key, subject, resource, operation,)
+                .with_domain(domain)
+                .verify()
+                .is_ok(),
+            "Regular token should verify even with extra domain context"
+        );
+    }
+
+    #[test]
+    fn test_service_chain_verifier_with_domain() {
+        use crate::verify::{AuthorizationVerifier, ServiceNode};
+
+        let subject = "alice".to_string();
+        let resource = "resource1".to_string();
+        let operation = "read".to_string();
+        let domain = "myapp.hessra.dev".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create service node
+        let node_keypair = KeyPair::new();
+        let node_public_key = node_keypair.public();
+        let node_key_string = format!("ed25519/{}", hex::encode(node_public_key.to_bytes()));
+
+        let service_nodes = vec![ServiceNode {
+            component: "api-gateway".to_string(),
+            public_key: node_key_string,
+        }];
+
+        // Create service chain token with domain restriction
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .service_chain(service_nodes.clone())
+        .domain_restricted(domain.clone())
+        .issue(&keypair)
+        .expect("Failed to create service chain token with domain");
+
+        // Convert token to bytes for attestation
+        let token_bytes = crate::decode_token(&token).expect("Failed to decode token");
+
+        // Add service node attestation
+        let attested_token_bytes = crate::attest::add_service_node_attestation(
+            token_bytes,
+            public_key,
+            &resource,
+            &node_keypair,
+        )
+        .expect("Failed to add attestation");
+
+        // Verify with service chain and domain - should succeed
+        assert!(
+            AuthorizationVerifier::from_bytes(
+                attested_token_bytes.clone(),
+                public_key,
+                subject.clone(),
+                resource.clone(),
+                operation.clone(),
+            )
+            .expect("Failed to create verifier")
+            .with_service_chain(service_nodes.clone(), Some("api-gateway".to_string()))
+            .with_domain(domain.clone())
+            .verify()
+            .is_ok(),
+            "Service chain token should verify with domain"
+        );
+
+        // Verify with service chain but no domain - should fail
+        assert!(
+            AuthorizationVerifier::from_bytes(
+                attested_token_bytes.clone(),
+                public_key,
+                subject.clone(),
+                resource.clone(),
+                operation.clone(),
+            )
+            .expect("Failed to create verifier")
+            .with_service_chain(service_nodes.clone(), Some("api-gateway".to_string()))
+            .verify()
+            .is_err(),
+            "Service chain token should fail without domain"
+        );
+
+        // Verify with domain but no service chain checks
+        // This should actually PASS because the attestation is valid and embedded in the token
+        // The service chain checks are additional validation for specific component requirements
+        assert!(
+            AuthorizationVerifier::from_bytes(
+                attested_token_bytes,
+                public_key,
+                subject,
+                resource,
+                operation,
+            )
+            .expect("Failed to create verifier")
+            .with_domain(domain)
+            .verify()
+            .is_ok(),
+            "Service chain token with valid attestation should pass basic verification"
+        );
+    }
 }

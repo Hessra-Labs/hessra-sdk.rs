@@ -6,6 +6,211 @@ use chrono::Utc;
 use hessra_token_core::{Biscuit, PublicKey, TokenError};
 use serde::Deserialize;
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct ServiceNode {
+    pub component: String,
+    pub public_key: String,
+}
+
+/// Builder for verifying Hessra authorization tokens with flexible configuration.
+///
+/// This builder allows you to configure various verification parameters including
+/// optional domain restrictions and service chain attestation.
+///
+/// # Example
+/// ```no_run
+/// use hessra_token_authz::{AuthorizationVerifier, ServiceNode, create_token};
+/// use hessra_token_core::KeyPair;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create a token
+/// let keypair = KeyPair::new();
+/// let public_key = keypair.public();
+/// let token = create_token(
+///     "user123".to_string(),
+///     "resource456".to_string(),
+///     "read".to_string(),
+///     keypair,
+/// )?;
+///
+/// // Basic authorization verification
+/// AuthorizationVerifier::new(
+///     token.clone(),
+///     public_key,
+///     "user123".to_string(),
+///     "resource456".to_string(),
+///     "read".to_string(),
+/// )
+/// .verify()?;
+///
+/// // With domain restriction
+/// AuthorizationVerifier::new(
+///     token.clone(),
+///     public_key,
+///     "user123".to_string(),
+///     "resource456".to_string(),
+///     "read".to_string(),
+/// )
+/// .with_domain("example.com".to_string())
+/// .verify()?;
+///
+/// // With service chain attestation
+/// let service_nodes = vec![
+///     ServiceNode {
+///         component: "api-gateway".to_string(),
+///         public_key: "ed25519/abcd1234...".to_string(),
+///     }
+/// ];
+/// AuthorizationVerifier::new(
+///     token,
+///     public_key,
+///     "user123".to_string(),
+///     "resource456".to_string(),
+///     "read".to_string(),
+/// )
+/// .with_service_chain(service_nodes, Some("api-gateway".to_string()))
+/// .verify()?;
+/// # Ok(())
+/// # }
+/// ```
+pub struct AuthorizationVerifier {
+    token: String,
+    public_key: PublicKey,
+    subject: String,
+    resource: String,
+    operation: String,
+    domain: Option<String>,
+    service_chain: Option<(Vec<ServiceNode>, Option<String>)>,
+}
+
+impl AuthorizationVerifier {
+    /// Creates a new authorization verifier for a base64-encoded token.
+    ///
+    /// # Arguments
+    /// * `token` - The base64-encoded authorization token to verify
+    /// * `public_key` - The public key used to verify the token signature
+    /// * `subject` - The subject (user) identifier to verify authorization for
+    /// * `resource` - The resource identifier to verify authorization against
+    /// * `operation` - The operation to verify authorization for
+    pub fn new(
+        token: String,
+        public_key: PublicKey,
+        subject: String,
+        resource: String,
+        operation: String,
+    ) -> Self {
+        Self {
+            token,
+            public_key,
+            subject,
+            resource,
+            operation,
+            domain: None,
+            service_chain: None,
+        }
+    }
+
+    /// Creates a new authorization verifier from raw token bytes.
+    ///
+    /// # Arguments
+    /// * `token` - The raw binary Biscuit token bytes
+    /// * `public_key` - The public key used to verify the token signature
+    /// * `subject` - The subject (user) identifier to verify authorization for
+    /// * `resource` - The resource identifier to verify authorization against
+    /// * `operation` - The operation to verify authorization for
+    pub fn from_bytes(
+        token: Vec<u8>,
+        public_key: PublicKey,
+        subject: String,
+        resource: String,
+        operation: String,
+    ) -> Result<Self, TokenError> {
+        // Convert bytes to base64 for internal storage
+        let biscuit = Biscuit::from(&token, public_key)?;
+        let token_string = biscuit
+            .to_base64()
+            .map_err(|e| TokenError::generic(format!("Failed to encode token: {e}")))?;
+        Ok(Self {
+            token: token_string,
+            public_key,
+            subject,
+            resource,
+            operation,
+            domain: None,
+            service_chain: None,
+        })
+    }
+
+    /// Adds a domain restriction to the verification.
+    ///
+    /// When set, adds a domain fact to the authorizer. This is required for
+    /// verifying domain-restricted tokens.
+    ///
+    /// # Arguments
+    /// * `domain` - The domain to verify against (e.g., "example.com")
+    pub fn with_domain(mut self, domain: String) -> Self {
+        self.domain = Some(domain);
+        self
+    }
+
+    /// Adds service chain attestation verification.
+    ///
+    /// When set, verifies that the token has been properly attested by the
+    /// specified service chain nodes.
+    ///
+    /// # Arguments
+    /// * `service_nodes` - The list of service nodes in the chain
+    /// * `component` - Optional specific component to verify in the chain
+    pub fn with_service_chain(
+        mut self,
+        service_nodes: Vec<ServiceNode>,
+        component: Option<String>,
+    ) -> Self {
+        self.service_chain = Some((service_nodes, component));
+        self
+    }
+
+    /// Performs the token verification with the configured parameters.
+    ///
+    /// # Returns
+    /// * `Ok(())` - If the token is valid and meets all verification requirements
+    /// * `Err(TokenError)` - If verification fails for any reason
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - The token is malformed or cannot be parsed
+    /// - The token signature is invalid
+    /// - The token has expired
+    /// - The token does not grant the required access rights
+    /// - The domain doesn't match (if domain restriction is set on token)
+    /// - Service chain attestation fails (if service chain is configured)
+    pub fn verify(self) -> Result<(), TokenError> {
+        let biscuit = Biscuit::from_base64(&self.token, self.public_key)?;
+
+        if let Some((service_nodes, component)) = self.service_chain {
+            // Service chain verification
+            verify_raw_service_chain_biscuit(
+                biscuit,
+                self.subject,
+                self.resource,
+                self.operation,
+                service_nodes,
+                component,
+                self.domain,
+            )
+        } else {
+            // Basic verification
+            verify_raw_biscuit(
+                biscuit,
+                self.subject,
+                self.resource,
+                self.operation,
+                self.domain,
+            )
+        }
+    }
+}
+
 pub(crate) fn build_base_authorizer(
     subject: String,
     resource: String,
@@ -81,8 +286,7 @@ pub fn verify_biscuit_local(
     resource: String,
     operation: String,
 ) -> Result<(), TokenError> {
-    let biscuit = Biscuit::from(&token, public_key)?;
-    verify_raw_biscuit(biscuit, subject, resource, operation, None)
+    AuthorizationVerifier::from_bytes(token, public_key, subject, resource, operation)?.verify()
 }
 
 /// Verifies a Biscuit authorization token locally without contacting the authorization server.
@@ -117,14 +321,14 @@ pub fn verify_token_local(
     resource: &str,
     operation: &str,
 ) -> Result<(), TokenError> {
-    let biscuit = Biscuit::from_base64(token, public_key)?;
-    verify_raw_biscuit(
-        biscuit,
+    AuthorizationVerifier::new(
+        token.to_string(),
+        public_key,
         subject.to_string(),
         resource.to_string(),
         operation.to_string(),
-        None,
     )
+    .verify()
 }
 
 /// Takes a public key encoded as a string in the format "ed25519/..." or "secp256r1/..."
@@ -155,12 +359,6 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
         .map_err(|e| TokenError::invalid_key_format(e.to_string()))?;
 
     Ok(key)
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct ServiceNode {
-    pub component: String,
-    pub public_key: String,
 }
 
 fn verify_raw_service_chain_biscuit(
@@ -222,16 +420,9 @@ pub fn verify_service_chain_biscuit_local(
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
-    let biscuit = Biscuit::from(&token, public_key).map_err(TokenError::biscuit_error)?;
-    verify_raw_service_chain_biscuit(
-        biscuit,
-        subject,
-        resource,
-        operation,
-        service_nodes,
-        component,
-        None,
-    )
+    AuthorizationVerifier::from_bytes(token, public_key, subject, resource, operation)?
+        .with_service_chain(service_nodes, component)
+        .verify()
 }
 
 pub fn verify_service_chain_token_local(
@@ -243,14 +434,13 @@ pub fn verify_service_chain_token_local(
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
 ) -> Result<(), TokenError> {
-    let biscuit = Biscuit::from_base64(token, public_key).map_err(TokenError::biscuit_error)?;
-    verify_raw_service_chain_biscuit(
-        biscuit,
+    AuthorizationVerifier::new(
+        token.to_string(),
+        public_key,
         subject.to_string(),
         resource.to_string(),
         operation.to_string(),
-        service_nodes,
-        component,
-        None,
     )
+    .with_service_chain(service_nodes, component)
+    .verify()
 }

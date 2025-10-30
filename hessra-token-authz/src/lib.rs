@@ -59,7 +59,7 @@ pub use mint::{
 pub use revocation::{get_authorization_revocation_id, get_authorization_revocation_id_from_bytes};
 pub use verify::{
     biscuit_key_from_string, verify_biscuit_local, verify_service_chain_biscuit_local,
-    verify_service_chain_token_local, verify_token_local, ServiceNode,
+    verify_service_chain_token_local, verify_token_local, AuthorizationVerifier, ServiceNode,
 };
 
 // Re-export commonly needed types from core

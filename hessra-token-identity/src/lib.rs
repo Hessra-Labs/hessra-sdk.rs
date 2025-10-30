@@ -15,7 +15,7 @@ pub use mint::{
 pub use revocation::{
     get_active_identity_revocation, get_identity_revocations, IdentityRevocation,
 };
-pub use verify::{verify_bearer_token, verify_identity_token};
+pub use verify::{verify_bearer_token, verify_identity_token, IdentityVerifier};
 
 #[cfg(test)]
 mod tests {
@@ -454,6 +454,123 @@ mod tests {
         assert!(
             verify_identity_token(delegatable_token, public_key, ":something".to_string()).is_ok(),
             "Identity starting with : would match delegatable empty identity's hierarchy check"
+        );
+    }
+
+    #[test]
+    fn test_domain_restricted_identity_verification() {
+        use verify::IdentityVerifier;
+
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+        let subject = "urn:hessra:alice".to_string();
+        let domain = "example.com".to_string();
+
+        // Test 1: Non-delegatable domain-restricted token
+        let domain_token = HessraIdentity::new(subject.clone(), TokenTimeConfig::default())
+            .domain_restricted(domain.clone())
+            .issue(&keypair)
+            .expect("Failed to create domain-restricted token");
+
+        // Should pass with matching domain using builder
+        assert!(
+            IdentityVerifier::new(domain_token.clone(), public_key)
+                .with_identity(subject.clone())
+                .with_domain(domain.clone())
+                .verify()
+                .is_ok(),
+            "Verification should succeed with matching domain"
+        );
+
+        // Should fail without domain context
+        assert!(
+            verify_identity_token(domain_token.clone(), public_key, subject.clone()).is_err(),
+            "Verification should fail without domain context"
+        );
+
+        // Should fail with wrong domain
+        assert!(
+            IdentityVerifier::new(domain_token.clone(), public_key)
+                .with_identity(subject.clone())
+                .with_domain("wrong.com".to_string())
+                .verify()
+                .is_err(),
+            "Verification should fail with wrong domain"
+        );
+
+        // Bearer verification should fail (needs domain fact)
+        assert!(
+            verify_bearer_token(domain_token.clone(), public_key).is_err(),
+            "Bearer verification should fail without domain context"
+        );
+
+        // Bearer with domain should pass
+        assert!(
+            IdentityVerifier::new(domain_token.clone(), public_key)
+                .with_domain(domain.clone())
+                .verify()
+                .is_ok(),
+            "Bearer verification should pass with domain context"
+        );
+
+        // Test 2: Delegatable domain-restricted token
+        let delegatable_domain_token =
+            HessraIdentity::new(subject.clone(), TokenTimeConfig::default())
+                .delegatable(true)
+                .domain_restricted(domain.clone())
+                .issue(&keypair)
+                .expect("Failed to create delegatable domain-restricted token");
+
+        // Should pass with exact identity and domain
+        assert!(
+            IdentityVerifier::new(delegatable_domain_token.clone(), public_key)
+                .with_identity(subject.clone())
+                .with_domain(domain.clone())
+                .verify()
+                .is_ok(),
+            "Delegatable token should verify with exact identity and domain"
+        );
+
+        // Should pass with hierarchical identity and domain
+        assert!(
+            IdentityVerifier::new(delegatable_domain_token.clone(), public_key)
+                .with_identity("urn:hessra:alice:laptop".to_string())
+                .with_domain(domain.clone())
+                .verify()
+                .is_ok(),
+            "Delegatable token should verify with hierarchical identity and domain"
+        );
+
+        // Should fail with hierarchical identity but no domain
+        assert!(
+            verify_identity_token(
+                delegatable_domain_token.clone(),
+                public_key,
+                "urn:hessra:alice:laptop".to_string()
+            )
+            .is_err(),
+            "Delegatable token should fail without domain context"
+        );
+
+        // Test 3: Non-domain-restricted token with domain context
+        // (extra context shouldn't break verification)
+        let regular_token = HessraIdentity::new(subject.clone(), TokenTimeConfig::default())
+            .issue(&keypair)
+            .expect("Failed to create regular token");
+
+        // Regular token should pass with or without domain context
+        assert!(
+            verify_identity_token(regular_token.clone(), public_key, subject.clone()).is_ok(),
+            "Regular token should verify without domain context"
+        );
+
+        assert!(
+            IdentityVerifier::new(regular_token.clone(), public_key)
+                .with_identity(subject.clone())
+                .with_domain(domain.clone())
+                .verify()
+                .is_ok(),
+            "Regular token should verify even with extra domain context"
         );
     }
 }
