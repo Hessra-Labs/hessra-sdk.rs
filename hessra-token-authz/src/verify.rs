@@ -1,19 +1,20 @@
 extern crate biscuit_auth as biscuit;
 
-use biscuit::macros::{authorizer, check};
+use biscuit::macros::{authorizer, check, fact};
 use biscuit::Algorithm;
 use chrono::Utc;
 use hessra_token_core::{Biscuit, PublicKey, TokenError};
 use serde::Deserialize;
 
-fn build_base_authorizer(
+pub(crate) fn build_base_authorizer(
     subject: String,
     resource: String,
     operation: String,
+    domain: Option<String>,
 ) -> Result<biscuit::AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
-    let authz = authorizer!(
+    let mut authz = authorizer!(
         r#"
             time({now});
             resource({resource});
@@ -22,6 +23,12 @@ fn build_base_authorizer(
             allow if subject($sub), resource($res), operation($op), right($sub, $res, $op);
         "#
     );
+
+    // Add domain fact if specified
+    if let Some(domain) = domain {
+        authz = authz.fact(fact!(r#"domain({domain});"#))?;
+    }
+
     Ok(authz)
 }
 
@@ -30,8 +37,9 @@ fn verify_raw_biscuit(
     subject: String,
     resource: String,
     operation: String,
+    domain: Option<String>,
 ) -> Result<(), TokenError> {
-    let authz = build_base_authorizer(subject, resource, operation)?;
+    let authz = build_base_authorizer(subject, resource, operation, domain)?;
     if authz.build(&biscuit)?.authorize().is_ok() {
         Ok(())
     } else {
@@ -74,7 +82,7 @@ pub fn verify_biscuit_local(
     operation: String,
 ) -> Result<(), TokenError> {
     let biscuit = Biscuit::from(&token, public_key)?;
-    verify_raw_biscuit(biscuit, subject, resource, operation)
+    verify_raw_biscuit(biscuit, subject, resource, operation, None)
 }
 
 /// Verifies a Biscuit authorization token locally without contacting the authorization server.
@@ -115,6 +123,7 @@ pub fn verify_token_local(
         subject.to_string(),
         resource.to_string(),
         operation.to_string(),
+        None,
     )
 }
 
@@ -161,8 +170,9 @@ fn verify_raw_service_chain_biscuit(
     operation: String,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
+    domain: Option<String>,
 ) -> Result<(), TokenError> {
-    let mut authz = build_base_authorizer(subject, resource.clone(), operation)?;
+    let mut authz = build_base_authorizer(subject, resource.clone(), operation, domain)?;
 
     let mut component_found = false;
     if component.is_none() {
@@ -220,6 +230,7 @@ pub fn verify_service_chain_biscuit_local(
         operation,
         service_nodes,
         component,
+        None,
     )
 }
 
@@ -240,5 +251,6 @@ pub fn verify_service_chain_token_local(
         operation.to_string(),
         service_nodes,
         component,
+        None,
     )
 }

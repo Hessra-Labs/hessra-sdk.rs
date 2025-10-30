@@ -12,7 +12,7 @@
 //! - Token verification: Verify tokens without contacting the authorization server
 //! - Service chain attestation: Add service node attestations to tokens
 //! - Multi-party authorization: Create tokens requiring multiple party attestations
-//! - WASM compatibility: Can be compiled to WebAssembly for use in browsers
+//! - WASM compatibility: WIP WASM bindings for token verification
 //!
 //! ## Usage
 //!
@@ -54,7 +54,7 @@ pub use mint::{
     create_biscuit, create_multi_party_biscuit, create_multi_party_biscuit_with_time,
     create_multi_party_token, create_multi_party_token_with_time, create_raw_multi_party_biscuit,
     create_service_chain_biscuit, create_service_chain_token, create_service_chain_token_with_time,
-    create_token, create_token_with_time,
+    create_token, create_token_with_time, HessraAuthorization,
 };
 pub use revocation::{get_authorization_revocation_id, get_authorization_revocation_id_from_bytes};
 pub use verify::{

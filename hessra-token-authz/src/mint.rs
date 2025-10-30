@@ -9,6 +9,186 @@ use hessra_token_core::{Biscuit, KeyPair, TokenTimeConfig};
 use std::error::Error;
 use tracing::info;
 
+/// Builder for creating Hessra authorization tokens with flexible configuration.
+///
+/// Authorization tokens can be configured with the following capabilities:
+/// - **Basic**: Simple authorization with subject, resource, and operation (default)
+/// - **Service Chain**: Add service node attestations via `.service_chain(nodes)`
+/// - **Multi-Party**: Add multi-party attestation requirements via `.multi_party(nodes)`
+/// - **Domain Restriction**: Limit token to a specific domain via `.domain_restricted(domain)`
+///
+/// Service chain and multi-party capabilities can be combined in the same token
+/// (though this is not currently validated or actively used).
+///
+/// # Example
+/// ```rust
+/// use hessra_token_authz::HessraAuthorization;
+/// use hessra_token_core::{KeyPair, TokenTimeConfig};
+///
+/// let keypair = KeyPair::new();
+///
+/// // Basic authorization with domain restriction
+/// let token = HessraAuthorization::new(
+///     "alice".to_string(),
+///     "resource1".to_string(),
+///     "read".to_string(),
+///     TokenTimeConfig::default()
+/// )
+/// .domain_restricted("myapp.hessra.dev".to_string())
+/// .issue(&keypair)
+/// .expect("Failed to create token");
+/// ```
+pub struct HessraAuthorization {
+    subject: String,
+    resource: String,
+    operation: String,
+    time_config: TokenTimeConfig,
+    service_chain_nodes: Option<Vec<ServiceNode>>,
+    multi_party_nodes: Option<Vec<ServiceNode>>,
+    domain: Option<String>,
+}
+
+impl HessraAuthorization {
+    /// Creates a new basic authorization token builder.
+    ///
+    /// # Arguments
+    /// * `subject` - The subject (user) identifier
+    /// * `resource` - The resource identifier to grant access to
+    /// * `operation` - The operation to grant access to
+    /// * `time_config` - Time configuration for token validity
+    pub fn new(
+        subject: String,
+        resource: String,
+        operation: String,
+        time_config: TokenTimeConfig,
+    ) -> Self {
+        Self {
+            subject,
+            resource,
+            operation,
+            time_config,
+            service_chain_nodes: None,
+            multi_party_nodes: None,
+            domain: None,
+        }
+    }
+
+    /// Adds service chain attestation to the authorization token.
+    ///
+    /// Service chain tokens include attestations for each service node in the chain.
+    /// The token grants access and includes trusting relationships for the specified nodes.
+    ///
+    /// Can be combined with `.multi_party()` to create a token with both capabilities
+    /// (though this is not currently validated or actively used).
+    ///
+    /// # Arguments
+    /// * `nodes` - Vector of service nodes that will attest to the token
+    pub fn service_chain(mut self, nodes: Vec<ServiceNode>) -> Self {
+        self.service_chain_nodes = Some(nodes);
+        self
+    }
+
+    /// Adds multi-party attestation requirement to the authorization token.
+    ///
+    /// Multi-party tokens require attestation from all specified parties before becoming valid.
+    /// The key difference from service chain is that the token is invalid until all parties
+    /// have provided their attestations.
+    ///
+    /// Can be combined with `.service_chain()` to create a token with both capabilities
+    /// (though this is not currently validated or actively used).
+    ///
+    /// # Arguments
+    /// * `nodes` - Vector of multi-party nodes that must attest to the token
+    pub fn multi_party(mut self, nodes: Vec<ServiceNode>) -> Self {
+        self.multi_party_nodes = Some(nodes);
+        self
+    }
+
+    /// Restricts the authorization to a specific domain.
+    ///
+    /// Adds a domain restriction check to the authority block:
+    /// - `check if domain({domain})`
+    ///
+    /// This ensures the token can only be used within the specified domain.
+    ///
+    /// # Arguments
+    /// * `domain` - The domain to restrict to (e.g., "myapp.hessra.dev")
+    pub fn domain_restricted(mut self, domain: String) -> Self {
+        self.domain = Some(domain);
+        self
+    }
+
+    /// Issues (builds and signs) the authorization token.
+    ///
+    /// # Arguments
+    /// * `keypair` - The keypair to sign the token with
+    ///
+    /// # Returns
+    /// Base64-encoded biscuit token
+    pub fn issue(self, keypair: &KeyPair) -> Result<String, Box<dyn Error>> {
+        let start_time = self
+            .time_config
+            .start_time
+            .unwrap_or_else(|| Utc::now().timestamp());
+        let expiration = start_time + self.time_config.duration;
+
+        // Extract fields for use in macro (macro doesn't support self.field directly)
+        let subject = self.subject;
+        let resource = self.resource;
+        let operation = self.operation;
+        let domain = self.domain;
+
+        // Build the base biscuit with subject, resource, operation, and time checks
+        let mut biscuit_builder = biscuit!(
+            r#"
+                right({subject}, {resource}, {operation});
+                check if time($time), $time < {expiration};
+            "#
+        );
+
+        // Add domain restriction if specified
+        if let Some(domain) = domain {
+            biscuit_builder = biscuit_builder.check(check!(
+                r#"
+                    check if domain({domain});
+                "#
+            ))?;
+        }
+
+        // Add service chain rules if specified
+        if let Some(nodes) = self.service_chain_nodes {
+            for node in nodes {
+                let component = node.component;
+                let public_key = biscuit_key_from_string(node.public_key)?;
+                biscuit_builder = biscuit_builder.rule(rule!(
+                    r#"
+                        node($s, {component}) <- service($s) trusting {public_key};
+                    "#
+                ))?;
+            }
+        }
+
+        // Add multi-party checks if specified
+        if let Some(nodes) = self.multi_party_nodes {
+            for node in nodes {
+                let component = node.component;
+                let public_key = biscuit_key_from_string(node.public_key)?;
+                biscuit_builder = biscuit_builder.check(check!(
+                    r#"
+                        check if namespace({component}) trusting {public_key};
+                    "#
+                ))?;
+            }
+        }
+
+        // Build and sign the biscuit
+        let biscuit = biscuit_builder.build(keypair)?;
+        info!("biscuit (authority): {}", biscuit);
+        let token = biscuit.to_base64()?;
+        Ok(token)
+    }
+}
+
 /// Creates a base biscuit builder with default time configuration.
 ///
 /// This is a private helper function that creates a biscuit builder with the default
@@ -1273,5 +1453,208 @@ mod tests {
             custom_time_config,
         );
         assert!(custom_time_biscuit.is_ok());
+    }
+
+    #[test]
+    fn test_basic_authorization_with_domain_restriction() {
+        let subject = "alice".to_string();
+        let resource = "resource1".to_string();
+        let operation = "read".to_string();
+        let domain = "myapp.hessra.dev".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create basic authorization token with domain restriction
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .domain_restricted(domain.clone())
+        .issue(&keypair);
+
+        assert!(token.is_ok(), "Failed to create domain-restricted token");
+        let token = token.unwrap();
+
+        // Parse and verify the token
+        let biscuit = Biscuit::from_base64(&token, public_key).unwrap();
+
+        // Build authorizer with domain fact - should succeed
+        let authz = crate::verify::build_base_authorizer(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            Some(domain.clone()),
+        )
+        .unwrap();
+        assert!(
+            authz.build(&biscuit).unwrap().authorize().is_ok(),
+            "Token should verify with correct domain"
+        );
+
+        // Build authorizer without domain fact - should fail
+        let authz_no_domain = crate::verify::build_base_authorizer(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            None,
+        )
+        .unwrap();
+        assert!(
+            authz_no_domain
+                .build(&biscuit)
+                .unwrap()
+                .authorize()
+                .is_err(),
+            "Token should fail verification without domain fact"
+        );
+
+        // Build authorizer with wrong domain - should fail
+        let authz_wrong_domain = crate::verify::build_base_authorizer(
+            subject,
+            resource,
+            operation,
+            Some("wrongdomain.com".to_string()),
+        )
+        .unwrap();
+        assert!(
+            authz_wrong_domain
+                .build(&biscuit)
+                .unwrap()
+                .authorize()
+                .is_err(),
+            "Token should fail verification with wrong domain"
+        );
+    }
+
+    #[test]
+    fn test_service_chain_with_domain_restriction() {
+        let subject = "alice".to_string();
+        let resource = "resource1".to_string();
+        let operation = "read".to_string();
+        let domain = "myapp.hessra.dev".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create service node
+        let chain_key = KeyPair::new();
+        let chain_public_key = hex::encode(chain_key.public().to_bytes());
+        let chain_public_key = format!("ed25519/{}", chain_public_key);
+        let chain_node = ServiceNode {
+            component: "edge_function".to_string(),
+            public_key: chain_public_key.clone(),
+        };
+        let nodes = vec![chain_node];
+
+        // Create service chain token with domain restriction
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .service_chain(nodes.clone())
+        .domain_restricted(domain.clone())
+        .issue(&keypair);
+
+        assert!(
+            token.is_ok(),
+            "Failed to create domain-restricted service chain token"
+        );
+        let token = token.unwrap();
+
+        // Parse and verify the token
+        let biscuit = Biscuit::from_base64(&token, public_key).unwrap();
+
+        // Build authorizer with domain fact - should succeed
+        let authz = crate::verify::build_base_authorizer(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            Some(domain),
+        )
+        .unwrap();
+        assert!(
+            authz.build(&biscuit).unwrap().authorize().is_ok(),
+            "Service chain token should verify with correct domain"
+        );
+
+        // Build authorizer without domain fact - should fail
+        let authz_no_domain =
+            crate::verify::build_base_authorizer(subject, resource, operation, None).unwrap();
+        assert!(
+            authz_no_domain
+                .build(&biscuit)
+                .unwrap()
+                .authorize()
+                .is_err(),
+            "Service chain token should fail verification without domain fact"
+        );
+    }
+
+    #[test]
+    fn test_multi_party_with_domain_restriction() {
+        let subject = "alice".to_string();
+        let resource = "resource1".to_string();
+        let operation = "read".to_string();
+        let domain = "myapp.hessra.dev".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create multi-party node
+        let party_key = KeyPair::new();
+        let party_public_key = hex::encode(party_key.public().to_bytes());
+        let party_public_key = format!("ed25519/{}", party_public_key);
+        let party_node = ServiceNode {
+            component: "approval_service".to_string(),
+            public_key: party_public_key.clone(),
+        };
+        let nodes = vec![party_node];
+
+        // Create multi-party token with domain restriction
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .multi_party(nodes.clone())
+        .domain_restricted(domain.clone())
+        .issue(&keypair);
+
+        assert!(
+            token.is_ok(),
+            "Failed to create domain-restricted multi-party token"
+        );
+        let token = token.unwrap();
+
+        // Parse and verify the token
+        let biscuit = Biscuit::from_base64(&token, public_key).unwrap();
+
+        // Build authorizer with domain fact - token will still fail because multi-party needs attestations
+        // But we're testing that domain check is present
+        let _authz = crate::verify::build_base_authorizer(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            Some(domain),
+        )
+        .unwrap();
+        // Multi-party token needs attestation, so this will fail for that reason, not domain
+        // We're just checking the token was created successfully with domain check
+        assert!(biscuit.to_base64().is_ok(), "Token should be valid biscuit");
+
+        // Build authorizer without domain fact - should also fail
+        let authz_no_domain =
+            crate::verify::build_base_authorizer(subject, resource, operation, None).unwrap();
+        assert!(
+            authz_no_domain
+                .build(&biscuit)
+                .unwrap()
+                .authorize()
+                .is_err(),
+            "Multi-party token should fail verification without domain fact or attestations"
+        );
     }
 }
