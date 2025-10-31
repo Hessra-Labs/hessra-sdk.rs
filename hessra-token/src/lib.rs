@@ -211,6 +211,7 @@ mod tests {
             r#"
                 right("alice", "resource1", "read");
                 right("alice", "resource1", "write");
+                check if subject($sub), resource($res), operation($op), right($sub, $res, $op);
             "#
         );
         let biscuit = biscuit_builder.build(&keypair).unwrap();

@@ -228,7 +228,7 @@ pub(crate) fn build_base_authorizer(
             resource({resource});
             subject({subject});
             operation({operation});
-            allow if subject($sub), resource($res), operation($op), right($sub, $res, $op);
+            allow if true;
         "#
     );
 

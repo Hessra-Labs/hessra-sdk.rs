@@ -142,6 +142,7 @@ impl HessraAuthorization {
         let mut biscuit_builder = biscuit!(
             r#"
                 right({subject}, {resource}, {operation});
+                check if subject($sub), resource($res), operation($op), right($sub, $res, $op);
                 check if time($time), $time < {expiration};
             "#
         );
@@ -242,6 +243,7 @@ fn create_base_biscuit_builder_with_time(
     let biscuit_builder = biscuit!(
         r#"
             right({subject}, {resource}, {operation});
+            check if subject($sub), resource($res), operation($op), right($sub, $res, $op);
             check if time($time), $time < {expiration};
         "#
     );
