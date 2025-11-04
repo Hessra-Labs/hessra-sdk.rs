@@ -1,6 +1,6 @@
 [package]
 name = "hessra-token"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["Jake Valentic <jake@hessra.net>"]
@@ -12,8 +12,8 @@ categories = ["authentication", "api-bindings", "web-programming"]
 readme = "README.md"
 
 [dependencies]
-hessra-token-core = { path = "../hessra-token-core", version = "0.2.1" }
-hessra-token-authz = { path = "../hessra-token-authz", version = "0.3.0" }
+hessra-token-core = { path = "../hessra-token-core", version = "0.3.0" }
+hessra-token-authz = { path = "../hessra-token-authz", version = "0.4.0" }
 
 # Optional dependencies for WASM support
 wasm-bindgen = { version = "0.2", optional = true }
