@@ -2070,6 +2070,7 @@ mod tests {
             resource.clone(),
             operation.clone(),
             &activator_keypair,
+            TokenTimeConfig::default(),
         )
         .expect("Failed to activate latent token");
 
@@ -2138,6 +2139,7 @@ mod tests {
                 resource.clone(),
                 operation.clone(),
                 &activator_keypair,
+                TokenTimeConfig::default(),
             )
             .expect("Failed to activate latent token");
 
@@ -2188,6 +2190,7 @@ mod tests {
             "resource1".to_string(),
             "write".to_string(), // Not in latent_rights!
             &activator_keypair,
+            TokenTimeConfig::default(),
         )
         .expect("Activation should succeed (validation happens at verification)");
 
@@ -2239,6 +2242,7 @@ mod tests {
             "resource1".to_string(),
             "read".to_string(),
             &activator_keypair,
+            TokenTimeConfig::default(),
         )
         .expect("Failed to activate latent token");
 
@@ -2319,6 +2323,7 @@ mod tests {
             "resource1".to_string(),
             "read".to_string(),
             &activator_keypair,
+            TokenTimeConfig::default(),
         )
         .expect("Failed to activate attested latent token");
 
@@ -2379,6 +2384,7 @@ mod tests {
             "resource1".to_string(),
             "read".to_string(),
             &activator_keypair,
+            TokenTimeConfig::default(),
         )
         .expect("Failed to activate latent token");
 
@@ -2440,6 +2446,7 @@ mod tests {
             "resource1".to_string(),
             "read".to_string(),
             &wrong_activator_keypair,
+            TokenTimeConfig::default(),
         )
         .expect("Activation succeeds (wrong key detected at verification)");
 
@@ -2455,6 +2462,133 @@ mod tests {
         assert!(
             result.is_err(),
             "Should fail to verify token activated with wrong key"
+        );
+    }
+
+    #[test]
+    fn test_latent_capability_time_attenuation() {
+        let root_keypair = KeyPair::new();
+        let root_public_key = root_keypair.public();
+
+        let activator_keypair = KeyPair::new();
+        let activator_public_key = format!(
+            "ed25519/{}",
+            hex::encode(activator_keypair.public().to_bytes())
+        );
+
+        // Create latent token with 30 minute expiration
+        let latent_rights = vec![("resource1".to_string(), "read".to_string())];
+
+        let latent_token = HessraAuthorization::new_latent(
+            latent_rights,
+            activator_public_key,
+            TokenTimeConfig {
+                start_time: Some(Utc::now().timestamp()),
+                duration: 1800, // 30 minutes
+            },
+        )
+        .issue(&root_keypair)
+        .expect("Failed to create latent token");
+
+        // Activate with 5 minute expiration (shorter than latent token)
+        let activated_token_short = activate_latent_token_from_string(
+            latent_token.clone(),
+            root_public_key,
+            "alice".to_string(),
+            "resource1".to_string(),
+            "read".to_string(),
+            &activator_keypair,
+            TokenTimeConfig {
+                start_time: Some(Utc::now().timestamp()),
+                duration: 300, // 5 minutes
+            },
+        )
+        .expect("Failed to activate latent token");
+
+        // Should verify successfully now
+        let result = crate::verify::verify_token_local(
+            &activated_token_short,
+            root_public_key,
+            "alice",
+            "resource1",
+            "read",
+        );
+        assert!(
+            result.is_ok(),
+            "Activated token with 5min expiration should verify"
+        );
+
+        // Create an expired activation (1 second ago, already expired)
+        let activated_token_expired = activate_latent_token_from_string(
+            latent_token.clone(),
+            root_public_key,
+            "bob".to_string(),
+            "resource1".to_string(),
+            "read".to_string(),
+            &activator_keypair,
+            TokenTimeConfig {
+                start_time: Some(Utc::now().timestamp() - 2), // Started 2 seconds ago
+                duration: 1,                                  // 1 second duration (already expired)
+            },
+        )
+        .expect("Failed to activate latent token");
+
+        // Should fail verification because activation expired
+        let result = crate::verify::verify_token_local(
+            &activated_token_expired,
+            root_public_key,
+            "bob",
+            "resource1",
+            "read",
+        );
+        assert!(
+            result.is_err(),
+            "Activated token with expired time should fail verification"
+        );
+
+        // Test that even though latent token is still valid (30min),
+        // the shorter activation time (5min) is respected
+        // We create a latent token that expires in the future but activate it
+        // with an already-expired time config
+        let latent_token_long = HessraAuthorization::new_latent(
+            vec![("resource2".to_string(), "write".to_string())],
+            format!(
+                "ed25519/{}",
+                hex::encode(activator_keypair.public().to_bytes())
+            ),
+            TokenTimeConfig {
+                start_time: Some(Utc::now().timestamp()),
+                duration: 3600, // 1 hour - very long
+            },
+        )
+        .issue(&root_keypair)
+        .expect("Failed to create long-lived latent token");
+
+        let activated_expired_despite_latent = activate_latent_token_from_string(
+            latent_token_long,
+            root_public_key,
+            "charlie".to_string(),
+            "resource2".to_string(),
+            "write".to_string(),
+            &activator_keypair,
+            TokenTimeConfig {
+                start_time: Some(Utc::now().timestamp() - 10), // Started 10 seconds ago
+                duration: 1,                                   // 1 second duration (expired)
+            },
+        )
+        .expect("Failed to activate long-lived latent token");
+
+        // Should fail even though latent token is still valid
+        let result = crate::verify::verify_token_local(
+            &activated_expired_despite_latent,
+            root_public_key,
+            "charlie",
+            "resource2",
+            "write",
+        );
+        assert!(
+            result.is_err(),
+            "Activation expiration should take precedence over latent expiration"
         );
     }
 }

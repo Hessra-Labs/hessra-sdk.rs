@@ -52,6 +52,7 @@ fn main() -> Result<(), TokenError> {
         "resource1".to_string(),
         "read".to_string(),
         &activator_keypair,
+        TokenTimeConfig::default(), // 5 minute expiration
     )?;
 
     verify_token_local(
@@ -85,6 +86,7 @@ fn main() -> Result<(), TokenError> {
             resource.to_string(),
             operation.to_string(),
             &activator_keypair,
+            TokenTimeConfig::default(), // 5 minute expiration
         )?;
 
         verify_token_local(
@@ -120,6 +122,7 @@ fn main() -> Result<(), TokenError> {
         "resource1".to_string(),
         "read".to_string(),
         &activator_keypair,
+        TokenTimeConfig::default(), // 5 minute expiration
     )?;
 
     AuthorizationVerifier::new(
@@ -174,6 +177,7 @@ fn main() -> Result<(), TokenError> {
         "resource1".to_string(),
         "read".to_string(),
         &activator_keypair,
+        TokenTimeConfig::default(), // 5 minute expiration
     )?;
 
     verify_token_local(
@@ -218,6 +222,7 @@ fn main() -> Result<(), TokenError> {
         "resource1".to_string(),
         "read".to_string(),
         &activator_keypair,
+        TokenTimeConfig::default(), // 5 minute expiration
     )?;
 
     println!("Adding service chain attestation AFTER activation...");
@@ -270,6 +275,7 @@ fn main() -> Result<(), TokenError> {
         "alice_data".to_string(),
         "read".to_string(),
         &activator_keypair,
+        TokenTimeConfig::default(), // 5 minute expiration
     )?;
 
     verify_token_local(
@@ -291,6 +297,7 @@ fn main() -> Result<(), TokenError> {
         "alice_data".to_string(),
         "write".to_string(),
         &activator_keypair,
+        TokenTimeConfig::default(), // 5 minute expiration
     )?;
 
     verify_token_local(
@@ -302,6 +309,60 @@ fn main() -> Result<(), TokenError> {
     )?;
 
     println!("✅ Alice can access her data with write permissions");
+    println!();
+
+    println!("Example 7: Time attenuation (30min latent → 5min activated)");
+    println!("-------------------------------------------------------------");
+    println!("Scenario: Long-lived latent token with short-lived activations for security");
+    println!();
+
+    // Create a long-lived latent token (30 minutes)
+    let long_lived_latent = HessraAuthorization::new_latent(
+        vec![
+            ("sensitive_resource".to_string(), "read".to_string()),
+            ("sensitive_resource".to_string(), "write".to_string()),
+        ],
+        activator_public_key.clone(),
+        TokenTimeConfig {
+            start_time: Some(chrono::Utc::now().timestamp()),
+            duration: 1800, // 30 minutes
+        },
+    )
+    .issue(&root_keypair)
+    .map_err(|e| TokenError::Generic(e.to_string()))?;
+
+    println!("Created long-lived latent token (30 minutes expiration)");
+
+    // Activate with a much shorter expiration (5 minutes)
+    let short_lived_activation = activate_latent_token_from_string(
+        long_lived_latent.clone(),
+        root_public_key,
+        "secure_service".to_string(),
+        "sensitive_resource".to_string(),
+        "read".to_string(),
+        &activator_keypair,
+        TokenTimeConfig {
+            start_time: Some(chrono::Utc::now().timestamp()),
+            duration: 300, // 5 minutes - much shorter!
+        },
+    )?;
+
+    println!("Activated with short expiration (5 minutes)");
+
+    verify_token_local(
+        &short_lived_activation,
+        root_public_key,
+        "secure_service",
+        "sensitive_resource",
+        "read",
+    )?;
+
+    println!("✅ Short-lived activation verified successfully");
+    println!();
+    println!("The latent token is still valid for 30 minutes, but this");
+    println!("particular activation will expire in 5 minutes.");
+    println!("The entity can activate the latent token again later with");
+    println!("a fresh 5-minute expiration, as long as the latent token hasn't expired.");
     println!();
 
     println!("=== All examples completed successfully! ===");

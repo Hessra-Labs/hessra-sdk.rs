@@ -1,7 +1,8 @@
 extern crate biscuit_auth as biscuit;
 
 use biscuit::macros::block;
-use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError};
+use chrono::Utc;
+use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError, TokenTimeConfig};
 
 /// Activate a latent capability token by attenuating it with a specific subject, resource, and operation.
 ///
@@ -13,9 +14,18 @@ use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError};
 /// from these facts, and the checks ensure:
 /// 1. The derived right is valid
 /// 2. The (resource, operation) pair exists in the original latent_rights
+/// 3. The activated token expires before both the latent token and activation time limits
+///
+/// ## Time Attenuation
+///
+/// The activated token can have a shorter expiration than the original latent token. The latent token
+/// might be valid for 30 minutes, but each activation can be restricted to a shorter timeframe (e.g., 5 minutes)
+/// for additional security. The activated token will be valid until the earliest of:
+/// - The latent token's expiration (from authority block)
+/// - The activation's expiration (from activation block)
 ///
 /// A single latent token can be activated multiple times with different combinations of subject,
-/// resource, and operation, as long as the (resource, operation) pair is in the latent_rights set.
+/// resource, operation, and expiration times, as long as the (resource, operation) pair is in the latent_rights set.
 ///
 /// # Arguments
 ///
@@ -25,6 +35,7 @@ use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError};
 /// * `resource` - The resource to activate (must be in latent_rights)
 /// * `operation` - The operation to activate (must be in latent_rights with resource)
 /// * `activator_key` - The keypair of the activator (must match the public key bound in the token)
+/// * `time_config` - Time configuration for the activated token's expiration
 ///
 /// # Returns
 ///
@@ -34,7 +45,7 @@ use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError};
 ///
 /// ```no_run
 /// use hessra_token_authz::{activate_latent_token, decode_token};
-/// use hessra_token_core::{KeyPair, PublicKey};
+/// use hessra_token_core::{KeyPair, PublicKey, TokenTimeConfig};
 ///
 /// let latent_token_base64 = "..."; // base64-encoded latent token
 /// let latent_token_bytes = decode_token(&latent_token_base64).unwrap();
@@ -49,6 +60,7 @@ use hessra_token_core::{Biscuit, KeyPair, PublicKey, TokenError};
 ///     "resource1".to_string(),
 ///     "read".to_string(),
 ///     &activator_keypair,
+///     TokenTimeConfig::default(), // 5 minute expiration
 /// ).unwrap();
 /// ```
 pub fn activate_latent_token(
@@ -58,6 +70,7 @@ pub fn activate_latent_token(
     resource: String,
     operation: String,
     activator_key: &KeyPair,
+    time_config: TokenTimeConfig,
 ) -> Result<Vec<u8>, TokenError> {
     // Parse the latent token
     let biscuit = Biscuit::from(&token, public_key)?;
@@ -65,11 +78,18 @@ pub fn activate_latent_token(
     // Create a third-party request for the activator to sign
     let third_party_request = biscuit.third_party_request()?;
 
-    // Create the activation block with delegate and right facts
+    // Calculate expiration time for the activation
+    let start_time = time_config
+        .start_time
+        .unwrap_or_else(|| Utc::now().timestamp());
+    let expiration = start_time + time_config.duration;
+
+    // Create the activation block with delegate, right facts, and time check
     let activation_block = block!(
         r#"
             delegate({subject});
             right({resource}, {operation});
+            check if time($time), $time < {expiration};
         "#
     );
 
@@ -92,6 +112,9 @@ pub fn activate_latent_token(
 /// token strings instead of binary token data. It decodes the input token, activates it, and
 /// returns the result as a base64-encoded string.
 ///
+/// See `activate_latent_token` for details on time attenuation and how the activated token
+/// can have a shorter expiration than the latent token.
+///
 /// # Arguments
 ///
 /// * `token` - The base64-encoded latent token string
@@ -100,6 +123,7 @@ pub fn activate_latent_token(
 /// * `resource` - The resource to activate (must be in latent_rights)
 /// * `operation` - The operation to activate (must be in latent_rights with resource)
 /// * `activator_key` - The keypair of the activator (must match the public key bound in the token)
+/// * `time_config` - Time configuration for the activated token's expiration
 ///
 /// # Returns
 ///
@@ -109,7 +133,7 @@ pub fn activate_latent_token(
 ///
 /// ```no_run
 /// use hessra_token_authz::activate_latent_token_from_string;
-/// use hessra_token_core::{KeyPair, PublicKey};
+/// use hessra_token_core::{KeyPair, PublicKey, TokenTimeConfig};
 ///
 /// let latent_token = "base64_encoded_latent_token".to_string();
 /// let root_public_key_pem = "..."; // pem string
@@ -123,6 +147,7 @@ pub fn activate_latent_token(
 ///     "resource1".to_string(),
 ///     "read".to_string(),
 ///     &activator_keypair,
+///     TokenTimeConfig::default(), // 5 minute expiration
 /// ).unwrap();
 /// ```
 pub fn activate_latent_token_from_string(
@@ -132,6 +157,7 @@ pub fn activate_latent_token_from_string(
     resource: String,
     operation: String,
     activator_key: &KeyPair,
+    time_config: TokenTimeConfig,
 ) -> Result<String, TokenError> {
     let token_bytes = hessra_token_core::decode_token(&token)?;
     let activated_bytes = activate_latent_token(
@@ -141,6 +167,7 @@ pub fn activate_latent_token_from_string(
         resource,
         operation,
         activator_key,
+        time_config,
     )?;
     let activated_token = hessra_token_core::encode_token(&activated_bytes);
     Ok(activated_token)
