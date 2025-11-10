@@ -15,6 +15,37 @@ pub struct ServiceNode {
     pub public_key: String,
 }
 
+/// Verification mode for authorization tokens.
+#[derive(Debug, Clone, PartialEq)]
+enum VerificationMode {
+    /// Identity-based verification: requires an explicit subject parameter.
+    /// The authorizer will check if the token grants rights to this specific subject.
+    Identity { subject: String },
+    /// Capability-based verification: derives the subject from the token's rights.
+    /// The authorizer will accept any token that grants the specified capability
+    /// (resource + operation), regardless of the subject.
+    Capability,
+}
+
+impl VerificationMode {
+    /// Returns the subject if in Identity mode, None for Capability mode.
+    fn subject(&self) -> Option<&str> {
+        match self {
+            VerificationMode::Identity { subject } => Some(subject),
+            VerificationMode::Capability => None,
+        }
+    }
+
+    /// Returns the subject if in Identity mode, "unknown" for Capability mode.
+    /// Used for error reporting.
+    fn subject_or_unknown(&self) -> &str {
+        match self {
+            VerificationMode::Identity { subject } => subject,
+            VerificationMode::Capability => "unknown",
+        }
+    }
+}
+
 /// Builder for verifying Hessra authorization tokens with flexible configuration.
 ///
 /// This builder allows you to configure various verification parameters including
@@ -79,7 +110,7 @@ pub struct ServiceNode {
 pub struct AuthorizationVerifier {
     token: String,
     public_key: PublicKey,
-    subject: String,
+    mode: VerificationMode,
     resource: String,
     operation: String,
     domain: Option<String>,
@@ -105,7 +136,7 @@ impl AuthorizationVerifier {
         Self {
             token,
             public_key,
-            subject,
+            mode: VerificationMode::Identity { subject },
             resource,
             operation,
             domain: None,
@@ -136,7 +167,67 @@ impl AuthorizationVerifier {
         Ok(Self {
             token: token_string,
             public_key,
-            subject,
+            mode: VerificationMode::Identity { subject },
+            resource,
+            operation,
+            domain: None,
+            service_chain: None,
+        })
+    }
+
+    /// Creates a new capability-based verifier (no subject required).
+    ///
+    /// This verifier will accept any token that grants the specified capability
+    /// (resource + operation), regardless of the subject. The subject is derived
+    /// from the token's rights instead of being provided explicitly.
+    ///
+    /// # Arguments
+    /// * `token` - The base64-encoded authorization token to verify
+    /// * `public_key` - The public key used to verify the token signature
+    /// * `resource` - The resource identifier to verify authorization against
+    /// * `operation` - The operation to verify authorization for
+    pub fn new_capability(
+        token: String,
+        public_key: PublicKey,
+        resource: String,
+        operation: String,
+    ) -> Self {
+        Self {
+            token,
+            public_key,
+            mode: VerificationMode::Capability,
+            resource,
+            operation,
+            domain: None,
+            service_chain: None,
+        }
+    }
+
+    /// Creates a new capability-based verifier from raw token bytes.
+    ///
+    /// This is the binary token version of `new_capability`. It accepts any token
+    /// that grants the specified capability (resource + operation), regardless of
+    /// the subject.
+    ///
+    /// # Arguments
+    /// * `token` - The raw binary Biscuit token bytes
+    /// * `public_key` - The public key used to verify the token signature
+    /// * `resource` - The resource identifier to verify authorization against
+    /// * `operation` - The operation to verify authorization for
+    pub fn from_bytes_capability(
+        token: Vec<u8>,
+        public_key: PublicKey,
+        resource: String,
+        operation: String,
+    ) -> Result<Self, TokenError> {
+        let biscuit = Biscuit::from(&token, public_key)?;
+        let token_string = biscuit
+            .to_base64()
+            .map_err(|e| TokenError::generic(format!("Failed to encode token: {e}")))?;
+        Ok(Self {
+            token: token_string,
+            public_key,
+            mode: VerificationMode::Capability,
             resource,
             operation,
             domain: None,
@@ -194,7 +285,7 @@ impl AuthorizationVerifier {
             // Service chain verification
             verify_raw_service_chain_biscuit(
                 biscuit,
-                self.subject,
+                self.mode,
                 self.resource,
                 self.operation,
                 service_nodes,
@@ -205,7 +296,7 @@ impl AuthorizationVerifier {
             // Basic verification
             verify_raw_biscuit(
                 biscuit,
-                self.subject,
+                self.mode,
                 self.resource,
                 self.operation,
                 self.domain,
@@ -240,24 +331,62 @@ pub(crate) fn build_base_authorizer(
     Ok(authz)
 }
 
+/// Build a capability-based authorizer that derives the subject from the token's rights.
+///
+/// Unlike `build_base_authorizer`, this function does not require a subject parameter.
+/// Instead, it uses a Datalog rule to derive the subject from any `right(subject, resource, operation)`
+/// facts present in the token. This allows verification based solely on capability (resource + operation)
+/// without needing to know the identity.
+pub(crate) fn build_capability_authorizer(
+    resource: String,
+    operation: String,
+    domain: Option<String>,
+) -> Result<biscuit::AuthorizerBuilder, TokenError> {
+    let now = Utc::now().timestamp();
+
+    let mut authz = authorizer!(
+        r#"
+            time({now});
+            resource({resource});
+            operation({operation});
+            // Derive subject from the token's rights instead of providing it explicitly
+            subject($sub) <- right($sub, {resource}, {operation});
+            allow if true;
+        "#
+    );
+
+    // Add domain fact if specified
+    if let Some(domain) = domain {
+        authz = authz.fact(fact!(r#"domain({domain});"#))?;
+    }
+
+    Ok(authz)
+}
+
 fn verify_raw_biscuit(
     biscuit: Biscuit,
-    subject: String,
+    mode: VerificationMode,
     resource: String,
     operation: String,
     domain: Option<String>,
 ) -> Result<(), TokenError> {
-    let authz = build_base_authorizer(
-        subject.clone(),
-        resource.clone(),
-        operation.clone(),
-        domain.clone(),
-    )?;
+    let authz = match &mode {
+        VerificationMode::Identity { subject } => build_base_authorizer(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            domain.clone(),
+        )?,
+        VerificationMode::Capability => {
+            build_capability_authorizer(resource.clone(), operation.clone(), domain.clone())?
+        }
+    };
+
     match authz.build(&biscuit)?.authorize() {
         Ok(_) => Ok(()),
         Err(e) => Err(convert_authorization_error(
             e,
-            Some(&subject),
+            mode.subject(),
             Some(&resource),
             Some(&operation),
             domain.as_deref(),
@@ -374,19 +503,24 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
 
 fn verify_raw_service_chain_biscuit(
     biscuit: Biscuit,
-    subject: String,
+    mode: VerificationMode,
     resource: String,
     operation: String,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
     domain: Option<String>,
 ) -> Result<(), TokenError> {
-    let mut authz = build_base_authorizer(
-        subject.clone(),
-        resource.clone(),
-        operation.clone(),
-        domain.clone(),
-    )?;
+    let mut authz = match &mode {
+        VerificationMode::Identity { subject } => build_base_authorizer(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            domain.clone(),
+        )?,
+        VerificationMode::Capability => {
+            build_capability_authorizer(resource.clone(), operation.clone(), domain.clone())?
+        }
+    };
 
     let mut component_found = false;
     if component.is_none() {
@@ -422,7 +556,7 @@ fn verify_raw_service_chain_biscuit(
         Ok(_) => Ok(()),
         Err(e) => Err(convert_service_chain_error(
             e,
-            &subject,
+            mode.subject_or_unknown(),
             &resource,
             &operation,
             service_nodes,
@@ -463,6 +597,156 @@ pub fn verify_service_chain_token_local(
     )
     .with_service_chain(service_nodes, component)
     .verify()
+}
+
+/// Verifies a Biscuit authorization token based on capability (resource + operation) only.
+///
+/// This function performs capability-based verification without requiring a subject parameter.
+/// The subject is derived from the token's rights - any subject that has the specified right
+/// for the resource and operation will satisfy verification.
+///
+/// This is useful for services that only care about authorization for an action, not identity.
+/// For example, a telemetry service that only needs to verify write permission, not who is writing.
+///
+/// # Arguments
+///
+/// * `token` - The base64-encoded Biscuit token string
+/// * `public_key` - The public key used to verify the token signature
+/// * `resource` - The resource identifier to verify authorization against
+/// * `operation` - The operation to verify authorization for
+///
+/// # Returns
+///
+/// * `Ok(())` - If the token is valid and grants access to the resource+operation
+/// * `Err(TokenError)` - If verification fails
+///
+/// # Example
+///
+/// ```no_run
+/// use hessra_token_authz::{verify_capability_token_local, create_token};
+/// use hessra_token_core::{KeyPair, TokenError};
+///
+/// let keypair = KeyPair::new();
+/// let public_key = keypair.public();
+///
+/// // Create a token for alice to read resource1
+/// let token = create_token(
+///     "alice".to_string(),
+///     "resource1".to_string(),
+///     "read".to_string(),
+///     keypair,
+/// )
+/// .map_err(|e| TokenError::Generic(e.to_string()))?;
+///
+/// // Verify capability without caring about the subject
+/// verify_capability_token_local(&token, public_key, "resource1", "read")?;
+/// # Ok::<(), hessra_token_core::TokenError>(())
+/// ```
+pub fn verify_capability_token_local(
+    token: &str,
+    public_key: PublicKey,
+    resource: &str,
+    operation: &str,
+) -> Result<(), TokenError> {
+    AuthorizationVerifier::new_capability(
+        token.to_string(),
+        public_key,
+        resource.to_string(),
+        operation.to_string(),
+    )
+    .verify()
+}
+
+/// Verifies a Biscuit authorization token based on capability (resource + operation) only.
+///
+/// This is the binary token version of `verify_capability_token_local`.
+///
+/// # Arguments
+///
+/// * `token` - The binary Biscuit token bytes
+/// * `public_key` - The public key used to verify the token signature
+/// * `resource` - The resource identifier to verify authorization against
+/// * `operation` - The operation to verify authorization for
+///
+/// # Returns
+///
+/// * `Ok(())` - If the token is valid and grants access to the resource+operation
+/// * `Err(TokenError)` - If verification fails
+pub fn verify_capability_biscuit_local(
+    token: Vec<u8>,
+    public_key: PublicKey,
+    resource: String,
+    operation: String,
+) -> Result<(), TokenError> {
+    AuthorizationVerifier::from_bytes_capability(token, public_key, resource, operation)?.verify()
+}
+
+/// Verifies a service chain token based on capability without requiring subject.
+///
+/// This combines service chain attestation verification with capability-based verification.
+/// The token must have the required service chain attestations and grant the specified
+/// capability (resource + operation), but the subject is derived from the token rather
+/// than being provided explicitly.
+///
+/// # Arguments
+///
+/// * `token` - The base64-encoded Biscuit token string
+/// * `public_key` - The public key used to verify the token signature
+/// * `resource` - The resource identifier to verify authorization against
+/// * `operation` - The operation to verify authorization for
+/// * `service_nodes` - The list of service nodes in the chain
+/// * `component` - Optional specific component to verify in the chain
+///
+/// # Returns
+///
+/// * `Ok(())` - If the token is valid and grants access
+/// * `Err(TokenError)` - If verification fails
+pub fn verify_service_chain_capability_token_local(
+    token: &str,
+    public_key: PublicKey,
+    resource: &str,
+    operation: &str,
+    service_nodes: Vec<ServiceNode>,
+    component: Option<String>,
+) -> Result<(), TokenError> {
+    AuthorizationVerifier::new_capability(
+        token.to_string(),
+        public_key,
+        resource.to_string(),
+        operation.to_string(),
+    )
+    .with_service_chain(service_nodes, component)
+    .verify()
+}
+
+/// Binary version of `verify_service_chain_capability_token_local`.
+///
+/// Verifies a service chain token from raw bytes based on capability without requiring subject.
+///
+/// # Arguments
+///
+/// * `token` - The binary Biscuit token bytes
+/// * `public_key` - The public key used to verify the token signature
+/// * `resource` - The resource identifier to verify authorization against
+/// * `operation` - The operation to verify authorization for
+/// * `service_nodes` - The list of service nodes in the chain
+/// * `component` - Optional specific component to verify in the chain
+///
+/// # Returns
+///
+/// * `Ok(())` - If the token is valid and grants access
+/// * `Err(TokenError)` - If verification fails
+pub fn verify_service_chain_capability_biscuit_local(
+    token: Vec<u8>,
+    public_key: PublicKey,
+    resource: String,
+    operation: String,
+    service_nodes: Vec<ServiceNode>,
+    component: Option<String>,
+) -> Result<(), TokenError> {
+    AuthorizationVerifier::from_bytes_capability(token, public_key, resource, operation)?
+        .with_service_chain(service_nodes, component)
+        .verify()
 }
 
 /// Convert biscuit authorization errors to detailed authorization errors

@@ -10,7 +10,7 @@
 //!
 //! - Token creation: Create singleton or latent capability tokens with configurable time settings
 //! - Token activation: Activate latent capability tokens with specific rights
-//! - Token verification: Verify tokens without contacting the authorization server
+//! - Token verification: Verify tokens using identity-based (requires subject) or capability-based (derives subject from token) modes
 //! - Service chain attestation: Add service node attestations to tokens
 //! - Multi-party authorization: Create tokens requiring multiple party attestations
 //! - WASM compatibility: WIP WASM bindings for token verification
@@ -28,6 +28,21 @@
 //! be used directly. They must be activated by the holder of the bound activator key using
 //! the `activate_latent_token` function. The same latent token can be activated multiple
 //! times with different subjects and (resource, operation) pairs from the latent_rights set.
+//!
+//! ## Verification Modes
+//!
+//! ### Identity-Based Verification
+//!
+//! Traditional verification requires an explicit subject (identity) parameter. The verifier
+//! checks if the token grants the specific subject access to the resource and operation.
+//!
+//! ### Capability-Based Verification
+//!
+//! Capability-based verification does not require a subject parameter. Instead, the subject
+//! is derived from the token's rights using a Datalog rule. This is useful for services that
+//! only care about whether a request has authorization for an action, not who is making the
+//! request. For example, a telemetry service might only need to verify write permission,
+//! regardless of the identity writing the data.
 //!
 //! ## Usage
 //!
@@ -75,7 +90,9 @@ pub use mint::{
 };
 pub use revocation::{get_authorization_revocation_id, get_authorization_revocation_id_from_bytes};
 pub use verify::{
-    biscuit_key_from_string, verify_biscuit_local, verify_service_chain_biscuit_local,
+    biscuit_key_from_string, verify_biscuit_local, verify_capability_biscuit_local,
+    verify_capability_token_local, verify_service_chain_biscuit_local,
+    verify_service_chain_capability_biscuit_local, verify_service_chain_capability_token_local,
     verify_service_chain_token_local, verify_token_local, AuthorizationVerifier, ServiceNode,
 };
 

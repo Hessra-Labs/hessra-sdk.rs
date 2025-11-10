@@ -2591,4 +2591,238 @@ mod tests {
             "Activation expiration should take precedence over latent expiration"
         );
     }
+
+    #[test]
+    fn test_verify_capability_token_basic() {
+        let subject = "alice".to_string();
+        let resource = "resource1".to_string();
+        let operation = "read".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create token with subject
+        let token = create_token(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            keypair,
+        )
+        .unwrap();
+
+        // Verify without providing subject - should succeed
+        let result =
+            crate::verify::verify_capability_token_local(&token, public_key, &resource, &operation);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_verify_capability_token_wrong_resource() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let token = create_token(
+            "alice".to_string(),
+            "resource1".to_string(),
+            "read".to_string(),
+            keypair,
+        )
+        .unwrap();
+
+        // Try to verify for wrong resource
+        let result = crate::verify::verify_capability_token_local(
+            &token,
+            public_key,
+            "resource2", // Wrong resource
+            "read",
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_capability_token_wrong_operation() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let token = create_token(
+            "alice".to_string(),
+            "resource1".to_string(),
+            "read".to_string(),
+            keypair,
+        )
+        .unwrap();
+
+        // Try to verify for wrong operation
+        let result = crate::verify::verify_capability_token_local(
+            &token,
+            public_key,
+            "resource1",
+            "write", // Wrong operation
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_capability_with_domain() {
+        let domain = "myapp.hessra.dev".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create token with domain restriction
+        let token = HessraAuthorization::new(
+            "alice".to_string(),
+            "resource1".to_string(),
+            "read".to_string(),
+            TokenTimeConfig::default(),
+        )
+        .domain_restricted(domain.clone())
+        .issue(&keypair)
+        .unwrap();
+
+        // Verify capability with matching domain
+        let result = crate::verify::AuthorizationVerifier::new_capability(
+            token.clone(),
+            public_key,
+            "resource1".to_string(),
+            "read".to_string(),
+        )
+        .with_domain(domain.clone())
+        .verify();
+
+        assert!(result.is_ok());
+
+        // Verify capability without domain - should fail
+        let result = crate::verify::AuthorizationVerifier::new_capability(
+            token,
+            public_key,
+            "resource1".to_string(),
+            "read".to_string(),
+        )
+        .verify();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_capability_with_service_chain() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let chain_keypair = KeyPair::new();
+        let chain_public_key =
+            format!("ed25519/{}", hex::encode(chain_keypair.public().to_bytes()));
+        let chain_node = ServiceNode {
+            component: "edge_function".to_string(),
+            public_key: chain_public_key,
+        };
+
+        // Create service chain token
+        let token = HessraAuthorization::new(
+            "alice".to_string(),
+            "resource1".to_string(),
+            "read".to_string(),
+            TokenTimeConfig::default(),
+        )
+        .service_chain(vec![chain_node.clone()])
+        .issue(&keypair)
+        .unwrap();
+
+        // Add attestation
+        let token_bytes = crate::decode_token(&token).unwrap();
+        let attested = crate::attest::add_service_node_attestation(
+            token_bytes,
+            public_key,
+            "resource1",
+            &chain_keypair,
+        )
+        .unwrap();
+        let attested_token = crate::encode_token(&attested);
+
+        // Verify capability with service chain
+        let result = crate::verify::verify_service_chain_capability_token_local(
+            &attested_token,
+            public_key,
+            "resource1",
+            "read",
+            vec![chain_node],
+            None,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_capability_verifier_builder() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+        let domain = "example.com".to_string();
+
+        let token = HessraAuthorization::new(
+            "alice".to_string(),
+            "resource1".to_string(),
+            "read".to_string(),
+            TokenTimeConfig::default(),
+        )
+        .domain_restricted(domain.clone())
+        .issue(&keypair)
+        .unwrap();
+
+        // Test builder pattern
+        let result = crate::verify::AuthorizationVerifier::new_capability(
+            token,
+            public_key,
+            "resource1".to_string(),
+            "read".to_string(),
+        )
+        .with_domain(domain)
+        .verify();
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_capability_vs_identity_verification() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create token for alice
+        let token = create_token(
+            "alice".to_string(),
+            "document_123".to_string(),
+            "read".to_string(),
+            keypair,
+        )
+        .unwrap();
+
+        // Identity-based: Must specify correct subject
+        let result = crate::verify::verify_token_local(
+            &token,
+            public_key,
+            "alice", // Must match
+            "document_123",
+            "read",
+        );
+        assert!(result.is_ok());
+
+        // Identity-based: Wrong subject fails
+        let result = crate::verify::verify_token_local(
+            &token,
+            public_key,
+            "bob", // Wrong subject
+            "document_123",
+            "read",
+        );
+        assert!(result.is_err());
+
+        // Capability-based: Don't care about subject
+        let result = crate::verify::verify_capability_token_local(
+            &token,
+            public_key,
+            "document_123", // No subject needed
+            "read",
+        );
+        assert!(result.is_ok());
+    }
 }
