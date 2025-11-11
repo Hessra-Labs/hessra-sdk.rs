@@ -4,30 +4,15 @@
 //!
 //! This crate provides functionality for creating, verifying and attesting authorization
 //! tokens (biscuit tokens) used in the Hessra authentication system. It supports advanced
-//! features like service chain attestation, multi-party authorization, and latent capability tokens.
+//! features like service chain attestation and multi-party authorization.
 //!
 //! ## Features
 //!
-//! - Token creation: Create singleton or latent capability tokens with configurable time settings
-//! - Token activation: Activate latent capability tokens with specific rights
+//! - Token creation: Create authorization tokens with configurable time settings
 //! - Token verification: Verify tokens using identity-based (requires subject) or capability-based (derives subject from token) modes
 //! - Service chain attestation: Add service node attestations to tokens
 //! - Multi-party authorization: Create tokens requiring multiple party attestations
 //! - WASM compatibility: WIP WASM bindings for token verification
-//!
-//! ## Token Types
-//!
-//! ### Singleton Capability Tokens
-//!
-//! Singleton tokens grant a specific right to a specific subject for a specific resource
-//! and operation. They can be used immediately upon issuance.
-//!
-//! ### Latent Capability Tokens
-//!
-//! Latent tokens contain broad `latent_right(resource, operation)` permissions but cannot
-//! be used directly. They must be activated by the holder of the bound activator key using
-//! the `activate_latent_token` function. The same latent token can be activated multiple
-//! times with different subjects and (resource, operation) pairs from the latent_rights set.
 //!
 //! ## Verification Modes
 //!
@@ -71,14 +56,12 @@
 //! }
 //! ```
 
-mod attenuate;
 mod attest;
 mod mint;
 mod revocation;
 mod verify;
 
 // Re-export all authorization-specific functionality
-pub use attenuate::{activate_latent_token, activate_latent_token_from_string};
 pub use attest::{
     add_multi_party_attestation, add_multi_party_attestation_to_token, add_service_node_attestation,
 };

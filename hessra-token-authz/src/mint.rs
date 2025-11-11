@@ -12,8 +12,6 @@ use tracing::info;
 /// Builder for creating Hessra authorization tokens with flexible configuration.
 ///
 /// Authorization tokens can be configured with the following capabilities:
-/// - **Singleton Capability**: Simple authorization with subject, resource, and operation (default)
-/// - **Latent Capability**: Broader authorization with latent_rights that must be activated
 /// - **Service Chain**: Add service node attestations via `.service_chain(nodes)`
 /// - **Multi-Party**: Add multi-party attestation requirements via `.multi_party(nodes)`
 /// - **Domain Restriction**: Limit token to a specific domain via `.domain_restricted(domain)`
@@ -21,24 +19,14 @@ use tracing::info;
 /// Service chain and multi-party capabilities can be combined in the same token
 /// (though this is not currently validated or actively used).
 ///
-/// ## Token Types
-///
-/// **Singleton Capability Token** (default): Grants a specific right to a specific subject for
-/// a specific resource and operation. The token can be used immediately.
-///
-/// **Latent Capability Token**: Contains broad `latent_right(resource, operation)` permissions
-/// but cannot be used directly. Must be activated by the holder of the bound activator key using
-/// the `activate_latent_token` function. The same latent token can be activated multiple times
-/// with different subjects and (resource, operation) pairs from the latent_rights set.
-///
-/// # Example - Singleton Token
+/// # Example
 /// ```rust
 /// use hessra_token_authz::HessraAuthorization;
 /// use hessra_token_core::{KeyPair, TokenTimeConfig};
 ///
 /// let keypair = KeyPair::new();
 ///
-/// // Singleton capability authorization with domain restriction
+/// // Authorization with domain restriction
 /// let token = HessraAuthorization::new(
 ///     "alice".to_string(),
 ///     "resource1".to_string(),
@@ -50,50 +38,14 @@ use tracing::info;
 /// .expect("Failed to create token");
 /// ```
 ///
-/// # Example - Latent Token
-/// ```rust
-/// use hessra_token_authz::HessraAuthorization;
-/// use hessra_token_core::{KeyPair, TokenTimeConfig};
-///
-/// let keypair = KeyPair::new();
-/// let activator_keypair = KeyPair::new();
-/// let activator_public_key = format!("ed25519/{}", hex::encode(activator_keypair.public().to_bytes()));
-///
-/// // Latent capability authorization
-/// let latent_rights = vec![
-///     ("resource1".to_string(), "read".to_string()),
-///     ("resource2".to_string(), "write".to_string()),
-/// ];
-///
-/// let token = HessraAuthorization::new_latent(
-///     latent_rights,
-///     activator_public_key,
-///     TokenTimeConfig::default()
-/// )
-/// .issue(&keypair)
-/// .expect("Failed to create latent token");
-/// ```
 pub struct HessraAuthorization {
-    token_type: TokenType,
-    // Singleton capability fields
     subject: Option<String>,
     resource: Option<String>,
     operation: Option<String>,
-    // Latent capability fields
-    latent_rights: Option<Vec<(String, String)>>,
-    activator_public_key: Option<String>,
-    // Common fields
     time_config: TokenTimeConfig,
     service_chain_nodes: Option<Vec<ServiceNode>>,
     multi_party_nodes: Option<Vec<ServiceNode>>,
     domain: Option<String>,
-}
-
-/// Token type for authorization tokens
-#[derive(Debug, Clone, PartialEq)]
-enum TokenType {
-    Singleton,
-    Latent,
 }
 
 impl HessraAuthorization {
@@ -114,68 +66,9 @@ impl HessraAuthorization {
         time_config: TokenTimeConfig,
     ) -> Self {
         Self {
-            token_type: TokenType::Singleton,
             subject: Some(subject),
             resource: Some(resource),
             operation: Some(operation),
-            latent_rights: None,
-            activator_public_key: None,
-            time_config,
-            service_chain_nodes: None,
-            multi_party_nodes: None,
-            domain: None,
-        }
-    }
-
-    /// Creates a new latent capability authorization token builder.
-    ///
-    /// Latent tokens contain broad `latent_right(resource, operation)` permissions but cannot
-    /// be used directly. They must be activated by the holder of the bound activator key using
-    /// the `activate_latent_token` function.
-    ///
-    /// The same latent token can be activated multiple times with different subjects and
-    /// (resource, operation) pairs from the latent_rights set.
-    ///
-    /// # Arguments
-    /// * `latent_rights` - Vector of (resource, operation) pairs that can be activated
-    /// * `activator_public_key` - Public key of the activator (format: "ed25519/hexstring")
-    /// * `time_config` - Time configuration for token validity
-    ///
-    /// # Example
-    /// ```rust
-    /// use hessra_token_authz::HessraAuthorization;
-    /// use hessra_token_core::{KeyPair, TokenTimeConfig};
-    ///
-    /// let keypair = KeyPair::new();
-    /// let activator_keypair = KeyPair::new();
-    /// let activator_public_key = format!("ed25519/{}", hex::encode(activator_keypair.public().to_bytes()));
-    ///
-    /// let latent_rights = vec![
-    ///     ("resource1".to_string(), "read".to_string()),
-    ///     ("resource1".to_string(), "write".to_string()),
-    ///     ("resource2".to_string(), "read".to_string()),
-    /// ];
-    ///
-    /// let token = HessraAuthorization::new_latent(
-    ///     latent_rights,
-    ///     activator_public_key,
-    ///     TokenTimeConfig::default()
-    /// )
-    /// .issue(&keypair)
-    /// .expect("Failed to create latent token");
-    /// ```
-    pub fn new_latent(
-        latent_rights: Vec<(String, String)>,
-        activator_public_key: String,
-        time_config: TokenTimeConfig,
-    ) -> Self {
-        Self {
-            token_type: TokenType::Latent,
-            subject: None,
-            resource: None,
-            operation: None,
-            latent_rights: Some(latent_rights),
-            activator_public_key: Some(activator_public_key),
             time_config,
             service_chain_nodes: None,
             multi_party_nodes: None,
@@ -230,9 +123,6 @@ impl HessraAuthorization {
 
     /// Issues (builds and signs) the authorization token.
     ///
-    /// This method builds and signs either a singleton or latent capability token based on
-    /// how the builder was constructed.
-    ///
     /// # Arguments
     /// * `keypair` - The keypair to sign the token with
     ///
@@ -247,82 +137,21 @@ impl HessraAuthorization {
 
         let domain = self.domain;
 
-        // Build the appropriate biscuit based on token type
-        let mut biscuit_builder = match self.token_type {
-            TokenType::Singleton => {
-                // Extract fields for singleton token
-                let subject = self.subject.ok_or("Singleton token requires subject")?;
-                let resource = self.resource.ok_or("Singleton token requires resource")?;
-                let operation = self.operation.ok_or("Singleton token requires operation")?;
+        // Extract required fields
+        let subject = self.subject.ok_or("Token requires subject")?;
+        let resource = self.resource.ok_or("Token requires resource")?;
+        let operation = self.operation.ok_or("Token requires operation")?;
 
-                // Build singleton authority block
-                biscuit!(
-                    r#"
-                        right({subject}, {resource}, {operation});
-                        check if subject($sub), resource($res), operation($op), right($sub, $res, $op);
-                        check if time($time), $time < {expiration};
-                    "#
-                )
-            }
-            TokenType::Latent => {
-                // Extract fields for latent token
-                let latent_rights = self
-                    .latent_rights
-                    .ok_or("Latent token requires latent_rights")?;
-                let activator_public_key_str = self
-                    .activator_public_key
-                    .ok_or("Latent token requires activator_public_key")?;
-                let activator_public_key = biscuit_key_from_string(activator_public_key_str)?;
+        // Build authority block
+        let mut biscuit_builder = biscuit!(
+            r#"
+                right({subject}, {resource}, {operation});
+                check if subject($sub), resource($res), operation($op), right($sub, $res, $op);
+                check if time($time), $time < {expiration};
+            "#
+        );
 
-                // Start with empty builder
-                let mut builder = BiscuitBuilder::new();
-
-                // Add latent_right facts for each (resource, operation) pair
-                for (resource, operation) in latent_rights.clone() {
-                    builder = builder.fact(biscuit::macros::fact!(
-                        r#"latent_right({resource}, {operation})"#
-                    ))?;
-                }
-
-                // Add the rule that derives right from delegate and latent_right
-                builder = builder.rule(rule!(
-                    r#"
-                        right($subject, $resource, $operation) <-
-                            delegate($subject),
-                            right($resource, $operation),
-                            latent_right($resource, $operation)
-                            trusting {activator_public_key};
-                    "#
-                ))?;
-
-                // Add check that the derived right is valid (trusting activator)
-                builder = builder.check(check!(
-                    r#"
-                        check if subject($sub), resource($res), operation($op),
-                                  right($sub, $res, $op)
-                                  trusting {activator_public_key};
-                    "#
-                ))?;
-
-                // Add check that resource and operation are in latent_rights
-                builder = builder.check(check!(
-                    r#"
-                        check if resource($res), operation($op), latent_right($res, $op);
-                    "#
-                ))?;
-
-                // Add time check
-                builder = builder.check(check!(
-                    r#"
-                        check if time($time), $time < {expiration};
-                    "#
-                ))?;
-
-                builder
-            }
-        };
-
-        // Add domain restriction if specified (works for both token types)
+        // Add domain restriction if specified
         if let Some(domain) = domain {
             biscuit_builder = biscuit_builder.check(check!(
                 r#"
@@ -1008,7 +837,6 @@ pub fn create_multi_party_token_with_time(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::attenuate::{activate_latent_token, activate_latent_token_from_string};
     use crate::verify::{verify_biscuit_local, verify_service_chain_biscuit_local};
     use biscuit::macros::block;
     use biscuit::Biscuit;
@@ -2029,566 +1857,6 @@ mod tests {
             .verify()
             .is_ok(),
             "Service chain token with valid attestation should pass basic verification"
-        );
-    }
-
-    #[test]
-    fn test_latent_capability_basic() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        // Create latent token with multiple rights
-        let latent_rights = vec![
-            ("resource1".to_string(), "read".to_string()),
-            ("resource1".to_string(), "write".to_string()),
-            ("resource2".to_string(), "read".to_string()),
-        ];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig::default(),
-        )
-        .issue(&root_keypair)
-        .expect("Failed to create latent token");
-
-        // Activate the latent token for a specific subject and right
-        let subject = "alice".to_string();
-        let resource = "resource1".to_string();
-        let operation = "read".to_string();
-
-        let activated_token = activate_latent_token_from_string(
-            latent_token.clone(),
-            root_public_key,
-            subject.clone(),
-            resource.clone(),
-            operation.clone(),
-            &activator_keypair,
-            TokenTimeConfig::default(),
-        )
-        .expect("Failed to activate latent token");
-
-        // Verify the activated token
-        let result = crate::verify::verify_token_local(
-            &activated_token,
-            root_public_key,
-            &subject,
-            &resource,
-            &operation,
-        );
-
-        assert!(result.is_ok(), "Activated token should verify successfully");
-    }
-
-    #[test]
-    fn test_latent_capability_multiple_activations() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        // Create latent token with multiple rights
-        let latent_rights = vec![
-            ("resource1".to_string(), "read".to_string()),
-            ("resource1".to_string(), "write".to_string()),
-            ("resource2".to_string(), "read".to_string()),
-        ];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig::default(),
-        )
-        .issue(&root_keypair)
-        .expect("Failed to create latent token");
-
-        // Activate the same latent token multiple times with different combinations
-        let activations = vec![
-            (
-                "alice".to_string(),
-                "resource1".to_string(),
-                "read".to_string(),
-            ),
-            (
-                "bob".to_string(),
-                "resource1".to_string(),
-                "write".to_string(),
-            ),
-            (
-                "charlie".to_string(),
-                "resource2".to_string(),
-                "read".to_string(),
-            ),
-        ];
-
-        for (subject, resource, operation) in activations {
-            let activated_token = activate_latent_token_from_string(
-                latent_token.clone(),
-                root_public_key,
-                subject.clone(),
-                resource.clone(),
-                operation.clone(),
-                &activator_keypair,
-                TokenTimeConfig::default(),
-            )
-            .expect("Failed to activate latent token");
-
-            // Verify each activated token
-            let result = crate::verify::verify_token_local(
-                &activated_token,
-                root_public_key,
-                &subject,
-                &resource,
-                &operation,
-            );
-
-            assert!(
-                result.is_ok(),
-                "Activated token for {} should verify successfully",
-                subject
-            );
-        }
-    }
-
-    #[test]
-    fn test_latent_capability_invalid_right() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        // Create latent token with limited rights
-        let latent_rights = vec![("resource1".to_string(), "read".to_string())];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig::default(),
-        )
-        .issue(&root_keypair)
-        .expect("Failed to create latent token");
-
-        // Try to activate with a right that's not in latent_rights
-        let activated_token = activate_latent_token_from_string(
-            latent_token,
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "write".to_string(), // Not in latent_rights!
-            &activator_keypair,
-            TokenTimeConfig::default(),
-        )
-        .expect("Activation should succeed (validation happens at verification)");
-
-        // Verification should fail because the right is not in latent_rights
-        let result = crate::verify::verify_token_local(
-            &activated_token,
-            root_public_key,
-            "alice",
-            "resource1",
-            "write",
-        );
-
-        assert!(
-            result.is_err(),
-            "Should fail to verify token with right not in latent_rights"
-        );
-    }
-
-    #[test]
-    fn test_latent_capability_with_domain_restriction() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        let domain = "myapp.hessra.dev".to_string();
-
-        // Create latent token with domain restriction
-        let latent_rights = vec![("resource1".to_string(), "read".to_string())];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig::default(),
-        )
-        .domain_restricted(domain.clone())
-        .issue(&root_keypair)
-        .expect("Failed to create latent token with domain restriction");
-
-        // Activate the token
-        let activated_token = activate_latent_token_from_string(
-            latent_token,
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-            &activator_keypair,
-            TokenTimeConfig::default(),
-        )
-        .expect("Failed to activate latent token");
-
-        // Verify with correct domain
-        let result = crate::verify::AuthorizationVerifier::new(
-            activated_token.clone(),
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-        )
-        .with_domain(domain.clone())
-        .verify();
-
-        assert!(result.is_ok(), "Should verify with correct domain");
-
-        // Verify without domain should fail
-        let result = crate::verify::AuthorizationVerifier::new(
-            activated_token,
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-        )
-        .verify();
-
-        assert!(result.is_err(), "Should fail to verify without domain");
-    }
-
-    #[test]
-    fn test_latent_capability_with_multi_party() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        // Create multi-party node
-        let party_keypair = KeyPair::new();
-        let party_public_key =
-            format!("ed25519/{}", hex::encode(party_keypair.public().to_bytes()));
-        let party_node = ServiceNode {
-            component: "approval_service".to_string(),
-            public_key: party_public_key,
-        };
-
-        // Create latent token with multi-party requirement
-        let latent_rights = vec![("resource1".to_string(), "read".to_string())];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig::default(),
-        )
-        .multi_party(vec![party_node])
-        .issue(&root_keypair)
-        .expect("Failed to create latent token with multi-party");
-
-        // Add multi-party attestation to the latent token (before activation)
-        let latent_token_bytes =
-            crate::decode_token(&latent_token).expect("Failed to decode token");
-        let attested_latent_bytes = crate::attest::add_multi_party_attestation(
-            latent_token_bytes,
-            root_public_key,
-            "approval_service".to_string(),
-            party_keypair,
-        )
-        .expect("Failed to add multi-party attestation");
-
-        // Now activate the attested latent token
-        let activated_token_bytes = activate_latent_token(
-            attested_latent_bytes,
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-            &activator_keypair,
-            TokenTimeConfig::default(),
-        )
-        .expect("Failed to activate attested latent token");
-
-        let activated_token = crate::encode_token(&activated_token_bytes);
-
-        // Verify the activated token
-        let result = crate::verify::verify_token_local(
-            &activated_token,
-            root_public_key,
-            "alice",
-            "resource1",
-            "read",
-        );
-
-        assert!(
-            result.is_ok(),
-            "Activated token with multi-party attestation should verify"
-        );
-    }
-
-    #[test]
-    fn test_activated_latent_with_service_chain() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        // Create service chain node
-        let chain_keypair = KeyPair::new();
-        let chain_public_key =
-            format!("ed25519/{}", hex::encode(chain_keypair.public().to_bytes()));
-        let chain_node = ServiceNode {
-            component: "edge_function".to_string(),
-            public_key: chain_public_key,
-        };
-
-        // Create latent token with service chain
-        let latent_rights = vec![("resource1".to_string(), "read".to_string())];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig::default(),
-        )
-        .service_chain(vec![chain_node.clone()])
-        .issue(&root_keypair)
-        .expect("Failed to create latent token with service chain");
-
-        // Activate the latent token first
-        let activated_token_bytes = activate_latent_token(
-            crate::decode_token(&latent_token).expect("Failed to decode"),
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-            &activator_keypair,
-            TokenTimeConfig::default(),
-        )
-        .expect("Failed to activate latent token");
-
-        // Add service chain attestation to the activated token
-        let attested_token_bytes = crate::attest::add_service_node_attestation(
-            activated_token_bytes,
-            root_public_key,
-            "resource1",
-            &chain_keypair,
-        )
-        .expect("Failed to add service chain attestation");
-
-        // Verify with service chain
-        let result = verify_service_chain_biscuit_local(
-            attested_token_bytes,
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-            vec![chain_node],
-            None,
-        );
-
-        assert!(
-            result.is_ok(),
-            "Activated latent token with service chain should verify"
-        );
-    }
-
-    #[test]
-    fn test_latent_capability_wrong_activator_key() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        // Create latent token bound to specific activator
-        let latent_rights = vec![("resource1".to_string(), "read".to_string())];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig::default(),
-        )
-        .issue(&root_keypair)
-        .expect("Failed to create latent token");
-
-        // Try to activate with a different keypair
-        let wrong_activator_keypair = KeyPair::new();
-
-        let activated_token = activate_latent_token_from_string(
-            latent_token,
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-            &wrong_activator_keypair,
-            TokenTimeConfig::default(),
-        )
-        .expect("Activation succeeds (wrong key detected at verification)");
-
-        // Verification should fail because the activator key doesn't match
-        let result = crate::verify::verify_token_local(
-            &activated_token,
-            root_public_key,
-            "alice",
-            "resource1",
-            "read",
-        );
-
-        assert!(
-            result.is_err(),
-            "Should fail to verify token activated with wrong key"
-        );
-    }
-
-    #[test]
-    fn test_latent_capability_time_attenuation() {
-        let root_keypair = KeyPair::new();
-        let root_public_key = root_keypair.public();
-
-        let activator_keypair = KeyPair::new();
-        let activator_public_key = format!(
-            "ed25519/{}",
-            hex::encode(activator_keypair.public().to_bytes())
-        );
-
-        // Create latent token with 30 minute expiration
-        let latent_rights = vec![("resource1".to_string(), "read".to_string())];
-
-        let latent_token = HessraAuthorization::new_latent(
-            latent_rights,
-            activator_public_key,
-            TokenTimeConfig {
-                start_time: Some(Utc::now().timestamp()),
-                duration: 1800, // 30 minutes
-            },
-        )
-        .issue(&root_keypair)
-        .expect("Failed to create latent token");
-
-        // Activate with 5 minute expiration (shorter than latent token)
-        let activated_token_short = activate_latent_token_from_string(
-            latent_token.clone(),
-            root_public_key,
-            "alice".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-            &activator_keypair,
-            TokenTimeConfig {
-                start_time: Some(Utc::now().timestamp()),
-                duration: 300, // 5 minutes
-            },
-        )
-        .expect("Failed to activate latent token");
-
-        // Should verify successfully now
-        let result = crate::verify::verify_token_local(
-            &activated_token_short,
-            root_public_key,
-            "alice",
-            "resource1",
-            "read",
-        );
-        assert!(
-            result.is_ok(),
-            "Activated token with 5min expiration should verify"
-        );
-
-        // Create an expired activation (1 second ago, already expired)
-        let activated_token_expired = activate_latent_token_from_string(
-            latent_token.clone(),
-            root_public_key,
-            "bob".to_string(),
-            "resource1".to_string(),
-            "read".to_string(),
-            &activator_keypair,
-            TokenTimeConfig {
-                start_time: Some(Utc::now().timestamp() - 2), // Started 2 seconds ago
-                duration: 1,                                  // 1 second duration (already expired)
-            },
-        )
-        .expect("Failed to activate latent token");
-
-        // Should fail verification because activation expired
-        let result = crate::verify::verify_token_local(
-            &activated_token_expired,
-            root_public_key,
-            "bob",
-            "resource1",
-            "read",
-        );
-        assert!(
-            result.is_err(),
-            "Activated token with expired time should fail verification"
-        );
-
-        // Test that even though latent token is still valid (30min),
-        // the shorter activation time (5min) is respected
-        // We create a latent token that expires in the future but activate it
-        // with an already-expired time config
-        let latent_token_long = HessraAuthorization::new_latent(
-            vec![("resource2".to_string(), "write".to_string())],
-            format!(
-                "ed25519/{}",
-                hex::encode(activator_keypair.public().to_bytes())
-            ),
-            TokenTimeConfig {
-                start_time: Some(Utc::now().timestamp()),
-                duration: 3600, // 1 hour - very long
-            },
-        )
-        .issue(&root_keypair)
-        .expect("Failed to create long-lived latent token");
-
-        let activated_expired_despite_latent = activate_latent_token_from_string(
-            latent_token_long,
-            root_public_key,
-            "charlie".to_string(),
-            "resource2".to_string(),
-            "write".to_string(),
-            &activator_keypair,
-            TokenTimeConfig {
-                start_time: Some(Utc::now().timestamp() - 10), // Started 10 seconds ago
-                duration: 1,                                   // 1 second duration (expired)
-            },
-        )
-        .expect("Failed to activate long-lived latent token");
-
-        // Should fail even though latent token is still valid
-        let result = crate::verify::verify_token_local(
-            &activated_expired_despite_latent,
-            root_public_key,
-            "charlie",
-            "resource2",
-            "write",
-        );
-        assert!(
-            result.is_err(),
-            "Activation expiration should take precedence over latent expiration"
         );
     }
 
