@@ -482,6 +482,17 @@ mod tests {
             "Verification should succeed with matching domain"
         );
 
+        // Should pass with matching domain using builder and ensuring subject in domain
+        assert!(
+            IdentityVerifier::new(domain_token.clone(), public_key)
+                .with_identity(subject.clone())
+                .with_domain(domain.clone())
+                .ensure_subject_in_domain()
+                .verify()
+                .is_ok(),
+            "Verification should succeed with matching domain"
+        );
+
         // Should fail without domain context
         assert!(
             verify_identity_token(domain_token.clone(), public_key, subject.clone()).is_err(),
@@ -526,6 +537,7 @@ mod tests {
             IdentityVerifier::new(delegatable_domain_token.clone(), public_key)
                 .with_identity(subject.clone())
                 .with_domain(domain.clone())
+                .ensure_subject_in_domain()
                 .verify()
                 .is_ok(),
             "Delegatable token should verify with exact identity and domain"
@@ -536,6 +548,7 @@ mod tests {
             IdentityVerifier::new(delegatable_domain_token.clone(), public_key)
                 .with_identity("urn:hessra:alice:laptop".to_string())
                 .with_domain(domain.clone())
+                .ensure_subject_in_domain()
                 .verify()
                 .is_ok(),
             "Delegatable token should verify with hierarchical identity and domain"
@@ -571,6 +584,18 @@ mod tests {
                 .verify()
                 .is_ok(),
             "Regular token should verify even with extra domain context"
+        );
+
+        // Test 4: Ensure subject in domain
+        // This should fail because the subject is not associated with the domain
+        assert!(
+            IdentityVerifier::new(regular_token.clone(), public_key)
+                .with_identity(subject.clone())
+                .with_domain(domain.clone())
+                .ensure_subject_in_domain()
+                .verify()
+                .is_err(),
+            "Regular token should fail to verify with ensure subject in domain"
         );
     }
 }

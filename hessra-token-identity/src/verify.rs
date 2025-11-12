@@ -1,5 +1,5 @@
 extern crate biscuit_auth as biscuit;
-use biscuit::macros::{authorizer, fact};
+use biscuit::macros::{authorizer, fact, policy};
 use chrono::Utc;
 use hessra_token_core::{parse_check_failure, Biscuit, PublicKey, TokenError};
 
@@ -42,6 +42,7 @@ pub struct IdentityVerifier {
     public_key: PublicKey,
     identity: Option<String>,
     domain: Option<String>,
+    ensure_subject_in_domain: bool,
 }
 
 impl IdentityVerifier {
@@ -56,6 +57,7 @@ impl IdentityVerifier {
             public_key,
             identity: None,
             domain: None,
+            ensure_subject_in_domain: false,
         }
     }
 
@@ -80,6 +82,16 @@ impl IdentityVerifier {
     /// * `domain` - The domain to verify against (e.g., "example.com")
     pub fn with_domain(mut self, domain: String) -> Self {
         self.domain = Some(domain);
+        self
+    }
+
+    /// Ensures that the subject is associated with the domain.
+    ///
+    /// When set, the token will only verify if the subject is associated with the domain.
+    ///
+    /// # Arguments
+    pub fn ensure_subject_in_domain(mut self) -> Self {
+        self.ensure_subject_in_domain = true;
         self
     }
 
@@ -112,9 +124,6 @@ impl IdentityVerifier {
                 r#"
                     time({now});
                     actor({identity});
-
-                    // Allow if all checks pass
-                    allow if true;
                 "#
             )
         } else {
@@ -123,9 +132,6 @@ impl IdentityVerifier {
                 r#"
                     time({now});
                     actor($a) <- subject($a);
-
-                    // Allow if all checks pass
-                    allow if true;
                 "#
             )
         };
@@ -133,6 +139,22 @@ impl IdentityVerifier {
         // Add domain fact if specified
         if let Some(domain) = self.domain {
             authz = authz.fact(fact!(r#"domain({domain});"#))?;
+        }
+
+        // Add policy to ensure that the subject is associated with the domain
+        if self.ensure_subject_in_domain {
+            authz = authz.policy(policy!(
+                r#"
+                    allow if subject($d, $s), domain($d), subject($s);
+                "#
+            ))?;
+        } else {
+            // Allow if all checks pass
+            authz = authz.policy(policy!(
+                r#"
+                    allow if true;
+                "#
+            ))?;
         }
 
         let mut authz = authz

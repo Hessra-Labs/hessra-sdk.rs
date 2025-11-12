@@ -1,6 +1,6 @@
 extern crate biscuit_auth as biscuit;
 
-use biscuit::macros::{biscuit, check};
+use biscuit::macros::{biscuit, check, rule};
 use chrono::Utc;
 use hessra_token_core::{KeyPair, TokenTimeConfig};
 use std::error::Error;
@@ -129,6 +129,13 @@ impl HessraIdentity {
             biscuit_builder = biscuit_builder.check(check!(
                 r#"
                     check if domain({domain});
+                "#
+            ))?;
+            // This rule creates a fact that the subject is associated with the domain,
+            // so that verifier can be sure that the subject is associated with the domain.
+            biscuit_builder = biscuit_builder.rule(rule!(
+                r#"
+                    subject($d, $s) <- domain($d), subject($s);
                 "#
             ))?;
         }

@@ -14,6 +14,8 @@ pub struct InspectResult {
     pub is_expired: bool,
     /// Whether this is a delegated token (has attenuation blocks)
     pub is_delegated: bool,
+    /// Domain restriction (if present)
+    pub domain: Option<String>,
 }
 
 /// Inspects an identity token to extract the subject/actor information without requiring verification.
@@ -23,6 +25,7 @@ pub struct InspectResult {
 /// - The expiration timestamp (if present)
 /// - Whether the token is expired
 /// - Whether the token has been delegated
+/// - The domain restriction (if present)
 ///
 /// # Arguments
 /// * `token` - Base64-encoded Biscuit token
@@ -73,6 +76,7 @@ pub fn inspect_identity_token(
 
     let token_content = biscuit.print();
     let expiry = extract_expiry_from_content(&token_content);
+    let domain = extract_domain_from_content(&token_content);
 
     let is_expired = expiry.is_some_and(|exp| exp < now);
 
@@ -81,6 +85,7 @@ pub fn inspect_identity_token(
         expiry,
         is_expired,
         is_delegated,
+        domain,
     })
 }
 
@@ -157,6 +162,34 @@ fn extract_expiry_from_content(content: &str) -> Option<i64> {
     }
 
     earliest_expiry
+}
+
+/// Extracts domain restriction from token content
+fn extract_domain_from_content(content: &str) -> Option<String> {
+    // Look for check constraints with domain
+    // Pattern: "check if domain(\"DOMAIN\")" or "check if domain(DOMAIN)"
+    for line in content.lines() {
+        if line.contains("check if") && line.contains("domain(") {
+            if let Some(start_pos) = line.find("domain(") {
+                let after_domain = &line[start_pos + 7..]; // Skip "domain("
+
+                // Try to extract the domain string - could be quoted or unquoted
+                // Look for content until closing paren
+                if let Some(end_pos) = after_domain.find(')') {
+                    let domain_str = &after_domain[..end_pos].trim();
+
+                    // Remove quotes if present
+                    let domain = domain_str.trim_matches('"').trim_matches('\'');
+
+                    if !domain.is_empty() {
+                        return Some(domain.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[cfg(test)]
@@ -314,5 +347,65 @@ mod tests {
             "Should get the last delegated identity"
         );
         assert!(result.is_delegated);
+    }
+
+    #[test]
+    fn test_inspect_domain_restricted_token() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+        let subject = "urn:hessra:alice".to_string();
+        let domain = "example.com".to_string();
+
+        // Test domain-restricted token
+        let token = HessraIdentity::new(subject.clone(), TokenTimeConfig::default())
+            .domain_restricted(domain.clone())
+            .issue(&keypair)
+            .expect("Failed to create domain-restricted token");
+
+        let result = inspect_identity_token(token, public_key)
+            .expect("Failed to inspect domain-restricted token");
+
+        assert_eq!(result.identity, subject);
+        assert_eq!(result.domain, Some(domain.clone()));
+        assert!(!result.is_delegated);
+    }
+
+    #[test]
+    fn test_inspect_non_domain_restricted_token() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+        let subject = "urn:hessra:alice".to_string();
+
+        // Test regular token without domain restriction
+        let token = HessraIdentity::new(subject.clone(), TokenTimeConfig::default())
+            .issue(&keypair)
+            .expect("Failed to create token");
+
+        let result = inspect_identity_token(token, public_key).expect("Failed to inspect token");
+
+        assert_eq!(result.identity, subject);
+        assert_eq!(result.domain, None);
+    }
+
+    #[test]
+    fn test_inspect_delegatable_domain_restricted_token() {
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+        let base_identity = "urn:hessra:org".to_string();
+        let domain = "myapp.hessra.dev".to_string();
+
+        // Create delegatable domain-restricted token (not yet delegated)
+        let token = HessraIdentity::new(base_identity.clone(), TokenTimeConfig::default())
+            .delegatable(true)
+            .domain_restricted(domain.clone())
+            .issue(&keypair)
+            .expect("Failed to create token");
+
+        let result = inspect_identity_token(token, public_key)
+            .expect("Failed to inspect delegatable domain-restricted token");
+
+        assert_eq!(result.identity, base_identity);
+        assert_eq!(result.domain, Some(domain));
+        assert!(!result.is_delegated); // Not yet delegated
     }
 }
