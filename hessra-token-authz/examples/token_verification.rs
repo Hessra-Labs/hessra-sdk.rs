@@ -9,7 +9,7 @@ fn main() -> Result<(), TokenError> {
     // Generate an example token
     let root_keypair = Arc::new(KeyPair::new());
     let token_base64 = generate_example_token(root_keypair.clone())?;
-    println!("Generated token: {}\n", token_base64);
+    println!("Generated token: {token_base64}\n");
 
     // Example 1: Basic verification
     println!("Example 1: Basic verification");
@@ -28,11 +28,11 @@ fn main() -> Result<(), TokenError> {
     // Create service node keypairs
     let service1_keypair = KeyPair::new();
     let service1_pk_hex = hex::encode(service1_keypair.public().to_bytes());
-    let service1_public_key = format!("ed25519/{}", service1_pk_hex);
+    let service1_public_key = format!("ed25519/{service1_pk_hex}");
 
     let service2_keypair = KeyPair::new();
     let service2_pk_hex = hex::encode(service2_keypair.public().to_bytes());
-    let service2_public_key = format!("ed25519/{}", service2_pk_hex);
+    let service2_public_key = format!("ed25519/{service2_pk_hex}");
 
     // Define service nodes
     let service_nodes = vec![
@@ -86,7 +86,7 @@ fn main() -> Result<(), TokenError> {
 
     // Convert public key to string format and back
     let pk_hex = hex::encode(root_keypair.public().to_bytes());
-    let pk_str = format!("ed25519/{}", pk_hex);
+    let pk_str = format!("ed25519/{pk_hex}");
     let parsed_pk = biscuit_key_from_string(pk_str)?;
 
     // Verify with parsed key

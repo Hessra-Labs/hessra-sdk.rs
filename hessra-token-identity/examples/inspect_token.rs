@@ -20,8 +20,8 @@ fn main() {
     )
     .expect("Failed to create token");
 
-    println!("Created identity token for: {}", alice_identity);
-    println!("Token: {}\n", token);
+    println!("Created identity token for: {alice_identity}");
+    println!("Token: {token}\n");
 
     // Inspect the token to extract information without verification
     let inspect_result =
@@ -32,7 +32,7 @@ fn main() {
     println!("  Is Delegated: {}", inspect_result.is_delegated);
     println!("  Is Expired: {}", inspect_result.is_expired);
     if let Some(expiry) = inspect_result.expiry {
-        println!("  Expires at: {} (Unix timestamp)", expiry);
+        println!("  Expires at: {expiry} (Unix timestamp)");
     }
     println!();
 
@@ -42,23 +42,20 @@ fn main() {
     // 1. Verify as a bearer token (no identity check)
     match verify_bearer_token(token.clone(), public_key) {
         Ok(_) => println!("  ✓ Valid as bearer token"),
-        Err(e) => println!("  ✗ Invalid as bearer token: {}", e),
+        Err(e) => println!("  ✗ Invalid as bearer token: {e}"),
     }
 
     // 2. Verify with correct identity
     match verify_identity_token(token.clone(), public_key, alice_identity.clone()) {
-        Ok(_) => println!("  ✓ Valid for identity: {}", alice_identity),
-        Err(e) => println!("  ✗ Invalid for identity {}: {}", alice_identity, e),
+        Ok(_) => println!("  ✓ Valid for identity: {alice_identity}"),
+        Err(e) => println!("  ✗ Invalid for identity {alice_identity}: {e}"),
     }
 
     // 3. Verify with wrong identity (should fail)
     let wrong_identity = "urn:hessra:bob".to_string();
     match verify_identity_token(token.clone(), public_key, wrong_identity.clone()) {
-        Ok(_) => println!("  ✗ Unexpectedly valid for: {}", wrong_identity),
-        Err(_) => println!(
-            "  ✓ Correctly rejected for wrong identity: {}",
-            wrong_identity
-        ),
+        Ok(_) => println!("  ✗ Unexpectedly valid for: {wrong_identity}"),
+        Err(_) => println!("  ✓ Correctly rejected for wrong identity: {wrong_identity}"),
     }
 
     println!("\n--- Bearer Token Use Case ---");

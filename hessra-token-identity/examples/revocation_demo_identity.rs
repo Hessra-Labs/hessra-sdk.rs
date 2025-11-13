@@ -28,7 +28,7 @@ fn main() {
 
     println!("   Base token revocations:");
     for rev in &base_revocations {
-        println!("   - {}", rev.to_string());
+        println!("   - {rev}");
     }
     println!();
 
@@ -48,7 +48,7 @@ fn main() {
 
     println!("   Delegated token revocations:");
     for rev in &delegated_revocations {
-        println!("   - {}", rev.to_string());
+        println!("   - {rev}");
     }
     println!();
 
@@ -68,7 +68,7 @@ fn main() {
 
     println!("   Multi-level delegated token revocations:");
     for rev in &browser_revocations {
-        println!("   - {}", rev.to_string());
+        println!("   - {rev}");
     }
     println!();
 

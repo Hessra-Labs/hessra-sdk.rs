@@ -1,4 +1,3 @@
-use base64;
 use base64::Engine;
 use hessra_config::{get_default_config, set_default_config, HessraConfig, Protocol};
 use std::env;

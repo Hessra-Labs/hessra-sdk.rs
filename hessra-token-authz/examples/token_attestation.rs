@@ -5,7 +5,7 @@ use hessra_token_core::{decode_token, encode_token, KeyPair, TokenError};
 fn main() -> Result<(), TokenError> {
     // Generate an example token
     let (token_base64, root_keypair) = generate_example_token()?;
-    println!("Original token: {}\n", token_base64);
+    println!("Original token: {token_base64}\n");
 
     // Create a service node keypair
     let service_keypair = KeyPair::new();
@@ -24,7 +24,7 @@ fn main() -> Result<(), TokenError> {
 
     // 3. Encode back to base64
     let attested_token_base64 = encode_token(&attested_token);
-    println!("Attested token: {}\n", attested_token_base64);
+    println!("Attested token: {attested_token_base64}\n");
 
     // 4. Verify the attested token still works
     println!("Verifying attested token...");
@@ -40,7 +40,7 @@ fn main() -> Result<(), TokenError> {
     // 5. Generate a chain of attestations
     println!("\nCreating a chain of attestations...");
     let token_with_chain = create_attestation_chain(&token_base64, &root_keypair)?;
-    println!("Token with attestation chain: {}", token_with_chain);
+    println!("Token with attestation chain: {token_with_chain}");
 
     // 6. Verify the chain token
     println!("\nVerifying token with attestation chain...");
@@ -92,7 +92,7 @@ fn create_attestation_chain(
 
     // Add multiple service attestations
     for service_name in service_names.iter() {
-        println!("  Adding attestation for {}", service_name);
+        println!("  Adding attestation for {service_name}");
 
         // Create a new keypair for this service
         let service_keypair = KeyPair::new();

@@ -1017,7 +1017,7 @@ mod tests {
         let public_key = root.public();
         let chain_key = KeyPair::new();
         let chain_public_key = hex::encode(chain_key.public().to_bytes());
-        let chain_public_key = format!("ed25519/{}", chain_public_key);
+        let chain_public_key = format!("ed25519/{chain_public_key}");
         let chain_node = ServiceNode {
             component: "edge_function".to_string(),
             public_key: chain_public_key.clone(),
@@ -1080,7 +1080,7 @@ mod tests {
         // Create two chain nodes
         let chain_key1 = KeyPair::new();
         let chain_public_key1 = hex::encode(chain_key1.public().to_bytes());
-        let chain_public_key1 = format!("ed25519/{}", chain_public_key1);
+        let chain_public_key1 = format!("ed25519/{chain_public_key1}");
         let chain_node1 = ServiceNode {
             component: "edge_function".to_string(),
             public_key: chain_public_key1.clone(),
@@ -1088,7 +1088,7 @@ mod tests {
 
         let chain_key2 = KeyPair::new();
         let chain_public_key2 = hex::encode(chain_key2.public().to_bytes());
-        let chain_public_key2 = format!("ed25519/{}", chain_public_key2);
+        let chain_public_key2 = format!("ed25519/{chain_public_key2}");
         let chain_node2 = ServiceNode {
             component: "middleware".to_string(),
             public_key: chain_public_key2.clone(),
@@ -1163,7 +1163,7 @@ mod tests {
         let public_key = root.public();
         let chain_key = KeyPair::new();
         let chain_public_key = hex::encode(chain_key.public().to_bytes());
-        let chain_public_key = format!("ed25519/{}", chain_public_key);
+        let chain_public_key = format!("ed25519/{chain_public_key}");
         let chain_node = ServiceNode {
             component: "edge_function".to_string(),
             public_key: chain_public_key.clone(),
@@ -1222,7 +1222,7 @@ mod tests {
         // Create three chain nodes
         let chain_key1 = KeyPair::new();
         let chain_public_key1 = hex::encode(chain_key1.public().to_bytes());
-        let chain_public_key1 = format!("ed25519/{}", chain_public_key1);
+        let chain_public_key1 = format!("ed25519/{chain_public_key1}");
         let chain_node1 = ServiceNode {
             component: "edge_function".to_string(),
             public_key: chain_public_key1.clone(),
@@ -1230,7 +1230,7 @@ mod tests {
 
         let chain_key2 = KeyPair::new();
         let chain_public_key2 = hex::encode(chain_key2.public().to_bytes());
-        let chain_public_key2 = format!("ed25519/{}", chain_public_key2);
+        let chain_public_key2 = format!("ed25519/{chain_public_key2}");
         let chain_node2 = ServiceNode {
             component: "middleware".to_string(),
             public_key: chain_public_key2.clone(),
@@ -1238,7 +1238,7 @@ mod tests {
 
         let chain_key3 = KeyPair::new();
         let chain_public_key3 = hex::encode(chain_key3.public().to_bytes());
-        let chain_public_key3 = format!("ed25519/{}", chain_public_key3);
+        let chain_public_key3 = format!("ed25519/{chain_public_key3}");
         let chain_node3 = ServiceNode {
             component: "backend".to_string(),
             public_key: chain_public_key3.clone(),
@@ -1322,7 +1322,7 @@ mod tests {
         let public_key = root.public();
         let chain_key = KeyPair::new();
         let chain_public_key = hex::encode(chain_key.public().to_bytes());
-        let chain_public_key = format!("ed25519/{}", chain_public_key);
+        let chain_public_key = format!("ed25519/{chain_public_key}");
         let chain_node = ServiceNode {
             component: "edge_function".to_string(),
             public_key: chain_public_key.clone(),
@@ -1393,7 +1393,7 @@ mod tests {
         // Create a multi-party node
         let multi_party_key = KeyPair::new();
         let multi_party_public_key = hex::encode(multi_party_key.public().to_bytes());
-        let multi_party_public_key = format!("ed25519/{}", multi_party_public_key);
+        let multi_party_public_key = format!("ed25519/{multi_party_public_key}");
         let multi_party_node = ServiceNode {
             component: "approval_service".to_string(),
             public_key: multi_party_public_key.clone(),
@@ -1546,7 +1546,7 @@ mod tests {
         // Create service node
         let chain_key = KeyPair::new();
         let chain_public_key = hex::encode(chain_key.public().to_bytes());
-        let chain_public_key = format!("ed25519/{}", chain_public_key);
+        let chain_public_key = format!("ed25519/{chain_public_key}");
         let chain_node = ServiceNode {
             component: "edge_function".to_string(),
             public_key: chain_public_key.clone(),
@@ -1611,7 +1611,7 @@ mod tests {
         // Create multi-party node
         let party_key = KeyPair::new();
         let party_public_key = hex::encode(party_key.public().to_bytes());
-        let party_public_key = format!("ed25519/{}", party_public_key);
+        let party_public_key = format!("ed25519/{party_public_key}");
         let party_node = ServiceNode {
             component: "approval_service".to_string(),
             public_key: party_public_key.clone(),
@@ -1777,7 +1777,8 @@ mod tests {
         // Create service node
         let node_keypair = KeyPair::new();
         let node_public_key = node_keypair.public();
-        let node_key_string = format!("ed25519/{}", hex::encode(node_public_key.to_bytes()));
+        let node_key_hex = hex::encode(node_public_key.to_bytes());
+        let node_key_string = format!("ed25519/{node_key_hex}");
 
         let service_nodes = vec![ServiceNode {
             component: "api-gateway".to_string(),
@@ -1979,8 +1980,8 @@ mod tests {
         let public_key = keypair.public();
 
         let chain_keypair = KeyPair::new();
-        let chain_public_key =
-            format!("ed25519/{}", hex::encode(chain_keypair.public().to_bytes()));
+        let chain_public_key_hex = hex::encode(chain_keypair.public().to_bytes());
+        let chain_public_key = format!("ed25519/{chain_public_key_hex}");
         let chain_node = ServiceNode {
             component: "edge_function".to_string(),
             public_key: chain_public_key,

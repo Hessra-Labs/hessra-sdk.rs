@@ -509,7 +509,7 @@ mod tests {
         .unwrap();
 
         let classification = classify_token(&biscuit);
-        let display_str = format!("{}", classification);
+        let display_str = format!("{classification}");
 
         assert!(display_str.contains("Token Classification"));
         assert!(display_str.contains("Type: authorization"));

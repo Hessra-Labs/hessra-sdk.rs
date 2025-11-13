@@ -111,7 +111,7 @@ mod tests {
 
         let attenuated_token = match attenuated_result {
             Ok(t) => t,
-            Err(e) => panic!("Failed to attenuate token: {:?}", e),
+            Err(e) => panic!("Failed to attenuate token: {e:?}"),
         };
 
         // Original identity should NOT work with attenuated token (delegation restricts usage)
@@ -326,7 +326,7 @@ mod tests {
             let token = HessraIdentity::new(base.to_string(), TokenTimeConfig::default())
                 .delegatable(true)
                 .issue(&keypair)
-                .expect(&format!("Failed to create delegatable token for {}", base));
+                .unwrap_or_else(|_| panic!("Failed to create delegatable token for {base}"));
 
             let attenuated = add_identity_attenuation_to_token(
                 token,
@@ -334,18 +334,16 @@ mod tests {
                 public_key, // Use the same public key
                 TokenTimeConfig::default(),
             )
-            .expect(&format!("Failed to attenuate {} to {}", base, delegated));
+            .unwrap_or_else(|_| panic!("Failed to attenuate {base} to {delegated}"));
 
             // After attenuation, only the delegated identity should work
             assert!(
                 verify_identity_token(attenuated.clone(), public_key, base.to_string()).is_err(),
-                "Base identity {} should NOT verify after delegation",
-                base
+                "Base identity {base} should NOT verify after delegation"
             );
             assert!(
                 verify_identity_token(attenuated, public_key, delegated.to_string()).is_ok(),
-                "Delegated identity {} should verify",
-                delegated
+                "Delegated identity {delegated} should verify"
             );
         }
     }
