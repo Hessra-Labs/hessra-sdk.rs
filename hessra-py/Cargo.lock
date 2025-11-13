@@ -577,7 +577,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hessra-api"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -603,7 +603,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-py"
-version = "0.2.1"
+version = "0.2.4"
 dependencies = [
  "hessra-api",
  "hessra-config",
@@ -620,7 +620,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-sdk"
-version = "0.10.1"
+version = "0.10.5"
 dependencies = [
  "hessra-api",
  "hessra-config",
@@ -635,7 +635,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-token"
-version = "0.6.0"
+version = "0.6.3"
 dependencies = [
  "hessra-token-authz",
  "hessra-token-core",
@@ -644,7 +644,7 @@ dependencies = [
 
 [[package]]
 name = "hessra-token-authz"
-version = "0.2.0"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "biscuit-auth",
@@ -659,19 +659,20 @@ dependencies = [
 
 [[package]]
 name = "hessra-token-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "biscuit-auth",
  "chrono",
  "hex",
+ "regex",
  "serde",
  "thiserror 2.0.12",
 ]
 
 [[package]]
 name = "hessra-token-identity"
-version = "0.3.0"
+version = "0.6.0"
 dependencies = [
  "base64 0.22.1",
  "biscuit-auth",
