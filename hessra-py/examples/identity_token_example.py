@@ -126,6 +126,7 @@ def main():
                     resource="resource1",
                     operation="read",
                     identity_token=identity_token,
+                    domain=None,
                 )
                 print("✓ Authorization token obtained using identity token")
                 print(f"   Token: {auth_token[:50]}...")

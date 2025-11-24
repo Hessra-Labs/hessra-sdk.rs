@@ -220,6 +220,7 @@ impl PyHessraClient {
         resource: String,
         operation: String,
         identity_token: String,
+        domain: Option<String>,
     ) -> HessraPyResult<String> {
         let inner = Arc::clone(&self.inner);
         let runtime = Arc::clone(&self.runtime);
@@ -227,7 +228,7 @@ impl PyHessraClient {
         runtime
             .block_on(async move {
                 let response = inner
-                    .request_token_with_identity(resource, operation, identity_token)
+                    .request_token_with_identity(resource, operation, identity_token, domain)
                     .await?;
                 response
                     .token
