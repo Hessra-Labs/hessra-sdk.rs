@@ -62,9 +62,9 @@ pub use hessra_config::{ConfigError, HessraConfig, Protocol};
 
 pub use hessra_api::{
     ApiError, HessraClient, HessraClientBuilder, IdentityTokenRequest, IdentityTokenResponse,
-    PublicKeyResponse, RefreshIdentityTokenRequest, SignTokenRequest, SignTokenResponse,
-    SignoffInfo, TokenRequest, TokenResponse, VerifyServiceChainTokenRequest, VerifyTokenRequest,
-    VerifyTokenResponse,
+    MintIdentityTokenRequest, MintIdentityTokenResponse, PublicKeyResponse,
+    RefreshIdentityTokenRequest, SignTokenRequest, SignTokenResponse, SignoffInfo, TokenRequest,
+    TokenResponse, VerifyServiceChainTokenRequest, VerifyTokenRequest, VerifyTokenResponse,
 };
 
 /// Errors that can occur in the Hessra SDK
@@ -264,13 +264,19 @@ impl Hessra {
 
     /// Request a token for a resource
     /// Returns the full TokenResponse which may include pending signoffs for multi-party tokens
+    ///
+    /// # Arguments
+    /// * `resource` - The resource identifier to request authorization for
+    /// * `operation` - The operation to request authorization for
+    /// * `domain` - Optional domain for domain-restricted identity token verification
     pub async fn request_token(
         &self,
         resource: impl Into<String>,
         operation: impl Into<String>,
+        domain: Option<String>,
     ) -> Result<TokenResponse, SdkError> {
         self.client
-            .request_token(resource.into(), operation.into())
+            .request_token(resource.into(), operation.into(), domain)
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
@@ -298,18 +304,30 @@ impl Hessra {
     /// This method should be used when you have a delegated identity token
     /// and want to request authorization tokens as that delegated identity
     /// The identity token will be automatically attenuated with a 5-second expiry for security
+    ///
+    /// # Arguments
+    /// * `resource` - The resource identifier to request authorization for
+    /// * `operation` - The operation to request authorization for
+    /// * `identity_token` - The identity token to use for authentication
+    /// * `domain` - Optional domain for domain-restricted identity token verification
     pub async fn request_token_with_identity(
         &self,
         resource: impl Into<String>,
         operation: impl Into<String>,
         identity_token: impl Into<String>,
+        domain: Option<String>,
     ) -> Result<TokenResponse, SdkError> {
         let token = identity_token.into();
         // Apply JIT attenuation to the identity token
         let attenuated_token = self.apply_jit_attenuation(token);
 
         self.client
-            .request_token_with_identity(resource.into(), operation.into(), attenuated_token)
+            .request_token_with_identity(
+                resource.into(),
+                operation.into(),
+                attenuated_token,
+                domain,
+            )
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
@@ -321,7 +339,7 @@ impl Hessra {
         resource: impl Into<String>,
         operation: impl Into<String>,
     ) -> Result<String, SdkError> {
-        let response = self.request_token(resource, operation).await?;
+        let response = self.request_token(resource, operation, None).await?;
         match response.token {
             Some(token) => Ok(token),
             None => Err(SdkError::Generic(format!(
@@ -465,7 +483,7 @@ impl Hessra {
         resource: &str,
         operation: &str,
     ) -> Result<String, SdkError> {
-        let initial_response = self.request_token(resource, operation).await?;
+        let initial_response = self.request_token(resource, operation, None).await?;
         self.collect_signoffs(initial_response, resource, operation)
             .await
     }
@@ -717,6 +735,43 @@ impl Hessra {
     ) -> Result<IdentityTokenResponse, SdkError> {
         self.client
             .refresh_identity_token(current_token.into(), identifier)
+            .await
+            .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Mint a new domain-restricted identity token
+    ///
+    /// This method requires mTLS authentication from a "realm" identity (one without domain restriction).
+    /// The minted token will be restricted to the minting identity's domain and cannot mint further sub-identities.
+    /// Permissions for the minted identity are determined by domain roles configured on the server.
+    ///
+    /// # Arguments
+    /// * `subject` - The subject identifier for the new identity (e.g., "uri:urn:test:argo-cli1:user123")
+    /// * `duration` - Optional duration in seconds. If None, server uses configured default.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use hessra_sdk::Hessra;
+    /// # async fn example(sdk: &Hessra) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Mint a domain-restricted identity token for a user
+    /// let response = sdk.mint_domain_restricted_identity_token(
+    ///     "uri:urn:test:argo-cli1:user123".to_string(),
+    ///     Some(3600) // 1 hour
+    /// ).await?;
+    ///
+    /// if let Some(token) = response.token {
+    ///     println!("Minted identity token: {}", token);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn mint_domain_restricted_identity_token(
+        &self,
+        subject: impl Into<String>,
+        duration: Option<u64>,
+    ) -> Result<MintIdentityTokenResponse, SdkError> {
+        self.client
+            .mint_domain_restricted_identity_token(subject.into(), duration)
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
     }

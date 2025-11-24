@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let resource = "resource1".to_string();
     let subject = "uri:urn:test:argo-cli0".to_string();
     let token = client
-        .request_token(resource.clone(), "read".to_string())
+        .request_token(resource.clone(), "read".to_string(), None)
         .await?;
     println!("Received token: {}", token);
 

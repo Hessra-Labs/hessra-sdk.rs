@@ -65,6 +65,12 @@ pub struct TokenRequest {
     pub resource: String,
     /// The operation to request authorization for
     pub operation: String,
+    /// Optional domain for domain-restricted identity token verification.
+    /// When provided, enables enhanced verification with ensure_subject_in_domain().
+    /// This parameter is used when the client is authenticating with a domain-restricted
+    /// identity token and wants the server to verify the subject is truly associated with the domain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
 }
 
 /// Request payload for verifying an authorization token
@@ -167,6 +173,28 @@ pub struct IdentityTokenResponse {
     /// Response message from the server
     pub response_msg: String,
     /// The issued identity token, if successful
+    pub token: Option<String>,
+    /// Time until expiration in seconds
+    pub expires_in: Option<u64>,
+    /// The identity contained in the token
+    pub identity: Option<String>,
+}
+
+/// Request for minting a new domain-restricted identity token
+#[derive(Serialize, Deserialize)]
+pub struct MintIdentityTokenRequest {
+    /// The subject identifier for the new identity token
+    pub subject: String,
+    /// Optional duration in seconds (server will use default if not provided)
+    pub duration: Option<u64>,
+}
+
+/// Response from minting a domain-restricted identity token
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MintIdentityTokenResponse {
+    /// Response message from the server
+    pub response_msg: String,
+    /// The minted identity token, if successful
     pub token: Option<String>,
     /// Time until expiration in seconds
     pub expires_in: Option<u64>,
@@ -751,14 +779,21 @@ impl HessraClient {
 
     /// Request a token for a resource
     /// Returns the full TokenResponse which may include pending signoffs for multi-party tokens
+    ///
+    /// # Arguments
+    /// * `resource` - The resource identifier to request authorization for
+    /// * `operation` - The operation to request authorization for
+    /// * `domain` - Optional domain for domain-restricted identity token verification
     pub async fn request_token(
         &self,
         resource: String,
         operation: String,
+        domain: Option<String>,
     ) -> Result<TokenResponse, ApiError> {
         let request = TokenRequest {
             resource,
             operation,
+            domain,
         };
 
         let response = match self {
@@ -781,15 +816,23 @@ impl HessraClient {
     /// Request a token for a resource using an identity token for authentication
     /// The identity token will be sent in the Authorization header as a Bearer token
     /// Returns the full TokenResponse which may include pending signoffs for multi-party tokens
+    ///
+    /// # Arguments
+    /// * `resource` - The resource identifier to request authorization for
+    /// * `operation` - The operation to request authorization for
+    /// * `identity_token` - The identity token to use for authentication
+    /// * `domain` - Optional domain for domain-restricted identity token verification
     pub async fn request_token_with_identity(
         &self,
         resource: String,
         operation: String,
         identity_token: String,
+        domain: Option<String>,
     ) -> Result<TokenResponse, ApiError> {
         let request = TokenRequest {
             resource,
             operation,
+            domain,
         };
 
         let response = match self {
@@ -824,7 +867,7 @@ impl HessraClient {
         resource: String,
         operation: String,
     ) -> Result<String, ApiError> {
-        let response = self.request_token(resource, operation).await?;
+        let response = self.request_token(resource, operation, None).await?;
 
         match response.token {
             Some(token) => Ok(token),
@@ -1052,6 +1095,39 @@ impl HessraClient {
             HessraClient::Http3(client) => {
                 client
                     .send_request::<_, IdentityTokenResponse>("refresh_identity_token", &request)
+                    .await?
+            }
+        };
+
+        Ok(response)
+    }
+
+    /// Mint a new domain-restricted identity token
+    ///
+    /// This endpoint requires mTLS authentication from a "realm" identity (one without domain restriction).
+    /// The minted token will be restricted to the minting identity's domain and cannot mint further sub-identities.
+    /// Permissions are determined by domain roles configured on the server.
+    ///
+    /// # Arguments
+    /// * `subject` - The subject identifier for the new identity (e.g., "uri:urn:test:argo-cli1:user123")
+    /// * `duration` - Optional duration in seconds. If None, server uses configured default.
+    pub async fn mint_domain_restricted_identity_token(
+        &self,
+        subject: String,
+        duration: Option<u64>,
+    ) -> Result<MintIdentityTokenResponse, ApiError> {
+        let request = MintIdentityTokenRequest { subject, duration };
+
+        let response = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request::<_, MintIdentityTokenResponse>("mint_identity_token", &request)
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request::<_, MintIdentityTokenResponse>("mint_identity_token", &request)
                     .await?
             }
         };

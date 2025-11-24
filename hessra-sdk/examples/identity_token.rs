@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             println!("\nAttempting to request authorization token for resource4:write using agent1's token but with the root identity certificate:");
             match sdk
-                .request_token_with_identity("resource4", "write", &attenuated_token)
+                .request_token_with_identity("resource4", "write", &attenuated_token, None)
                 .await
             {
                 Ok(response) => {
@@ -129,7 +129,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("\nAttempting to request authorization token for resource4:read as agent1:");
             println!("  (Identity token sent via Authorization: Bearer <token> header)");
             match sdk2
-                .request_token_with_identity("resource4", "read", &attenuated_token)
+                .request_token_with_identity("resource4", "read", &attenuated_token, None)
                 .await
             {
                 Ok(response) => {
@@ -156,7 +156,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             );
 
             println!("\nAttempting to request authorization token for resource4:write with mTLS:");
-            match sdk.request_token("resource4", "write").await {
+            match sdk.request_token("resource4", "write", None).await {
                 Ok(response) => {
                     if let Some(_auth_token) = response.token {
                         println!("✓ Successfully got write access with original identity (has full permissions)");

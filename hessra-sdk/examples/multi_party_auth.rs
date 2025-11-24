@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Step 1: Request initial token
-    let token_response = client.request_token(resource, operation).await?;
+    let token_response = client.request_token(resource, operation, None).await?;
     println!("Initial token request successful");
 
     if let Some(pending_signoffs) = &token_response.pending_signoffs {

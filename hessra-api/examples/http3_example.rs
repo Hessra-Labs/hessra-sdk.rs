@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     println!("Requesting token for resource: {}", resource);
 
     let token = match client
-        .request_token(resource.clone(), "read".to_string())
+        .request_token(resource.clone(), "read".to_string(), None)
         .await
     {
         Ok(token) => {

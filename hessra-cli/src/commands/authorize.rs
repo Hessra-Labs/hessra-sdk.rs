@@ -192,11 +192,11 @@ async fn request_authorization(
 
     // Request the authorization token
     let response: TokenResponse = if let Some(id_token) = identity_token {
-        sdk.request_token_with_identity(&resource, &operation, &id_token)
+        sdk.request_token_with_identity(&resource, &operation, &id_token, None)
             .await
             .map_err(|e| CliError::Sdk(format!("Authorization request failed: {e}")))?
     } else {
-        sdk.request_token(&resource, &operation)
+        sdk.request_token(&resource, &operation, None)
             .await
             .map_err(|e| CliError::Sdk(format!("Authorization request failed: {e}")))?
     };

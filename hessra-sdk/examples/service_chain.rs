@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Request a token for a specific resource
     let resource = "order_service".to_string();
     let token_response = client
-        .request_token(resource.clone(), "read".to_string())
+        .request_token(resource.clone(), "read".to_string(), None)
         .await?;
 
     if let Some(pending) = &token_response.pending_signoffs {

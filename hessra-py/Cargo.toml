@@ -1,6 +1,6 @@
 [package]
 name = "hessra-py"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Python bindings for Hessra authentication services"
@@ -13,11 +13,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Core Hessra SDK
-hessra-sdk = { path = "../hessra-sdk", version = "0.10.4" }
+hessra-sdk = { path = "../hessra-sdk", version = "0.11.0" }
 hessra-config = { path = "../hessra-config", version = "0.3.0" }
 hessra-token = { path = "../hessra-token", version = "0.6.3" }
 hessra-token-identity = { path = "../hessra-token-identity", version = "0.6.0" }
-hessra-api = { path = "../hessra-api", version = "0.5.1" }
+hessra-api = { path = "../hessra-api", version = "0.6.0" }
 
 # PyO3 for Python bindings
 pyo3 = { version = "0.25", features = ["extension-module", "abi3-py38"] }
