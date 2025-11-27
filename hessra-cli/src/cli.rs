@@ -247,6 +247,45 @@ pub enum IdentityCommands {
         /// Name of the token to delete
         token_name: String,
     },
+
+    /// Mint a domain-restricted identity token
+    Mint {
+        /// The subject identifier for the new identity (e.g., "uri:urn:test:domain:user123")
+        #[arg(short = 's', long)]
+        subject: String,
+
+        /// Time-to-live for the token in seconds
+        #[arg(long)]
+        ttl: Option<u64>,
+
+        /// Server hostname or URL
+        #[arg(long, env = "HESSRA_SERVER")]
+        server: Option<String>,
+
+        /// Server port
+        #[arg(short, long, default_value = "443", env = "HESSRA_PORT")]
+        port: u16,
+
+        /// Path to client certificate for mTLS
+        #[arg(long, env = "HESSRA_CERT")]
+        cert: Option<PathBuf>,
+
+        /// Path to client private key for mTLS
+        #[arg(long, env = "HESSRA_KEY")]
+        key: Option<PathBuf>,
+
+        /// Path to CA certificate
+        #[arg(long, env = "HESSRA_CA")]
+        ca: Option<PathBuf>,
+
+        /// Name to save the token as (optional)
+        #[arg(long)]
+        save_as: Option<String>,
+
+        /// Output only the token without any formatting
+        #[arg(long)]
+        token_only: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -296,6 +335,10 @@ pub enum AuthorizeCommands {
         /// Server public key (base64 encoded) - for offline verification
         #[arg(long, env = "HESSRA_PUBLIC_KEY")]
         public_key: Option<String>,
+
+        /// Domain for domain-restricted identity token verification
+        #[arg(long)]
+        domain: Option<String>,
     },
 
     /// Verify an authorization token

@@ -23,6 +23,7 @@ pub async fn handle_authorize_command(command: AuthorizeCommands, json_output: b
             server,
             port,
             public_key,
+            domain,
         } => {
             request_authorization(
                 resource,
@@ -35,6 +36,7 @@ pub async fn handle_authorize_command(command: AuthorizeCommands, json_output: b
                 server,
                 port,
                 public_key,
+                domain,
                 json_output,
                 token_only,
             )
@@ -76,21 +78,41 @@ async fn request_authorization(
     server: Option<String>,
     port: u16,
     public_key: Option<String>,
+    domain: Option<String>,
     json_output: bool,
     token_only: bool,
 ) -> Result<()> {
     let config = CliConfig::load()?;
 
+    // Get server from config if not specified (needed before loading token)
+    let server = server
+        .or_else(|| config.default_server.clone())
+        .ok_or_else(|| CliError::Config("No server specified and no default configured".into()))?;
+
+    // Normalize server URL
+    let server = if !server.starts_with("http://") && !server.starts_with("https://") {
+        server
+    } else {
+        server
+            .replace("https://", "")
+            .replace("http://", "")
+            .replace('/', "")
+    };
+
     // Determine authentication method and load identity token if needed
     let identity_token = if let Some(name) = identity_token_name {
-        // Explicitly specified identity token
-        Some(TokenStorage::load_token(&name, &config)?)
+        // Explicitly specified identity token (from server-specific directory)
+        Some(TokenStorage::load_token_for_server(
+            &server, &name, &config,
+        )?)
     } else if let Some(path) = token_file {
         // Identity token from file
         Some(fs::read_to_string(path)?)
-    } else if TokenStorage::token_exists("default", &config) {
-        // Try to use default identity token if it exists
-        Some(TokenStorage::load_token("default", &config)?)
+    } else if TokenStorage::token_exists_for_server(&server, "default") {
+        // Try to use default identity token if it exists for this server
+        Some(TokenStorage::load_token_for_server(
+            &server, "default", &config,
+        )?)
     } else {
         // No identity token available, will use mTLS
         None
@@ -107,21 +129,6 @@ async fn request_authorization(
         Some(pb)
     } else {
         None
-    };
-
-    // Get server from config if not specified
-    let server = server
-        .or_else(|| config.default_server.clone())
-        .ok_or_else(|| CliError::Config("No server specified and no default configured".into()))?;
-
-    // Normalize server URL
-    let server = if !server.starts_with("http://") && !server.starts_with("https://") {
-        server
-    } else {
-        server
-            .replace("https://", "")
-            .replace("http://", "")
-            .replace('/', "")
     };
 
     // Load or fetch public key for verification
@@ -192,11 +199,11 @@ async fn request_authorization(
 
     // Request the authorization token
     let response: TokenResponse = if let Some(id_token) = identity_token {
-        sdk.request_token_with_identity(&resource, &operation, &id_token, None)
+        sdk.request_token_with_identity(&resource, &operation, &id_token, domain.clone())
             .await
             .map_err(|e| CliError::Sdk(format!("Authorization request failed: {e}")))?
     } else {
-        sdk.request_token(&resource, &operation, None)
+        sdk.request_token(&resource, &operation, domain.clone())
             .await
             .map_err(|e| CliError::Sdk(format!("Authorization request failed: {e}")))?
     };

@@ -4,7 +4,7 @@ use crate::error::{CliError, Result};
 use chrono::{DateTime, Utc};
 use colored::Colorize;
 use dialoguer::Confirm;
-use hessra_sdk::{Hessra, IdentityTokenResponse, Protocol};
+use hessra_sdk::{Hessra, IdentityTokenResponse, MintIdentityTokenResponse, Protocol};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::json;
 use std::fs;
@@ -134,6 +134,33 @@ pub async fn handle_identity_command(
         }
 
         IdentityCommands::Delete { token_name } => delete_token(token_name, json_output).await,
+
+        IdentityCommands::Mint {
+            subject,
+            ttl,
+            server,
+            port,
+            cert,
+            key,
+            ca,
+            save_as,
+            token_only,
+        } => {
+            mint_domain_restricted(
+                subject,
+                ttl,
+                server,
+                port,
+                cert,
+                key,
+                ca,
+                save_as,
+                token_only,
+                json_output,
+                verbose,
+            )
+            .await
+        }
     }
 }
 
@@ -1271,4 +1298,224 @@ async fn prune_tokens(
     }
 
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn mint_domain_restricted(
+    subject: String,
+    ttl: Option<u64>,
+    server: Option<String>,
+    port: u16,
+    cert_path: Option<PathBuf>,
+    key_path: Option<PathBuf>,
+    ca_path: Option<PathBuf>,
+    save_as: Option<String>,
+    token_only: bool,
+    json_output: bool,
+    verbose: bool,
+) -> Result<()> {
+    let config = CliConfig::load()?;
+
+    // Resolve server from parameter or config
+    let server = config.resolve_server(server)?;
+
+    // Try to load server config for cert/key paths and port
+    let server_config = ServerConfig::load(&server).ok();
+    let resolved_port = server_config.as_ref().map(|c| c.port).unwrap_or(port);
+
+    // Resolve cert and key paths (required for minting - mTLS is mandatory)
+    let cert_path = cert_path
+        .or_else(|| server_config.as_ref().and_then(|c| c.cert_path.clone()))
+        .or(config.default_cert_path.clone())
+        .ok_or_else(|| {
+            CliError::InvalidInput(
+                "Certificate path is required (--cert). Run: hessra config init".to_string(),
+            )
+        })?;
+
+    let key_path = key_path
+        .or_else(|| server_config.as_ref().and_then(|c| c.key_path.clone()))
+        .or(config.default_key_path.clone())
+        .ok_or_else(|| {
+            CliError::InvalidInput(
+                "Key path is required (--key). Run: hessra config init".to_string(),
+            )
+        })?;
+
+    // Try to load CA cert from server directory first, then fall back to provided path
+    let ca = if let Some(provided_ca_path) = ca_path {
+        fs::read_to_string(&provided_ca_path)
+            .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+    } else {
+        let server_ca_path = ServerConfig::ca_cert_path(&server)?;
+        if server_ca_path.exists() {
+            if verbose && !json_output && !token_only {
+                println!("  Using CA cert from: {}", server_ca_path.display());
+            }
+            fs::read_to_string(&server_ca_path)
+                .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+        } else {
+            // CA cert doesn't exist - try to fetch it automatically
+            if !json_output && !token_only {
+                println!(
+                    "  Fetching CA certificate from {}...",
+                    server.bright_white()
+                );
+            }
+
+            match hessra_sdk::fetch_ca_cert(&server, Some(resolved_port)).await {
+                Ok(ca_cert) => {
+                    // Save the fetched CA cert
+                    if let Some(parent) = server_ca_path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::write(&server_ca_path, &ca_cert)?;
+
+                    if !json_output && !token_only {
+                        println!("  {} CA certificate fetched and cached", "✓".green());
+                    }
+
+                    ca_cert
+                }
+                Err(e) => {
+                    return Err(CliError::Config(format!(
+                        "CA certificate not found for server '{server}' and auto-fetch failed: {e}\n\n\
+                        Either:\n\
+                        1. Run: hessra init {server} --cert <cert> --key <key> --set-default\n\
+                        2. Or provide CA manually: --ca <path_to_ca.crt>"
+                    )));
+                }
+            }
+        }
+    };
+
+    // Load mTLS cert and key
+    let cert = fs::read_to_string(&cert_path)
+        .map_err(|e| CliError::FileNotFound(format!("Certificate file: {e}")))?;
+    let key = fs::read_to_string(&key_path)
+        .map_err(|e| CliError::FileNotFound(format!("Key file: {e}")))?;
+
+    let progress = if !json_output && !token_only {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .unwrap(),
+        );
+        pb.set_message("Minting domain-restricted identity token...");
+        pb.enable_steady_tick(Duration::from_millis(100));
+        Some(pb)
+    } else {
+        None
+    };
+
+    // Build SDK client with mTLS
+    let mut client = Hessra::builder()
+        .base_url(&server)
+        .port(resolved_port)
+        .protocol(Protocol::Http1)
+        .mtls_cert(&cert)
+        .mtls_key(&key)
+        .server_ca(&ca)
+        .build()
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
+
+    // Setup (fetch public key)
+    client
+        .setup()
+        .await
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
+
+    // Save the public key for future use
+    if let Ok(public_key) = hessra_sdk::fetch_public_key(&server, Some(resolved_port), &ca).await {
+        PublicKeyStorage::save_public_key(&server, &public_key, &config)?;
+        if verbose && !json_output && !token_only {
+            println!("  {} Public key cached for {server}", "✓".green());
+        }
+    }
+
+    // Mint domain-restricted identity token
+    let response = client
+        .mint_domain_restricted_identity_token(&subject, ttl)
+        .await
+        .map_err(|e| CliError::Sdk(e.to_string()))?;
+
+    if let Some(pb) = progress {
+        pb.finish_and_clear();
+    }
+
+    match response {
+        MintIdentityTokenResponse {
+            token: Some(token),
+            identity: Some(identity),
+            expires_in: Some(expires),
+            ..
+        } => {
+            // Save token to server-specific directory if requested
+            let token_saved = if let Some(ref name) = save_as {
+                let path = TokenStorage::save_token_for_server(&server, name, &token, &config)?;
+                Some(path)
+            } else {
+                None
+            };
+
+            // Handle output based on mode
+            if token_only {
+                println!("{token}");
+            } else if json_output {
+                let mut output = json!({
+                    "success": true,
+                    "server": server,
+                    "subject": subject,
+                    "identity": identity,
+                    "expires_in": expires,
+                    "token": token,
+                    "saved": token_saved.is_some(),
+                });
+
+                if let Some(ref name) = save_as {
+                    output["saved_as"] = json!(name);
+                }
+                if let Some(ref path) = token_saved {
+                    output["token_path"] = json!(path);
+                }
+
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                println!("{}", "✓ Domain-restricted identity token minted!".green());
+                println!("  Server: {}", server.bright_white());
+                println!("  Subject: {}", subject.bright_cyan());
+                println!("  Identity: {}", identity.bright_cyan());
+                println!("  Expires in: {expires} seconds");
+
+                if let Some(ref name) = save_as {
+                    println!("  Saved as: {}", name.bright_yellow());
+                    if verbose {
+                        if let Some(ref path) = token_saved {
+                            println!("  Token path: {}", path.display());
+                        }
+                    }
+                } else {
+                    println!("  Status: {}", "Not saved (output only)".yellow());
+                }
+
+                println!("\n{}", "Token:".bright_cyan());
+                println!("{token}");
+            }
+            Ok(())
+        }
+        _ => {
+            let msg = format!("Minting failed: {}", response.response_msg);
+            if json_output {
+                let output = json!({
+                    "success": false,
+                    "error": msg,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else if !token_only {
+                println!("{} {}", "✗".red(), msg);
+            }
+            Err(CliError::Token(msg))
+        }
+    }
 }

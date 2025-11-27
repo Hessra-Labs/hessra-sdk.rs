@@ -127,11 +127,9 @@ impl PyHessraConfigBuilder {
                 self.protocol = Some(protocol);
                 Ok(self.clone())
             }
-            _ => {
-                Err(crate::error::HessraPyError {
-                    inner: format!("Invalid protocol: {protocol}. Must be 'http1'"),
-                })
-            }
+            _ => Err(crate::error::HessraPyError {
+                inner: format!("Invalid protocol: {protocol}. Must be 'http1'"),
+            }),
         }
     }
 
@@ -147,46 +145,48 @@ impl PyHessraConfigBuilder {
 
     pub fn build(&mut self) -> HessraPyResult<PyHessraConfig> {
         let mut builder = HessraConfig::builder();
-        
+
         if let Some(ref base_url) = self.base_url {
             builder = builder.base_url(base_url.clone());
         }
-        
+
         if let Some(port) = self.port {
             builder = builder.port(port);
         }
-        
+
         // Only set mTLS if provided - don't use dummy values
         if let Some(ref cert) = self.mtls_cert {
             builder = builder.mtls_cert(cert.clone());
         }
-        
+
         if let Some(ref key) = self.mtls_key {
             builder = builder.mtls_key(key.clone());
         }
-        
+
         if let Some(ref ca) = self.server_ca {
             builder = builder.server_ca(ca.clone());
         }
-        
+
         if let Some(ref proto) = self.protocol {
             let protocol = match proto.as_str() {
                 "http1" => Protocol::Http1,
-                _ => return Err(crate::error::HessraPyError {
-                    inner: format!("Invalid protocol: {proto}"),
-                }),
+                _ => {
+                    return Err(crate::error::HessraPyError {
+                        inner: format!("Invalid protocol: {proto}"),
+                    })
+                }
             };
             builder = builder.protocol(protocol);
         }
-        
+
         if let Some(ref public_key) = self.public_key {
             builder = builder.public_key(public_key.clone());
         }
-        
+
         if let Some(ref keypair) = self.personal_keypair {
             builder = builder.personal_keypair(keypair.clone());
         }
-        
+
         Ok(PyHessraConfig {
             inner: builder.build()?,
         })

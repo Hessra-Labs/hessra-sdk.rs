@@ -73,6 +73,7 @@ impl CliConfig {
         Ok(Self::config_dir()?.join("config.toml"))
     }
 
+    #[allow(dead_code)]
     pub fn token_dir(&self) -> Result<PathBuf> {
         if let Some(ref dir) = self.token_storage_dir {
             Ok(dir.clone())
@@ -363,6 +364,7 @@ impl TokenStorage {
         Ok(token_path)
     }
 
+    #[allow(dead_code)]
     pub fn load_token(name: &str, config: &CliConfig) -> Result<String> {
         let token_path = config.token_dir()?.join(format!("{name}.token"));
         if !token_path.exists() {
@@ -398,6 +400,7 @@ impl TokenStorage {
         Ok(tokens)
     }
 
+    #[allow(dead_code)]
     pub fn token_exists(name: &str, config: &CliConfig) -> bool {
         config
             .token_dir()

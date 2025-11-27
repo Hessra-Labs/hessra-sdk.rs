@@ -1,6 +1,6 @@
 [package]
 name = "hessra-py"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Python bindings for Hessra authentication services"

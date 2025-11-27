@@ -1,6 +1,6 @@
 [package]
 name = "hessra"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Command-line interface for Hessra authentication and identity management"

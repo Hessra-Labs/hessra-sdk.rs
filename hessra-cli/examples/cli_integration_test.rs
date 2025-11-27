@@ -10,17 +10,27 @@
 //! - Token verification
 //! - Token management (list, delete)
 //! - Server management commands
+//! - Authorization token request (mTLS and identity token)
+//! - Authorization token verification
+//! - Domain-restricted identity minting
+//! - Authorization with domain parameter
+//! - Domain-based permission enforcement
 
 use anyhow::Result;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-// Test certificates for mTLS authentication
+// Test certificates for mTLS authentication (argo-cli0 identity)
 static MTLS_CERT: &str = include_str!("../../certs/client.crt");
 static MTLS_KEY: &str = include_str!("../../certs/client.key");
 
+// Realm identity certificates (argo-cli1 - can mint domain-restricted tokens)
+static MTLS_CERT_REALM: &str = include_str!("../../certs/argo-cli1.pem");
+static MTLS_KEY_REALM: &str = include_str!("../../certs/argo-cli1.key.pem");
+
 const TEST_SERVER: &str = "test.hessra.net";
+const REALM_DOMAIN: &str = "uri:urn:test:argo-cli1";
 
 fn run_hessra_command(args: &[&str]) -> Result<(String, String, bool)> {
     let output = Command::new("cargo")
@@ -44,6 +54,19 @@ fn setup_test_certificates() -> Result<(PathBuf, PathBuf)> {
 
     fs::write(&cert_path, MTLS_CERT)?;
     fs::write(&key_path, MTLS_KEY)?;
+
+    Ok((cert_path, key_path))
+}
+
+fn setup_realm_certificates() -> Result<(PathBuf, PathBuf)> {
+    let temp_dir = std::env::temp_dir().join("hessra_cli_test");
+    fs::create_dir_all(&temp_dir)?;
+
+    let cert_path = temp_dir.join("argo-cli1.pem");
+    let key_path = temp_dir.join("argo-cli1.key.pem");
+
+    fs::write(&cert_path, MTLS_CERT_REALM)?;
+    fs::write(&key_path, MTLS_KEY_REALM)?;
 
     Ok((cert_path, key_path))
 }
@@ -129,8 +152,8 @@ async fn main() -> Result<()> {
 
     if !success {
         eprintln!("Server initialization failed!");
-        eprintln!("stderr: {}", stderr);
-        eprintln!("stdout: {}", stdout);
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
     }
 
     assert!(success, "Server initialization should succeed");
@@ -165,8 +188,8 @@ async fn main() -> Result<()> {
 
     if !success {
         eprintln!("Authentication failed!");
-        eprintln!("stderr: {}", stderr);
-        eprintln!("stdout: {}", stdout);
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
     }
 
     assert!(success, "Authentication should succeed");
@@ -202,8 +225,8 @@ async fn main() -> Result<()> {
     ])?;
 
     if !success {
-        eprintln!("Delegation stderr: {}", stderr);
-        eprintln!("Delegation stdout: {}", stdout);
+        eprintln!("Delegation stderr: {stderr}");
+        eprintln!("Delegation stdout: {stdout}");
     }
     assert!(success, "Delegation should succeed with cached key");
     assert!(
@@ -235,8 +258,8 @@ async fn main() -> Result<()> {
 
     if !success {
         eprintln!("Verification failed!");
-        eprintln!("stderr: {}", stderr);
-        eprintln!("stdout: {}", stdout);
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
     }
 
     assert!(success, "Verification should succeed");
@@ -329,8 +352,8 @@ async fn main() -> Result<()> {
 
     if !success {
         eprintln!("Auto-fetch CA failed!");
-        eprintln!("stderr: {}", stderr);
-        eprintln!("stdout: {}", stdout);
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
     }
 
     assert!(success, "Authentication with auto-fetch CA should succeed");
@@ -370,8 +393,8 @@ async fn main() -> Result<()> {
 
     if !success {
         eprintln!("Auto-fetch pubkey failed!");
-        eprintln!("stderr: {}", stderr);
-        eprintln!("stdout: {}", stdout);
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
     }
 
     assert!(success, "Delegation with auto-fetch pubkey should succeed");
@@ -381,8 +404,235 @@ async fn main() -> Result<()> {
     assert!(key_cached, "Public key should be auto-fetched");
     println!("✓ Public key auto-fetch successful");
 
+    // ========================================
+    // NEW TESTS: Authorization and Domain-Restricted Identity
+    // ========================================
+
+    // Test 10: Authorization request with mTLS
+    println!("\n10. Testing authorization request with mTLS...");
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "authorize",
+        "request",
+        "--resource",
+        "resource1",
+        "--operation",
+        "read",
+        "--cert",
+        cert_path.to_str().unwrap(),
+        "--key",
+        key_path.to_str().unwrap(),
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Authorization request (mTLS) failed!");
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
+    }
+
+    assert!(success, "Authorization request with mTLS should succeed");
+    assert!(
+        stdout.contains("\"success\": true"),
+        "Should indicate success"
+    );
+    assert!(stdout.contains("\"token\":"), "Should contain auth token");
+    println!("✓ Authorization request with mTLS successful");
+
+    // Test 11: Authorization request with identity token
+    println!("\n11. Testing authorization request with identity token...");
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "authorize",
+        "request",
+        "--resource",
+        "resource1",
+        "--operation",
+        "read",
+        "--identity-token",
+        "test_main",
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Authorization request (identity token) failed!");
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
+    }
+
+    assert!(
+        success,
+        "Authorization request with identity token should succeed"
+    );
+    assert!(
+        stdout.contains("\"success\": true"),
+        "Should indicate success"
+    );
+    println!("✓ Authorization request with identity token successful");
+
+    // Extract the token for verification test
+    let auth_token: serde_json::Value = serde_json::from_str(&stdout)?;
+    let auth_token_str = auth_token["token"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("No token in authorization response"))?;
+
+    // Test 12: Authorization token verification
+    println!("\n12. Testing authorization token verification...");
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "authorize",
+        "verify",
+        "--token",
+        auth_token_str,
+        "--subject",
+        "uri:urn:test:argo-cli0",
+        "--resource",
+        "resource1",
+        "--operation",
+        "read",
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Authorization verification failed!");
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
+    }
+
+    assert!(success, "Authorization verification should succeed");
+    assert!(
+        stdout.contains("\"success\": true"),
+        "Verification should indicate success"
+    );
+    println!("✓ Authorization token verification successful");
+
+    // ========================================
+    // Domain-Restricted Identity Tests
+    // ========================================
+
+    // Test 13: Domain-restricted identity minting
+    println!("\n13. Testing domain-restricted identity minting...");
+
+    // First, setup realm identity (argo-cli1) as the server config
+    let (realm_cert_path, realm_key_path) = setup_realm_certificates()?;
+
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "init",
+        TEST_SERVER,
+        "--cert",
+        realm_cert_path.to_str().unwrap(),
+        "--key",
+        realm_key_path.to_str().unwrap(),
+        "--force",
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Realm identity setup failed!");
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
+    }
+
+    assert!(success, "Realm identity setup should succeed");
+    println!("  Realm identity (argo-cli1) configured");
+
+    // Now mint a domain-restricted token
+    let domain_subject = format!("{REALM_DOMAIN}:user123");
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "identity",
+        "mint",
+        "--subject",
+        &domain_subject,
+        "--ttl",
+        "3600",
+        "--save-as",
+        "test_domain_restricted",
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Domain-restricted identity minting failed!");
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
+    }
+
+    assert!(success, "Domain-restricted identity minting should succeed");
+    assert!(
+        stdout.contains("\"success\": true"),
+        "Should indicate success"
+    );
+    assert!(
+        stdout.contains(&domain_subject),
+        "Should contain the minted subject"
+    );
+    println!("✓ Domain-restricted identity token minted successfully");
+
+    // Restore original client certificates for subsequent tests
+    let (_, _, _) = run_hessra_command(&[
+        "init",
+        TEST_SERVER,
+        "--cert",
+        cert_path.to_str().unwrap(),
+        "--key",
+        key_path.to_str().unwrap(),
+        "--force",
+        "--json",
+    ])?;
+
+    // Test 14: Authorization with domain parameter
+    println!("\n14. Testing authorization with domain parameter...");
+    let (stdout, stderr, success) = run_hessra_command(&[
+        "authorize",
+        "request",
+        "--resource",
+        "resource3",
+        "--operation",
+        "read",
+        "--identity-token",
+        "test_domain_restricted",
+        "--domain",
+        REALM_DOMAIN,
+        "--json",
+    ])?;
+
+    if !success {
+        eprintln!("Authorization with domain failed!");
+        eprintln!("stderr: {stderr}");
+        eprintln!("stdout: {stdout}");
+    }
+
+    assert!(
+        success,
+        "Authorization with domain parameter should succeed for allowed resource"
+    );
+    assert!(
+        stdout.contains("\"success\": true"),
+        "Should indicate success"
+    );
+    println!("✓ Authorization with domain parameter successful");
+
+    // Test 15: Domain permission enforcement (should fail)
+    println!("\n15. Testing domain permission enforcement...");
+    let (stdout, _stderr, success) = run_hessra_command(&[
+        "authorize",
+        "request",
+        "--resource",
+        "resource4",
+        "--operation",
+        "write",
+        "--identity-token",
+        "test_domain_restricted",
+        "--domain",
+        REALM_DOMAIN,
+        "--json",
+    ])?;
+
+    // This should fail - member role doesn't have resource4:write
+    assert!(
+        !success || stdout.contains("\"success\": false"),
+        "Authorization should fail for unauthorized resource"
+    );
+    println!("✓ Domain permission enforcement working (correctly denied resource4:write)");
+
     // Cleanup
-    println!("\n10. Cleaning up test artifacts...");
+    println!("\n16. Cleaning up test artifacts...");
     cleanup_test_tokens()?;
     fs::remove_dir_all(cert_path.parent().unwrap())?;
     println!("✓ Cleanup complete");
@@ -395,6 +645,11 @@ async fn main() -> Result<()> {
     println!("  ✓ Server config auto-resolution (no repetitive parameters)");
     println!("  ✓ Default server support (minimal command arguments)");
     println!("  ✓ Server management commands (list, show, switch)");
+    println!("  ✓ Authorization token request with mTLS and identity token");
+    println!("  ✓ Authorization token verification");
+    println!("  ✓ Domain-restricted identity minting");
+    println!("  ✓ Authorization with domain parameter");
+    println!("  ✓ Domain-based permission enforcement");
 
     Ok(())
 }

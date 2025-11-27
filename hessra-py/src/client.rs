@@ -8,6 +8,7 @@ use tokio::runtime::Runtime;
 use crate::config::PyHessraConfig;
 use crate::error::HessraPyResult;
 use crate::identity::PyIdentityTokenResponse;
+use crate::response::PyMintIdentityTokenResponse;
 
 #[pyclass(name = "HessraClient")]
 pub struct PyHessraClient {
@@ -271,6 +272,22 @@ impl PyHessraClient {
             .create_identity_token_local(subject, duration)
             .map_err(Into::into)
     }
+
+    pub fn mint_domain_restricted_identity_token(
+        &self,
+        subject: String,
+        duration: Option<u64>,
+    ) -> HessraPyResult<PyMintIdentityTokenResponse> {
+        let inner = Arc::clone(&self.inner);
+        let runtime = Arc::clone(&self.runtime);
+
+        let response = runtime.block_on(async move {
+            inner
+                .mint_domain_restricted_identity_token(subject, duration)
+                .await
+        })?;
+        Ok(response.into())
+    }
 }
 
 #[pyclass(name = "HessraClientBuilder")]
@@ -341,47 +358,49 @@ impl PyHessraClientBuilder {
         })?);
 
         let mut builder = hessra_sdk::Hessra::builder();
-        
+
         if let Some(ref base_url) = self.base_url {
             builder = builder.base_url(base_url.clone());
         }
-        
+
         if let Some(port) = self.port {
             builder = builder.port(port);
         }
-        
+
         // Only set mTLS if provided - don't use dummy values
         if let Some(ref cert) = self.mtls_cert {
             builder = builder.mtls_cert(cert.clone());
         }
-        
+
         if let Some(ref key) = self.mtls_key {
             builder = builder.mtls_key(key.clone());
         }
-        
+
         if let Some(ref ca) = self.server_ca {
             builder = builder.server_ca(ca.clone());
         }
-        
+
         if let Some(ref proto) = self.protocol {
             use hessra_config::Protocol;
             let protocol = match proto.as_str() {
                 "http1" => Protocol::Http1,
-                _ => return Err(crate::error::HessraPyError {
-                    inner: format!("Invalid protocol: {proto}"),
-                }),
+                _ => {
+                    return Err(crate::error::HessraPyError {
+                        inner: format!("Invalid protocol: {proto}"),
+                    })
+                }
             };
             builder = builder.protocol(protocol);
         }
-        
+
         if let Some(ref public_key) = self.public_key {
             builder = builder.public_key(public_key.clone());
         }
-        
+
         if let Some(ref keypair) = self.personal_keypair {
             builder = builder.personal_keypair(keypair.clone());
         }
-        
+
         let hessra = builder.build()?;
 
         Ok(PyHessraClient {

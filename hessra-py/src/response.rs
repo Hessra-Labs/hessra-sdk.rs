@@ -1,4 +1,4 @@
-use hessra_api::{SignTokenResponse, SignoffInfo, TokenResponse};
+use hessra_api::{MintIdentityTokenResponse, SignTokenResponse, SignoffInfo, TokenResponse};
 use pyo3::prelude::*;
 
 #[pyclass(name = "SignoffInfo")]
@@ -136,6 +136,60 @@ impl From<SignTokenResponse> for PySignTokenResponse {
         Self {
             response_msg: response.response_msg,
             signed_token: response.signed_token,
+        }
+    }
+}
+
+#[pyclass(name = "MintIdentityTokenResponse")]
+#[derive(Clone)]
+pub struct PyMintIdentityTokenResponse {
+    #[pyo3(get)]
+    pub response_msg: String,
+    #[pyo3(get)]
+    pub token: Option<String>,
+    #[pyo3(get)]
+    pub expires_in: Option<u64>,
+    #[pyo3(get)]
+    pub identity: Option<String>,
+}
+
+#[pymethods]
+impl PyMintIdentityTokenResponse {
+    #[new]
+    pub fn new(
+        response_msg: String,
+        token: Option<String>,
+        expires_in: Option<u64>,
+        identity: Option<String>,
+    ) -> Self {
+        Self {
+            response_msg,
+            token,
+            expires_in,
+            identity,
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        let token_preview = match &self.token {
+            Some(t) => format!("Some('{}...')", &t[..std::cmp::min(20, t.len())]),
+            None => "None".to_string(),
+        };
+
+        format!(
+            "MintIdentityTokenResponse(response_msg='{}', token={}, expires_in={:?}, identity={:?})",
+            self.response_msg, token_preview, self.expires_in, self.identity
+        )
+    }
+}
+
+impl From<MintIdentityTokenResponse> for PyMintIdentityTokenResponse {
+    fn from(response: MintIdentityTokenResponse) -> Self {
+        Self {
+            response_msg: response.response_msg,
+            token: response.token,
+            expires_in: response.expires_in,
+            identity: response.identity,
         }
     }
 }
