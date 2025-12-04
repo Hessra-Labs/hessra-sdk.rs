@@ -166,7 +166,7 @@ client.verify_identity_token_local(
 Realm identities can mint domain-restricted tokens:
 
 ```python
-# Requires mTLS authentication as a realm identity
+# Requires authentication as a realm identity (via mTLS or identity token)
 response = client.mint_domain_restricted_identity_token(
     subject="urn:hessra:mycompany:user123",
     duration=3600  # Optional TTL

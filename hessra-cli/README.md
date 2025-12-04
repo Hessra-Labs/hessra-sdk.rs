@@ -136,7 +136,7 @@ hessra identity delete old-token
 
 #### Mint Domain-Restricted Identity
 
-Create a domain-restricted identity token for a subject. This requires mTLS authentication (realm identity) and contacts the authorization server:
+Create a domain-restricted identity token for a subject. This requires authentication as a realm identity (via mTLS or identity token) and contacts the authorization server:
 
 ```bash
 hessra identity mint \
