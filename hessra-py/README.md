@@ -6,12 +6,14 @@ Python bindings for the Hessra authentication and authorization system.
 
 This Python package provides bindings to the Rust-based Hessra SDK, enabling Python applications to:
 
+- Request and verify identity tokens
+- Delegate identity tokens to sub-identities
+- Mint domain-restricted identity tokens
 - Verify Biscuit authorization tokens (locally and remotely)
+- Request authorization tokens using identity token authentication
 - Manage service chain token attestation
 - Handle mTLS-authenticated communication with Hessra services
 - Configure and manage authorization settings
-
-**Note**: This library is focused on token verification and service chain operations. Token creation is handled by the Hessra authorization service.
 
 ## Installation
 
@@ -117,6 +119,104 @@ result = client.verify_token_remote(
     operation="read"
 )
 print(f"Verification result: {result}")
+```
+
+## Identity Token Operations
+
+The Python SDK supports full identity token management:
+
+### Request Identity Token
+
+Authenticate with mTLS to obtain an identity token:
+
+```python
+# Client must be configured with mTLS credentials
+response = client.request_identity_token(identifier=None)  # Optional identifier
+print(f"Identity: {response.identity}")
+print(f"Expires in: {response.expires_in} seconds")
+identity_token = response.token
+```
+
+### Delegate Identity
+
+Create a delegated identity token for sub-identities:
+
+```python
+# Delegate to a more specific identity
+delegated_token = client.attenuate_identity_token(
+    token=identity_token,
+    delegated_identity="urn:hessra:alice:agent",
+    duration=3600  # 1 hour, optional (defaults to 1 hour)
+)
+```
+
+### Verify Identity Token
+
+Verify an identity token locally:
+
+```python
+client.verify_identity_token_local(
+    token=identity_token,
+    identity="urn:hessra:alice"
+)
+```
+
+### Mint Domain-Restricted Identity
+
+Realm identities can mint domain-restricted tokens:
+
+```python
+# Requires mTLS authentication as a realm identity
+response = client.mint_domain_restricted_identity_token(
+    subject="urn:hessra:mycompany:user123",
+    duration=3600  # Optional TTL
+)
+domain_token = response.token
+```
+
+### Request Authorization with Identity
+
+Use an identity token to request authorization (no mTLS needed):
+
+```python
+# Create client WITHOUT mTLS
+user_client = (
+    hessra_py.HessraClient.builder()
+    .base_url("auth.your-domain.com")
+    .server_ca(ca_cert)
+    .build()
+)
+
+# Request authorization token with identity
+auth_token = user_client.request_token_with_identity(
+    resource="protected-resource",
+    operation="read",
+    identity_token=identity_token,
+    domain="urn:hessra:mycompany"  # Optional domain context
+)
+```
+
+### Refresh Identity Token
+
+Refresh an identity token before it expires:
+
+```python
+response = client.refresh_identity_token(
+    current_token=identity_token,
+    identifier=None  # Optional
+)
+new_token = response.token
+```
+
+### Create Local Identity Token
+
+Create an identity token locally (requires personal keypair):
+
+```python
+token = client.create_identity_token_local(
+    subject="urn:hessra:alice",
+    duration=3600  # Optional TTL
+)
 ```
 
 ## Service Chain Operations
@@ -230,9 +330,26 @@ Main client for interacting with Hessra services.
 
 - `__init__(config)` - Create client with configuration
 - `setup_new()` - Setup client and return new instance with public key
+- `get_public_key()` - Fetch public key from service
+
+**Identity Token Methods:**
+
+- `request_identity_token(identifier)` - Request identity token with mTLS
+- `refresh_identity_token(current_token, identifier)` - Refresh identity token
+- `verify_identity_token_local(token, identity)` - Verify identity token locally
+- `attenuate_identity_token(token, delegated_identity, duration)` - Delegate identity
+- `create_identity_token_local(subject, duration)` - Create identity token locally
+- `mint_domain_restricted_identity_token(subject, duration)` - Mint domain-restricted token
+- `request_token_with_identity(resource, operation, identity_token, domain)` - Request auth with identity
+
+**Authorization Token Methods:**
+
+- `request_token_simple(resource, operation)` - Request authorization token
 - `verify_token_local(token, subject, resource, operation)` - Verify token locally
 - `verify_token_remote(token, subject, resource, operation)` - Verify token via API
-- `get_public_key()` - Fetch public key from service
+
+**Service Chain Methods:**
+
 - `attest_service_chain_token(token, service)` - Add service attestation to token
 - `verify_service_chain_token_local(...)` - Verify service chain token locally
 - `verify_service_chain_token_remote(...)` - Verify service chain token via API

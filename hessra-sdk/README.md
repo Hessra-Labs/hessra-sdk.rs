@@ -2,7 +2,7 @@
 
 The primary interface for interacting with Hessra authentication and authorization services.
 
-This SDK provides support for both identity tokens (for authentication) and authorization tokens (for resource access), with the ability to use either mTLS certificates or identity tokens for authentication.
+This SDK provides support for both identity tokens (for authentication) and authorization tokens (for resource access), with the ability to use either mTLS certificates or identity tokens for authentication. It also supports domain-restricted identities for multi-tenant and scoped access control scenarios.
 
 ## API Reference
 
@@ -75,6 +75,28 @@ client.verify_identity_token_local(
     "urn:hessra:alice:laptop"
 )?;
 ```
+
+### Domain-Restricted Identities
+
+Realm identities can mint domain-restricted tokens for multi-tenant or scoped access control:
+
+```rust
+// Realm identity mints a domain-restricted token (requires mTLS)
+let response = realm_client.mint_domain_restricted_identity_token(
+    "urn:hessra:tenant1:user123".to_string(),
+    Some(3600)  // 1 hour TTL
+).await?;
+
+// Use domain-restricted token for authorization with domain context
+let auth_token = client.request_token_with_identity(
+    "protected-resource",
+    "read",
+    &response.token.unwrap(),
+    Some("urn:hessra:tenant1".to_string())  // Domain context
+).await?;
+```
+
+Domain-restricted tokens cannot be delegated and get permissions from server-configured roles.
 
 ### Working with Authorization Tokens
 

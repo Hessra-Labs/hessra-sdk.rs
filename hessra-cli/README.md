@@ -134,6 +134,34 @@ hessra identity prune --force
 hessra identity delete old-token
 ```
 
+#### Mint Domain-Restricted Identity
+
+Create a domain-restricted identity token for a subject. This requires mTLS authentication (realm identity) and contacts the authorization server:
+
+```bash
+hessra identity mint \
+  --subject "uri:urn:mycompany:user123" \
+  --server auth.your-domain.com \
+  --cert ~/.hessra/realm.crt \
+  --key ~/.hessra/realm.key \
+  --ca ~/.hessra/ca.pem \
+  --ttl 3600 \
+  --save-as user123-token
+```
+
+Domain-restricted tokens:
+- Cannot be delegated or create sub-identities
+- Get permissions from server-configured roles
+- Are bound to the realm identity's domain
+
+Output just the token:
+
+```bash
+hessra identity mint \
+  --subject "uri:urn:mycompany:user123" \
+  --token-only
+```
+
 ### Authorization Operations
 
 #### Request Authorization Token

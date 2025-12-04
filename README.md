@@ -31,7 +31,7 @@ This repository is organized as a Rust workspace with the following components:
 - **hessra-token**: Authorization token re-exports from sub-crates
 - **hessra-token-core**: Core utilities and types shared by token crates
 - **hessra-token-authz**: Authorization token creation, verification, and attestation
-- **hessra-token-identity**: Identity token creation, verification, and delegation
+- **hessra-token-identity**: Identity token creation, verification, delegation, and domain restrictions
 - **hessra-config**: Configuration management for the SDK
 - **hessra-api**: HTTP client for communicating with Hessra services
 - **hessra-ffi**: Foreign Function Interface for other languages
@@ -41,6 +41,7 @@ This repository is organized as a Rust workspace with the following components:
 
 - **Dual Authentication**: Support for both mTLS and identity token authentication
 - **Identity Tokens**: Hierarchical, delegatable identity tokens for authentication without mTLS
+- **Domain-Restricted Identities**: Bind identity tokens to specific domains for multi-tenant and scoped access control
 - **Secure by Design**: Tokens are short-lived and narrowly scoped to specific resources and operations
 - **Protocol Support**: HTTP/1.1 with optional HTTP/3 (via feature flag)
 - **Flexible Configuration**: Multiple ways to configure the client including environment variables, files, and code
@@ -184,6 +185,33 @@ Key benefits of identity tokens:
 - **Hierarchical Delegation**: Create sub-identities with restricted permissions
 - **Time-bound**: Each delegation can have its own expiration
 - **Offline Verification**: Verify tokens locally without network calls
+
+### Domain-Restricted Identities
+
+For multi-tenant applications or scoped access control, realm identities can mint domain-restricted identity tokens:
+
+```rust
+// Realm identity mints a domain-restricted token for a user
+let response = realm_client.mint_domain_restricted_identity_token(
+    "urn:hessra:tenant1:user123".to_string(),
+    Some(3600)  // 1 hour TTL
+).await?;
+
+// Use the domain-restricted identity to request authorization
+// The domain parameter enables enhanced verification
+let auth_token = client.request_token_with_identity(
+    "protected-resource",
+    "read",
+    &response.token.unwrap(),
+    Some("urn:hessra:tenant1".to_string())  // Domain context
+).await?;
+```
+
+Domain-restricted tokens:
+- Cannot mint new identities (prevents delegation chains)
+- Are bound to a specific domain context
+- Get permissions from role-based configuration on the server
+- Enable enhanced subject-in-domain verification
 
 ## Service Chain Attestation
 
