@@ -1,6 +1,6 @@
 [package]
 name = "hessra"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 authors = ["Jake Valentic <jake@hessra.net>"]
 description = "Command-line interface for Hessra authentication and identity management"
@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core dependencies
-hessra-sdk = { path = "../hessra-sdk", version = "0.11.0" }
+hessra-sdk = { path = "../hessra-sdk", version = "0.11.1" }
 hessra-config = { path = "../hessra-config", version = "0.3.0" }
 
 # CLI and async
