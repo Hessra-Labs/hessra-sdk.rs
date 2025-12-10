@@ -179,11 +179,23 @@ async fn authenticate(
     let config = CliConfig::load()?;
 
     // Resolve server from parameter or config
-    let server = config.resolve_server(server)?;
+    let server_raw = config.resolve_server(server)?;
+
+    // Parse the server address to extract host and any embedded port
+    let (server_host, embedded_port) = hessra_sdk::parse_server_address(&server_raw);
+
+    // Use the host (without port) as the server identifier for config lookups
+    // This ensures "127.0.0.1:4433" and "127.0.0.1" both resolve to the same config
+    let server = server_host;
 
     // Try to load server config for cert/key paths and port
     let server_config = ServerConfig::load(&server).ok();
-    let resolved_port = server_config.as_ref().map(|c| c.port).unwrap_or(port);
+    // Port priority: server_config > embedded_port > CLI default
+    let resolved_port = server_config
+        .as_ref()
+        .map(|c| c.port)
+        .or(embedded_port)
+        .unwrap_or(port);
 
     // Resolve cert and key paths
     let cert_path = cert_path
@@ -1317,11 +1329,22 @@ async fn mint_domain_restricted(
     let config = CliConfig::load()?;
 
     // Resolve server from parameter or config
-    let server = config.resolve_server(server)?;
+    let server_raw = config.resolve_server(server)?;
+
+    // Parse the server address to extract host and any embedded port
+    let (server_host, embedded_port) = hessra_sdk::parse_server_address(&server_raw);
+
+    // Use the host (without port) as the server identifier for config lookups
+    let server = server_host;
 
     // Try to load server config for cert/key paths and port
     let server_config = ServerConfig::load(&server).ok();
-    let resolved_port = server_config.as_ref().map(|c| c.port).unwrap_or(port);
+    // Port priority: server_config > embedded_port > CLI default
+    let resolved_port = server_config
+        .as_ref()
+        .map(|c| c.port)
+        .or(embedded_port)
+        .unwrap_or(port);
 
     // Resolve cert and key paths (required for minting - mTLS is mandatory)
     let cert_path = cert_path

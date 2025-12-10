@@ -20,6 +20,72 @@ use thiserror::Error;
 
 use hessra_config::{HessraConfig, Protocol};
 
+/// Parse a server address string into (host, port) components.
+///
+/// Handles various address formats:
+/// - IP:Port (e.g., "127.0.0.1:4433")
+/// - IP alone (e.g., "127.0.0.1")
+/// - hostname:port (e.g., "test.hessra.net:443")
+/// - hostname alone (e.g., "test.hessra.net")
+/// - IPv6 with brackets and port (e.g., "[::1]:443")
+/// - IPv6 with brackets, no port (e.g., "[::1]")
+/// - URLs with protocol (e.g., "https://host:port/path")
+///
+/// Returns (host, Option<port>) where host is just the hostname/IP part
+/// without any embedded port or protocol.
+pub fn parse_server_address(address: &str) -> (String, Option<u16>) {
+    let address = address.trim();
+
+    // Strip protocol prefix if present
+    let without_protocol = address
+        .strip_prefix("https://")
+        .or_else(|| address.strip_prefix("http://"))
+        .unwrap_or(address);
+
+    // Strip path if present (everything after first /)
+    let host_port = without_protocol
+        .split('/')
+        .next()
+        .unwrap_or(without_protocol);
+
+    // Handle IPv6 addresses with brackets
+    if host_port.starts_with('[') {
+        // IPv6 format: [::1]:port or [::1]
+        if let Some(bracket_end) = host_port.find(']') {
+            let host = &host_port[1..bracket_end]; // Get the IPv6 address without brackets
+            let after_bracket = &host_port[bracket_end + 1..];
+
+            if let Some(port_str) = after_bracket.strip_prefix(':') {
+                // Has port after bracket
+                if let Ok(port) = port_str.parse::<u16>() {
+                    return (host.to_string(), Some(port));
+                }
+            }
+            // No port or invalid port
+            return (host.to_string(), None);
+        }
+        // Malformed IPv6, return as-is without brackets
+        return (host_port.trim_start_matches('[').to_string(), None);
+    }
+
+    // Handle IPv4 or hostname with optional port
+    // Count colons to distinguish IPv6 from host:port
+    let colon_count = host_port.chars().filter(|c| *c == ':').count();
+
+    if colon_count == 1 {
+        // Single colon means host:port format
+        let parts: Vec<&str> = host_port.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            if let Ok(port) = parts[1].parse::<u16>() {
+                return (parts[0].to_string(), Some(port));
+            }
+        }
+    }
+
+    // No colon or multiple colons (unbracketed IPv6) - treat as host only
+    (host_port.to_string(), None)
+}
+
 // Error type for the API client
 #[derive(Error, Debug)]
 pub enum ApiError {
@@ -222,11 +288,20 @@ pub struct BaseConfig {
 }
 
 impl BaseConfig {
-    /// Get the formatted base URL, with port if specified
+    /// Get the formatted base URL, with port if specified.
+    ///
+    /// Handles cases where base_url might already contain an embedded port.
+    /// If both an embedded port and self.port are present, self.port takes precedence.
     pub fn get_base_url(&self) -> String {
-        match self.port {
-            Some(port) => format!("{}:{port}", self.base_url),
-            None => self.base_url.clone(),
+        // Parse the base_url to extract host and any embedded port
+        let (host, embedded_port) = parse_server_address(&self.base_url);
+
+        // Explicitly set port takes precedence, then embedded port
+        let resolved_port = self.port.or(embedded_port);
+
+        match resolved_port {
+            Some(port) => format!("{host}:{port}"),
+            None => host,
         }
     }
 }
@@ -609,8 +684,13 @@ impl HessraClient {
         port: Option<u16>,
         server_ca: impl Into<String>,
     ) -> Result<String, ApiError> {
-        let base_url = base_url.into();
+        let base_url_str = base_url.into();
         let server_ca = server_ca.into();
+
+        // Parse the base_url to handle addresses with embedded ports
+        let (host, embedded_port) = parse_server_address(&base_url_str);
+        // Use embedded port if present, otherwise use the provided port parameter
+        let resolved_port = embedded_port.or(port);
 
         // Create a regular reqwest client (no mTLS)
         let cert_pem = server_ca.as_bytes();
@@ -626,10 +706,10 @@ impl HessraClient {
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
-        // Format the URL
-        let url = match port {
-            Some(port) => format!("https://{base_url}:{port}/public_key"),
-            None => format!("https://{base_url}/public_key"),
+        // Format the URL using the parsed host and resolved port
+        let url = match resolved_port {
+            Some(port) => format!("https://{host}:{port}/public_key"),
+            None => format!("https://{host}/public_key"),
         };
 
         // Make the request
@@ -671,7 +751,12 @@ impl HessraClient {
         base_url: impl Into<String>,
         port: Option<u16>,
     ) -> Result<String, ApiError> {
-        let base_url = base_url.into();
+        let base_url_str = base_url.into();
+
+        // Parse the base_url to handle addresses with embedded ports
+        let (host, embedded_port) = parse_server_address(&base_url_str);
+        // Use embedded port if present, otherwise use the provided port parameter
+        let resolved_port = embedded_port.or(port);
 
         // Create a reqwest client using system CA store
         let client = reqwest::ClientBuilder::new()
@@ -679,10 +764,10 @@ impl HessraClient {
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
-        // Format the URL
-        let url = match port {
-            Some(port) => format!("https://{base_url}:{port}/ca_cert"),
-            None => format!("https://{base_url}/ca_cert"),
+        // Format the URL using the parsed host and resolved port
+        let url = match resolved_port {
+            Some(port) => format!("https://{host}:{port}/ca_cert"),
+            None => format!("https://{host}/ca_cert"),
         };
 
         // Make the request
@@ -728,8 +813,13 @@ impl HessraClient {
         port: Option<u16>,
         server_ca: impl Into<String>,
     ) -> Result<String, ApiError> {
-        let base_url = base_url.into();
+        let base_url_str = base_url.into();
         let server_ca = server_ca.into();
+
+        // Parse the base_url to handle addresses with embedded ports
+        let (host, embedded_port) = parse_server_address(&base_url_str);
+        // Use embedded port if present, otherwise use the provided port parameter
+        let resolved_port = embedded_port.or(port);
 
         // Create a regular reqwest client (no mTLS)
         let cert_pem = server_ca.as_bytes();
@@ -747,10 +837,10 @@ impl HessraClient {
             .build()
             .map_err(|e| ApiError::SslConfig(e.to_string()))?;
 
-        // Format the URL
-        let url = match port {
-            Some(port) => format!("https://{base_url}:{port}/public_key"),
-            None => format!("https://{base_url}/public_key"),
+        // Format the URL using the parsed host and resolved port
+        let url = match resolved_port {
+            Some(port) => format!("https://{host}:{port}/public_key"),
+            None => format!("https://{host}/public_key"),
         };
 
         // Make the request
@@ -1191,5 +1281,114 @@ mod tests {
         assert_eq!(builder.config.server_ca, "CA");
         assert_eq!(builder.config.public_key, Some("PUBKEY".to_string()));
         assert_eq!(builder.config.personal_keypair, Some("KEYPAIR".to_string()));
+    }
+
+    // Test parse_server_address function
+    #[test]
+    fn test_parse_server_address_ip_with_port() {
+        let (host, port) = parse_server_address("127.0.0.1:4433");
+        assert_eq!(host, "127.0.0.1");
+        assert_eq!(port, Some(4433));
+    }
+
+    #[test]
+    fn test_parse_server_address_ip_only() {
+        let (host, port) = parse_server_address("127.0.0.1");
+        assert_eq!(host, "127.0.0.1");
+        assert_eq!(port, None);
+    }
+
+    #[test]
+    fn test_parse_server_address_hostname_with_port() {
+        let (host, port) = parse_server_address("test.hessra.net:443");
+        assert_eq!(host, "test.hessra.net");
+        assert_eq!(port, Some(443));
+    }
+
+    #[test]
+    fn test_parse_server_address_hostname_only() {
+        let (host, port) = parse_server_address("test.hessra.net");
+        assert_eq!(host, "test.hessra.net");
+        assert_eq!(port, None);
+    }
+
+    #[test]
+    fn test_parse_server_address_with_https_protocol() {
+        let (host, port) = parse_server_address("https://example.com:8443");
+        assert_eq!(host, "example.com");
+        assert_eq!(port, Some(8443));
+    }
+
+    #[test]
+    fn test_parse_server_address_with_https_protocol_no_port() {
+        let (host, port) = parse_server_address("https://example.com");
+        assert_eq!(host, "example.com");
+        assert_eq!(port, None);
+    }
+
+    #[test]
+    fn test_parse_server_address_with_path() {
+        let (host, port) = parse_server_address("https://example.com:8443/some/path");
+        assert_eq!(host, "example.com");
+        assert_eq!(port, Some(8443));
+    }
+
+    #[test]
+    fn test_parse_server_address_ipv6_with_brackets_and_port() {
+        let (host, port) = parse_server_address("[::1]:8443");
+        assert_eq!(host, "::1");
+        assert_eq!(port, Some(8443));
+    }
+
+    #[test]
+    fn test_parse_server_address_ipv6_with_brackets_no_port() {
+        let (host, port) = parse_server_address("[::1]");
+        assert_eq!(host, "::1");
+        assert_eq!(port, None);
+    }
+
+    #[test]
+    fn test_parse_server_address_ipv6_full_with_port() {
+        let (host, port) = parse_server_address("[2001:db8::1]:4433");
+        assert_eq!(host, "2001:db8::1");
+        assert_eq!(port, Some(4433));
+    }
+
+    #[test]
+    fn test_parse_server_address_with_whitespace() {
+        let (host, port) = parse_server_address("  127.0.0.1:4433  ");
+        assert_eq!(host, "127.0.0.1");
+        assert_eq!(port, Some(4433));
+    }
+
+    #[test]
+    fn test_base_config_get_base_url_with_embedded_port() {
+        // Test that BaseConfig::get_base_url handles embedded ports correctly
+        let config = BaseConfig {
+            base_url: "127.0.0.1:4433".to_string(),
+            port: None, // No explicit port set
+            mtls_key: None,
+            mtls_cert: None,
+            server_ca: "".to_string(),
+            public_key: None,
+            personal_keypair: None,
+        };
+        // Should extract the embedded port and use it
+        assert_eq!(config.get_base_url(), "127.0.0.1:4433");
+    }
+
+    #[test]
+    fn test_base_config_get_base_url_explicit_port_overrides_embedded() {
+        // Test that explicitly set port takes precedence over embedded port
+        let config = BaseConfig {
+            base_url: "127.0.0.1:4433".to_string(),
+            port: Some(8080), // Explicit port should override
+            mtls_key: None,
+            mtls_cert: None,
+            server_ca: "".to_string(),
+            public_key: None,
+            personal_keypair: None,
+        };
+        assert_eq!(config.get_base_url(), "127.0.0.1:8080");
     }
 }

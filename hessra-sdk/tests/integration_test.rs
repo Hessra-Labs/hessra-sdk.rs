@@ -116,11 +116,13 @@ async fn test_sdk_integration() -> Result<(), SdkError> {
         .build();
 
     // Access components from the SDK
+    // Note: HessraConfig::builder() stores base_url as-is (no parsing)
     let config = hessra.config();
     assert_eq!(config.base_url, "https://test.hessra.net");
     assert_eq!(config.port, Some(443));
 
     // 4. Alternatively, use the builder pattern for the SDK
+    // The builder accepts various formats including URLs with protocol
     let hessra = hessra_sdk::Hessra::builder()
         .base_url("https://test.hessra.net")
         .port(443)
@@ -131,9 +133,9 @@ async fn test_sdk_integration() -> Result<(), SdkError> {
         .public_key(include_str!("test_certs/service_public_key.pem"))
         .build()?;
 
-    // Verify config from builder
+    // Verify config from builder - base_url is normalized to just hostname
     let config = hessra.config();
-    assert_eq!(config.base_url, "https://test.hessra.net");
+    assert_eq!(config.base_url, "test.hessra.net");
     assert_eq!(config.port, Some(443));
 
     // Note: In a real test, we would make actual API calls to the service

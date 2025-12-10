@@ -61,8 +61,8 @@ pub use hessra_token_identity::{
 pub use hessra_config::{ConfigError, HessraConfig, Protocol};
 
 pub use hessra_api::{
-    ApiError, HessraClient, HessraClientBuilder, IdentityTokenRequest, IdentityTokenResponse,
-    MintIdentityTokenRequest, MintIdentityTokenResponse, PublicKeyResponse,
+    parse_server_address, ApiError, HessraClient, HessraClientBuilder, IdentityTokenRequest,
+    IdentityTokenResponse, MintIdentityTokenRequest, MintIdentityTokenResponse, PublicKeyResponse,
     RefreshIdentityTokenRequest, SignTokenRequest, SignTokenResponse, SignoffInfo, TokenRequest,
     TokenResponse, VerifyServiceChainTokenRequest, VerifyTokenRequest, VerifyTokenResponse,
 };
@@ -900,9 +900,27 @@ impl HessraBuilder {
         }
     }
 
-    /// Set the base URL for the Hessra service
+    /// Set the base URL for the Hessra service.
+    ///
+    /// Accepts various address formats including:
+    /// - IP:Port (e.g., "127.0.0.1:4433")
+    /// - IP alone (e.g., "127.0.0.1")
+    /// - hostname:port (e.g., "test.hessra.net:443")
+    /// - hostname alone (e.g., "test.hessra.net")
+    ///
+    /// If the address includes a port, it will be automatically extracted
+    /// and used unless explicitly overridden by calling `.port()`.
     pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
-        self.config_builder = self.config_builder.base_url(base_url);
+        let base_url_str = base_url.into();
+        let (host, embedded_port) = parse_server_address(&base_url_str);
+
+        self.config_builder = self.config_builder.base_url(host);
+
+        // If an embedded port was found, set it (can be overridden by explicit .port() call)
+        if let Some(port) = embedded_port {
+            self.config_builder = self.config_builder.port(port);
+        }
+
         self
     }
 
