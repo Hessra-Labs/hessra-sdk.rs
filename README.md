@@ -261,6 +261,8 @@ client.verify_service_chain_token(
 ).await?;
 ```
 
+**Note:** Service chain verification uses an extended time limit of 10ms (vs 1ms for regular tokens) because each service node adds additional Datalog checks.
+
 ## Examples
 
 Check the [examples directory](hessra-sdk/examples/) for complete working examples:

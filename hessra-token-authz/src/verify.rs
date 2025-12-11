@@ -1,5 +1,6 @@
 extern crate biscuit_auth as biscuit;
 
+use biscuit::datalog::RunLimits;
 use biscuit::macros::{authorizer, check, fact};
 use biscuit::Algorithm;
 use chrono::Utc;
@@ -8,6 +9,7 @@ use hessra_token_core::{
     TokenError,
 };
 use serde::Deserialize;
+use std::time::Duration;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ServiceNode {
@@ -552,7 +554,17 @@ fn verify_raw_service_chain_biscuit(
         }
     }
 
-    match authz.build(&biscuit)?.authorize() {
+    // Service chain verification evaluates additional Datalog checks for each
+    // node in the chain. This can exceed default time limits on slower systems,
+    // so we use extended limits here (default is 1ms, we use 10ms).
+    let service_chain_limits = RunLimits {
+        max_time: Duration::from_millis(10),
+        ..Default::default()
+    };
+    match authz
+        .build(&biscuit)?
+        .authorize_with_limits(service_chain_limits)
+    {
         Ok(_) => Ok(()),
         Err(e) => Err(convert_service_chain_error(
             e,

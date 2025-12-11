@@ -167,6 +167,8 @@ client.verify_service_chain_token_local(
 )?;
 ```
 
+**Note:** Service chain verification uses an extended time limit of 10ms (vs 1ms for regular tokens) because each service node adds additional Datalog checks.
+
 ### Multi-Party Authorization
 
 Handle tokens that require signoffs from multiple authorization services:

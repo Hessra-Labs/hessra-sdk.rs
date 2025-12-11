@@ -45,6 +45,8 @@ verify_service_chain_biscuit_local(
 
 Service chains allow tokens to be attested by multiple services in a defined order, providing cryptographic proof that a request passed through the proper authorization checkpoints.
 
+**Note:** Service chain verification uses an extended time limit of 10ms (vs 1ms for regular tokens) because each service node adds additional Datalog checks.
+
 ## Domain-Restricted Tokens
 
 Authorization tokens can be restricted to a specific domain:
