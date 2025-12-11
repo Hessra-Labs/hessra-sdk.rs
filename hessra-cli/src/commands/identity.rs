@@ -218,8 +218,24 @@ async fn authenticate(
 
     // Try to load CA cert from server directory first, then fall back to provided path
     let ca = if let Some(provided_ca_path) = ca_path {
-        fs::read_to_string(&provided_ca_path)
-            .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+        let ca_content = fs::read_to_string(&provided_ca_path)
+            .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?;
+
+        // Auto-save to server config for future use
+        let server_ca_path = ServerConfig::ca_cert_path(&server)?;
+        if let Some(parent) = server_ca_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&server_ca_path, &ca_content)?;
+        if verbose && !json_output {
+            println!(
+                "  {} CA cert saved to: {}",
+                "✓".green(),
+                server_ca_path.display()
+            );
+        }
+
+        ca_content
     } else {
         let server_ca_path = ServerConfig::ca_cert_path(&server)?;
         if server_ca_path.exists() {
@@ -232,8 +248,9 @@ async fn authenticate(
             // CA cert doesn't exist - try to fetch it automatically
             if !json_output {
                 println!(
-                    "  Fetching CA certificate from {}...",
-                    server.bright_white()
+                    "  Fetching CA certificate from {}:{}...",
+                    server.bright_white(),
+                    resolved_port
                 );
             }
 
@@ -1367,8 +1384,24 @@ async fn mint_domain_restricted(
 
     // Try to load CA cert from server directory first, then fall back to provided path
     let ca = if let Some(provided_ca_path) = ca_path {
-        fs::read_to_string(&provided_ca_path)
-            .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?
+        let ca_content = fs::read_to_string(&provided_ca_path)
+            .map_err(|e| CliError::FileNotFound(format!("CA file: {e}")))?;
+
+        // Auto-save to server config for future use
+        let server_ca_path = ServerConfig::ca_cert_path(&server)?;
+        if let Some(parent) = server_ca_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&server_ca_path, &ca_content)?;
+        if verbose && !json_output && !token_only {
+            println!(
+                "  {} CA cert saved to: {}",
+                "✓".green(),
+                server_ca_path.display()
+            );
+        }
+
+        ca_content
     } else {
         let server_ca_path = ServerConfig::ca_cert_path(&server)?;
         if server_ca_path.exists() {
@@ -1381,8 +1414,9 @@ async fn mint_domain_restricted(
             // CA cert doesn't exist - try to fetch it automatically
             if !json_output && !token_only {
                 println!(
-                    "  Fetching CA certificate from {}...",
-                    server.bright_white()
+                    "  Fetching CA certificate from {}:{}...",
+                    server.bright_white(),
+                    resolved_port
                 );
             }
 
