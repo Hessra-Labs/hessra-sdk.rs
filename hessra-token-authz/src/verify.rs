@@ -17,6 +17,19 @@ pub struct ServiceNode {
     pub public_key: String,
 }
 
+/// Optional context for token verification restrictions.
+///
+/// This struct bundles optional restrictions that can be applied during
+/// token verification. Using a struct instead of individual parameters
+/// makes it easier to add new restrictions without changing function signatures.
+#[derive(Debug, Clone, Default)]
+pub struct VerificationContext {
+    /// Domain restriction for the verification
+    pub domain: Option<String>,
+    /// Prefix restriction for the verification
+    pub prefix: Option<String>,
+}
+
 /// Verification mode for authorization tokens.
 #[derive(Debug, Clone, PartialEq)]
 enum VerificationMode {
@@ -115,8 +128,7 @@ pub struct AuthorizationVerifier {
     mode: VerificationMode,
     resource: String,
     operation: String,
-    domain: Option<String>,
-    prefix: Option<String>,
+    context: VerificationContext,
     service_chain: Option<(Vec<ServiceNode>, Option<String>)>,
 }
 
@@ -142,8 +154,7 @@ impl AuthorizationVerifier {
             mode: VerificationMode::Identity { subject },
             resource,
             operation,
-            domain: None,
-            prefix: None,
+            context: VerificationContext::default(),
             service_chain: None,
         }
     }
@@ -174,8 +185,7 @@ impl AuthorizationVerifier {
             mode: VerificationMode::Identity { subject },
             resource,
             operation,
-            domain: None,
-            prefix: None,
+            context: VerificationContext::default(),
             service_chain: None,
         })
     }
@@ -203,8 +213,7 @@ impl AuthorizationVerifier {
             mode: VerificationMode::Capability,
             resource,
             operation,
-            domain: None,
-            prefix: None,
+            context: VerificationContext::default(),
             service_chain: None,
         }
     }
@@ -236,8 +245,7 @@ impl AuthorizationVerifier {
             mode: VerificationMode::Capability,
             resource,
             operation,
-            domain: None,
-            prefix: None,
+            context: VerificationContext::default(),
             service_chain: None,
         })
     }
@@ -250,7 +258,7 @@ impl AuthorizationVerifier {
     /// # Arguments
     /// * `domain` - The domain to verify against (e.g., "example.com")
     pub fn with_domain(mut self, domain: String) -> Self {
-        self.domain = Some(domain);
+        self.context.domain = Some(domain);
         self
     }
 
@@ -262,7 +270,7 @@ impl AuthorizationVerifier {
     /// # Arguments
     /// * `prefix` - The prefix to verify against (e.g., "tenant/TENANTID/user/USERID/")
     pub fn with_prefix(mut self, prefix: String) -> Self {
-        self.prefix = Some(prefix);
+        self.context.prefix = Some(prefix);
         self
     }
 
@@ -309,8 +317,7 @@ impl AuthorizationVerifier {
                 self.operation,
                 service_nodes,
                 component,
-                self.domain,
-                self.prefix,
+                self.context,
             )
         } else {
             // Basic verification
@@ -319,8 +326,7 @@ impl AuthorizationVerifier {
                 self.mode,
                 self.resource,
                 self.operation,
-                self.domain,
-                self.prefix,
+                self.context,
             )
         }
     }
@@ -330,8 +336,7 @@ pub(crate) fn build_base_authorizer(
     subject: String,
     resource: String,
     operation: String,
-    domain: Option<String>,
-    prefix: Option<String>,
+    context: &VerificationContext,
 ) -> Result<biscuit::AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
@@ -346,12 +351,12 @@ pub(crate) fn build_base_authorizer(
     );
 
     // Add domain fact if specified
-    if let Some(domain) = domain {
+    if let Some(domain) = context.domain.clone() {
         authz = authz.fact(fact!(r#"domain({domain});"#))?;
     }
 
     // Add prefix fact if specified
-    if let Some(prefix) = prefix {
+    if let Some(prefix) = context.prefix.clone() {
         authz = authz.fact(fact!(r#"prefix({prefix});"#))?;
     }
 
@@ -367,8 +372,7 @@ pub(crate) fn build_base_authorizer(
 pub(crate) fn build_capability_authorizer(
     resource: String,
     operation: String,
-    domain: Option<String>,
-    prefix: Option<String>,
+    context: &VerificationContext,
 ) -> Result<biscuit::AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
@@ -384,12 +388,12 @@ pub(crate) fn build_capability_authorizer(
     );
 
     // Add domain fact if specified
-    if let Some(domain) = domain {
+    if let Some(domain) = context.domain.clone() {
         authz = authz.fact(fact!(r#"domain({domain});"#))?;
     }
 
     // Add prefix fact if specified
-    if let Some(prefix) = prefix {
+    if let Some(prefix) = context.prefix.clone() {
         authz = authz.fact(fact!(r#"prefix({prefix});"#))?;
     }
 
@@ -401,23 +405,18 @@ fn verify_raw_biscuit(
     mode: VerificationMode,
     resource: String,
     operation: String,
-    domain: Option<String>,
-    prefix: Option<String>,
+    context: VerificationContext,
 ) -> Result<(), TokenError> {
     let authz = match &mode {
         VerificationMode::Identity { subject } => build_base_authorizer(
             subject.clone(),
             resource.clone(),
             operation.clone(),
-            domain.clone(),
-            prefix.clone(),
+            &context,
         )?,
-        VerificationMode::Capability => build_capability_authorizer(
-            resource.clone(),
-            operation.clone(),
-            domain.clone(),
-            prefix.clone(),
-        )?,
+        VerificationMode::Capability => {
+            build_capability_authorizer(resource.clone(), operation.clone(), &context)?
+        }
     };
 
     match authz.build(&biscuit)?.authorize() {
@@ -427,8 +426,7 @@ fn verify_raw_biscuit(
             mode.subject(),
             Some(&resource),
             Some(&operation),
-            domain.as_deref(),
-            prefix.as_deref(),
+            &context,
         )),
     }
 }
@@ -540,7 +538,6 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
     Ok(key)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn verify_raw_service_chain_biscuit(
     biscuit: Biscuit,
     mode: VerificationMode,
@@ -548,19 +545,17 @@ fn verify_raw_service_chain_biscuit(
     operation: String,
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
-    domain: Option<String>,
-    prefix: Option<String>,
+    context: VerificationContext,
 ) -> Result<(), TokenError> {
     let mut authz = match &mode {
         VerificationMode::Identity { subject } => build_base_authorizer(
             subject.clone(),
             resource.clone(),
             operation.clone(),
-            domain.clone(),
-            prefix.clone(),
+            &context,
         )?,
         VerificationMode::Capability => {
-            build_capability_authorizer(resource.clone(), operation.clone(), domain.clone(), prefix.clone())?
+            build_capability_authorizer(resource.clone(), operation.clone(), &context)?
         }
     };
 
@@ -612,7 +607,7 @@ fn verify_raw_service_chain_biscuit(
             &resource,
             &operation,
             service_nodes,
-            domain.as_deref(),
+            &context,
         )),
     }
 }
@@ -807,8 +802,7 @@ fn convert_authorization_error(
     subject: Option<&str>,
     resource: Option<&str>,
     operation: Option<&str>,
-    domain: Option<&str>,
-    _prefix: Option<&str>,
+    context: &VerificationContext,
 ) -> TokenError {
     use biscuit::error::{Logic, Token};
 
@@ -841,7 +835,7 @@ fn convert_authorization_error(
                         } => {
                             return TokenError::DomainMismatch {
                                 expected,
-                                provided: domain.map(|s| s.to_string()),
+                                provided: context.domain.clone(),
                                 block_id,
                                 check_id,
                             };
@@ -877,7 +871,7 @@ fn convert_service_chain_error(
     resource: &str,
     operation: &str,
     service_nodes: Vec<ServiceNode>,
-    domain: Option<&str>,
+    context: &VerificationContext,
 ) -> TokenError {
     use biscuit::error::{Logic, Token};
 
@@ -929,7 +923,7 @@ fn convert_service_chain_error(
                         } => {
                             return TokenError::DomainMismatch {
                                 expected,
-                                provided: domain.map(|s| s.to_string()),
+                                provided: context.domain.clone(),
                                 block_id,
                                 check_id,
                             };

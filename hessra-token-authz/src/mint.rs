@@ -1518,8 +1518,10 @@ mod tests {
             subject.clone(),
             resource.clone(),
             operation.clone(),
-            Some(domain.clone()),
-            None,
+            &crate::verify::VerificationContext {
+                domain: Some(domain.clone()),
+                ..Default::default()
+            },
         )
         .unwrap();
         assert!(
@@ -1532,8 +1534,7 @@ mod tests {
             subject.clone(),
             resource.clone(),
             operation.clone(),
-            None,
-            None,
+            &crate::verify::VerificationContext::default(),
         )
         .unwrap();
         assert!(
@@ -1550,8 +1551,10 @@ mod tests {
             subject,
             resource,
             operation,
-            Some("wrongdomain.com".to_string()),
-            None,
+            &crate::verify::VerificationContext {
+                domain: Some("wrongdomain.com".to_string()),
+                ..Default::default()
+            },
         )
         .unwrap();
         assert!(
@@ -1608,8 +1611,10 @@ mod tests {
             subject.clone(),
             resource.clone(),
             operation.clone(),
-            Some(domain),
-            None,
+            &crate::verify::VerificationContext {
+                domain: Some(domain),
+                ..Default::default()
+            },
         )
         .unwrap();
         assert!(
@@ -1618,8 +1623,13 @@ mod tests {
         );
 
         // Build authorizer without domain fact - should fail
-        let authz_no_domain =
-            crate::verify::build_base_authorizer(subject, resource, operation, None, None).unwrap();
+        let authz_no_domain = crate::verify::build_base_authorizer(
+            subject,
+            resource,
+            operation,
+            &crate::verify::VerificationContext::default(),
+        )
+        .unwrap();
         assert!(
             authz_no_domain
                 .build(&biscuit)
@@ -1675,8 +1685,10 @@ mod tests {
             subject.clone(),
             resource.clone(),
             operation.clone(),
-            Some(domain),
-            None,
+            &crate::verify::VerificationContext {
+                domain: Some(domain),
+                ..Default::default()
+            },
         )
         .unwrap();
         // Multi-party token needs attestation, so this will fail for that reason, not domain
@@ -1684,8 +1696,13 @@ mod tests {
         assert!(biscuit.to_base64().is_ok(), "Token should be valid biscuit");
 
         // Build authorizer without domain fact - should also fail
-        let authz_no_domain =
-            crate::verify::build_base_authorizer(subject, resource, operation, None, None).unwrap();
+        let authz_no_domain = crate::verify::build_base_authorizer(
+            subject,
+            resource,
+            operation,
+            &crate::verify::VerificationContext::default(),
+        )
+        .unwrap();
         assert!(
             authz_no_domain
                 .build(&biscuit)
@@ -2225,15 +2242,10 @@ mod tests {
                 .expect("Failed to add prefix restriction");
 
         // Verification should fail with wrong prefix
-        let result = AuthorizationVerifier::new(
-            attested_token,
-            public_key,
-            subject,
-            resource,
-            operation,
-        )
-        .with_prefix(wrong_prefix)
-        .verify();
+        let result =
+            AuthorizationVerifier::new(attested_token, public_key, subject, resource, operation)
+                .with_prefix(wrong_prefix)
+                .verify();
         assert!(result.is_err(), "Token should fail with wrong prefix");
     }
 
@@ -2269,18 +2281,10 @@ mod tests {
                 .expect("Failed to add prefix restriction");
 
         // Verification should fail without prefix context (no with_prefix call)
-        let result = AuthorizationVerifier::new(
-            attested_token,
-            public_key,
-            subject,
-            resource,
-            operation,
-        )
-        .verify();
-        assert!(
-            result.is_err(),
-            "Token should fail without prefix context"
-        );
+        let result =
+            AuthorizationVerifier::new(attested_token, public_key, subject, resource, operation)
+                .verify();
+        assert!(result.is_err(), "Token should fail without prefix context");
     }
 
     #[test]
@@ -2330,9 +2334,13 @@ mod tests {
         let attested_token = crate::encode_token(&attested_bytes);
 
         // Add prefix restriction
-        let final_token =
-            add_prefix_restriction_to_token(attested_token, public_key, prefix.clone(), prefix_keypair)
-                .expect("Failed to add prefix restriction");
+        let final_token = add_prefix_restriction_to_token(
+            attested_token,
+            public_key,
+            prefix.clone(),
+            prefix_keypair,
+        )
+        .expect("Failed to add prefix restriction");
 
         // Verify with both service chain and prefix
         let result = AuthorizationVerifier::new(
@@ -2384,14 +2392,10 @@ mod tests {
                 .expect("Failed to add prefix restriction");
 
         // Verify capability-based with prefix
-        let result = AuthorizationVerifier::new_capability(
-            attested_token,
-            public_key,
-            resource,
-            operation,
-        )
-        .with_prefix(prefix)
-        .verify();
+        let result =
+            AuthorizationVerifier::new_capability(attested_token, public_key, resource, operation)
+                .with_prefix(prefix)
+                .verify();
         assert!(
             result.is_ok(),
             "Capability-based verification should work with prefix: {:?}",
@@ -2466,15 +2470,10 @@ mod tests {
         );
 
         // Should fail with only prefix (missing domain)
-        let result = AuthorizationVerifier::new(
-            attested_token,
-            public_key,
-            subject,
-            resource,
-            operation,
-        )
-        .with_prefix(prefix)
-        .verify();
+        let result =
+            AuthorizationVerifier::new(attested_token, public_key, subject, resource, operation)
+                .with_prefix(prefix)
+                .verify();
         assert!(
             result.is_err(),
             "Token should fail with only prefix, missing domain"
