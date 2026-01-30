@@ -46,6 +46,7 @@ pub struct HessraAuthorization {
     service_chain_nodes: Option<Vec<ServiceNode>>,
     multi_party_nodes: Option<Vec<ServiceNode>>,
     domain: Option<String>,
+    prefix_attenuator: Option<String>,
 }
 
 impl HessraAuthorization {
@@ -73,6 +74,7 @@ impl HessraAuthorization {
             service_chain_nodes: None,
             multi_party_nodes: None,
             domain: None,
+            prefix_attenuator: None,
         }
     }
 
@@ -121,6 +123,22 @@ impl HessraAuthorization {
         self
     }
 
+    /// Restricts the authorization to a specific prefix, provided by
+    /// a specific third party.
+    ///
+    /// Adds a prefix restriction check to the authority block:
+    /// - `check if prefix_added(true) trusting {prefix_attenuator}`
+    ///
+    /// attenuate.rs: add_prefix_restriction() will add both the prefix
+    /// restriction check and the prefix added fact.
+    ///
+    /// # Arguments
+    /// * `prefix_attenuator` - The prefix attenuator to restrict to (e.g., "tenant/TENANTID/user/USERID/")
+    pub fn prefix_restricted(mut self, prefix_attenuator: String) -> Self {
+        self.prefix_attenuator = Some(prefix_attenuator);
+        self
+    }
+
     /// Issues (builds and signs) the authorization token.
     ///
     /// # Arguments
@@ -160,6 +178,15 @@ impl HessraAuthorization {
             ))?;
         }
 
+        // Enforce prefix restriction if specified
+        if let Some(prefix_attenuator) = self.prefix_attenuator {
+            let prefix_key = biscuit_key_from_string(prefix_attenuator)?;
+            biscuit_builder = biscuit_builder.check(check!(
+                r#"
+                    check if prefix_added(true) trusting {prefix_key};
+                "#
+            ))?;
+        }
         // Add service chain rules if specified (works for both token types)
         if let Some(nodes) = self.service_chain_nodes {
             for node in nodes {
@@ -1492,6 +1519,7 @@ mod tests {
             resource.clone(),
             operation.clone(),
             Some(domain.clone()),
+            None,
         )
         .unwrap();
         assert!(
@@ -1504,6 +1532,7 @@ mod tests {
             subject.clone(),
             resource.clone(),
             operation.clone(),
+            None,
             None,
         )
         .unwrap();
@@ -1522,6 +1551,7 @@ mod tests {
             resource,
             operation,
             Some("wrongdomain.com".to_string()),
+            None,
         )
         .unwrap();
         assert!(
@@ -1579,6 +1609,7 @@ mod tests {
             resource.clone(),
             operation.clone(),
             Some(domain),
+            None,
         )
         .unwrap();
         assert!(
@@ -1588,7 +1619,7 @@ mod tests {
 
         // Build authorizer without domain fact - should fail
         let authz_no_domain =
-            crate::verify::build_base_authorizer(subject, resource, operation, None).unwrap();
+            crate::verify::build_base_authorizer(subject, resource, operation, None, None).unwrap();
         assert!(
             authz_no_domain
                 .build(&biscuit)
@@ -1645,6 +1676,7 @@ mod tests {
             resource.clone(),
             operation.clone(),
             Some(domain),
+            None,
         )
         .unwrap();
         // Multi-party token needs attestation, so this will fail for that reason, not domain
@@ -1653,7 +1685,7 @@ mod tests {
 
         // Build authorizer without domain fact - should also fail
         let authz_no_domain =
-            crate::verify::build_base_authorizer(subject, resource, operation, None).unwrap();
+            crate::verify::build_base_authorizer(subject, resource, operation, None, None).unwrap();
         assert!(
             authz_no_domain
                 .build(&biscuit)
@@ -2093,5 +2125,359 @@ mod tests {
             "read",
         );
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_basic_authorization_with_prefix_restriction() {
+        use crate::attenuate::add_prefix_restriction_to_token;
+        use crate::verify::AuthorizationVerifier;
+
+        let subject = "alice".to_string();
+        let resource = "documents".to_string();
+        let operation = "read".to_string();
+        let prefix = "tenant/123/user/456/".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create a prefix attenuator keypair
+        let prefix_keypair = KeyPair::new();
+        let prefix_public_key_hex = hex::encode(prefix_keypair.public().to_bytes());
+        let prefix_attenuator = format!("ed25519/{prefix_public_key_hex}");
+
+        // Create token with prefix restriction requirement
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .prefix_restricted(prefix_attenuator)
+        .issue(&keypair)
+        .expect("Failed to create prefix-restricted token");
+
+        // Token should fail verification without prefix attestation
+        let result = AuthorizationVerifier::new(
+            token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        )
+        .with_prefix(prefix.clone())
+        .verify();
+        assert!(
+            result.is_err(),
+            "Token should fail without prefix attestation"
+        );
+
+        // Add the prefix attestation
+        let attested_token =
+            add_prefix_restriction_to_token(token, public_key, prefix.clone(), prefix_keypair)
+                .expect("Failed to add prefix restriction");
+
+        // Now verification should succeed with correct prefix
+        let result = AuthorizationVerifier::new(
+            attested_token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        )
+        .with_prefix(prefix.clone())
+        .verify();
+        assert!(
+            result.is_ok(),
+            "Token should verify with correct prefix: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_prefix_restriction_wrong_prefix() {
+        use crate::attenuate::add_prefix_restriction_to_token;
+        use crate::verify::AuthorizationVerifier;
+
+        let subject = "alice".to_string();
+        let resource = "documents".to_string();
+        let operation = "read".to_string();
+        let prefix = "tenant/123/user/456/".to_string();
+        let wrong_prefix = "tenant/999/user/999/".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let prefix_keypair = KeyPair::new();
+        let prefix_public_key_hex = hex::encode(prefix_keypair.public().to_bytes());
+        let prefix_attenuator = format!("ed25519/{prefix_public_key_hex}");
+
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .prefix_restricted(prefix_attenuator)
+        .issue(&keypair)
+        .expect("Failed to create prefix-restricted token");
+
+        // Add the prefix attestation with the correct prefix
+        let attested_token =
+            add_prefix_restriction_to_token(token, public_key, prefix, prefix_keypair)
+                .expect("Failed to add prefix restriction");
+
+        // Verification should fail with wrong prefix
+        let result = AuthorizationVerifier::new(
+            attested_token,
+            public_key,
+            subject,
+            resource,
+            operation,
+        )
+        .with_prefix(wrong_prefix)
+        .verify();
+        assert!(result.is_err(), "Token should fail with wrong prefix");
+    }
+
+    #[test]
+    fn test_prefix_restriction_missing_prefix_context() {
+        use crate::attenuate::add_prefix_restriction_to_token;
+        use crate::verify::AuthorizationVerifier;
+
+        let subject = "alice".to_string();
+        let resource = "documents".to_string();
+        let operation = "read".to_string();
+        let prefix = "tenant/123/user/456/".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let prefix_keypair = KeyPair::new();
+        let prefix_public_key_hex = hex::encode(prefix_keypair.public().to_bytes());
+        let prefix_attenuator = format!("ed25519/{prefix_public_key_hex}");
+
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .prefix_restricted(prefix_attenuator)
+        .issue(&keypair)
+        .expect("Failed to create prefix-restricted token");
+
+        // Add the prefix attestation
+        let attested_token =
+            add_prefix_restriction_to_token(token, public_key, prefix, prefix_keypair)
+                .expect("Failed to add prefix restriction");
+
+        // Verification should fail without prefix context (no with_prefix call)
+        let result = AuthorizationVerifier::new(
+            attested_token,
+            public_key,
+            subject,
+            resource,
+            operation,
+        )
+        .verify();
+        assert!(
+            result.is_err(),
+            "Token should fail without prefix context"
+        );
+    }
+
+    #[test]
+    fn test_service_chain_with_prefix_restriction() {
+        use crate::attenuate::add_prefix_restriction_to_token;
+        use crate::attest::add_service_node_attestation;
+        use crate::verify::AuthorizationVerifier;
+
+        let subject = "alice".to_string();
+        let resource = "documents".to_string();
+        let operation = "read".to_string();
+        let prefix = "tenant/123/user/456/".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        // Create service node keypair
+        let chain_keypair = KeyPair::new();
+        let chain_public_key_hex = hex::encode(chain_keypair.public().to_bytes());
+        let chain_public_key = format!("ed25519/{chain_public_key_hex}");
+        let chain_node = ServiceNode {
+            component: "api-gateway".to_string(),
+            public_key: chain_public_key,
+        };
+
+        // Create prefix attenuator keypair
+        let prefix_keypair = KeyPair::new();
+        let prefix_public_key_hex = hex::encode(prefix_keypair.public().to_bytes());
+        let prefix_attenuator = format!("ed25519/{prefix_public_key_hex}");
+
+        // Create token with both service chain and prefix restriction
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .service_chain(vec![chain_node.clone()])
+        .prefix_restricted(prefix_attenuator)
+        .issue(&keypair)
+        .expect("Failed to create token with service chain and prefix restriction");
+
+        // Add service node attestation
+        let token_bytes = crate::decode_token(&token).expect("Failed to decode token");
+        let attested_bytes =
+            add_service_node_attestation(token_bytes, public_key, &resource, &chain_keypair)
+                .expect("Failed to add service attestation");
+        let attested_token = crate::encode_token(&attested_bytes);
+
+        // Add prefix restriction
+        let final_token =
+            add_prefix_restriction_to_token(attested_token, public_key, prefix.clone(), prefix_keypair)
+                .expect("Failed to add prefix restriction");
+
+        // Verify with both service chain and prefix
+        let result = AuthorizationVerifier::new(
+            final_token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        )
+        .with_service_chain(vec![chain_node], Some("api-gateway".to_string()))
+        .with_prefix(prefix)
+        .verify();
+        assert!(
+            result.is_ok(),
+            "Token should verify with service chain and prefix: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_capability_verification_with_prefix() {
+        use crate::attenuate::add_prefix_restriction_to_token;
+        use crate::verify::AuthorizationVerifier;
+
+        let subject = "alice".to_string();
+        let resource = "documents".to_string();
+        let operation = "read".to_string();
+        let prefix = "tenant/123/user/456/".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let prefix_keypair = KeyPair::new();
+        let prefix_public_key_hex = hex::encode(prefix_keypair.public().to_bytes());
+        let prefix_attenuator = format!("ed25519/{prefix_public_key_hex}");
+
+        let token = HessraAuthorization::new(
+            subject,
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .prefix_restricted(prefix_attenuator)
+        .issue(&keypair)
+        .expect("Failed to create prefix-restricted token");
+
+        // Add the prefix attestation
+        let attested_token =
+            add_prefix_restriction_to_token(token, public_key, prefix.clone(), prefix_keypair)
+                .expect("Failed to add prefix restriction");
+
+        // Verify capability-based with prefix
+        let result = AuthorizationVerifier::new_capability(
+            attested_token,
+            public_key,
+            resource,
+            operation,
+        )
+        .with_prefix(prefix)
+        .verify();
+        assert!(
+            result.is_ok(),
+            "Capability-based verification should work with prefix: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_prefix_and_domain_combined() {
+        use crate::attenuate::add_prefix_restriction_to_token;
+        use crate::verify::AuthorizationVerifier;
+
+        let subject = "alice".to_string();
+        let resource = "documents".to_string();
+        let operation = "read".to_string();
+        let prefix = "tenant/123/user/456/".to_string();
+        let domain = "myapp.hessra.dev".to_string();
+        let keypair = KeyPair::new();
+        let public_key = keypair.public();
+
+        let prefix_keypair = KeyPair::new();
+        let prefix_public_key_hex = hex::encode(prefix_keypair.public().to_bytes());
+        let prefix_attenuator = format!("ed25519/{prefix_public_key_hex}");
+
+        // Create token with both domain and prefix restrictions
+        let token = HessraAuthorization::new(
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+            TokenTimeConfig::default(),
+        )
+        .domain_restricted(domain.clone())
+        .prefix_restricted(prefix_attenuator)
+        .issue(&keypair)
+        .expect("Failed to create token with domain and prefix restrictions");
+
+        // Add the prefix attestation
+        let attested_token =
+            add_prefix_restriction_to_token(token, public_key, prefix.clone(), prefix_keypair)
+                .expect("Failed to add prefix restriction");
+
+        // Verify with both domain and prefix
+        let result = AuthorizationVerifier::new(
+            attested_token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        )
+        .with_domain(domain.clone())
+        .with_prefix(prefix.clone())
+        .verify();
+        assert!(
+            result.is_ok(),
+            "Token should verify with both domain and prefix: {:?}",
+            result
+        );
+
+        // Should fail with only domain (missing prefix)
+        let result = AuthorizationVerifier::new(
+            attested_token.clone(),
+            public_key,
+            subject.clone(),
+            resource.clone(),
+            operation.clone(),
+        )
+        .with_domain(domain.clone())
+        .verify();
+        assert!(
+            result.is_err(),
+            "Token should fail with only domain, missing prefix"
+        );
+
+        // Should fail with only prefix (missing domain)
+        let result = AuthorizationVerifier::new(
+            attested_token,
+            public_key,
+            subject,
+            resource,
+            operation,
+        )
+        .with_prefix(prefix)
+        .verify();
+        assert!(
+            result.is_err(),
+            "Token should fail with only prefix, missing domain"
+        );
     }
 }

@@ -116,6 +116,7 @@ pub struct AuthorizationVerifier {
     resource: String,
     operation: String,
     domain: Option<String>,
+    prefix: Option<String>,
     service_chain: Option<(Vec<ServiceNode>, Option<String>)>,
 }
 
@@ -142,6 +143,7 @@ impl AuthorizationVerifier {
             resource,
             operation,
             domain: None,
+            prefix: None,
             service_chain: None,
         }
     }
@@ -173,6 +175,7 @@ impl AuthorizationVerifier {
             resource,
             operation,
             domain: None,
+            prefix: None,
             service_chain: None,
         })
     }
@@ -201,6 +204,7 @@ impl AuthorizationVerifier {
             resource,
             operation,
             domain: None,
+            prefix: None,
             service_chain: None,
         }
     }
@@ -233,6 +237,7 @@ impl AuthorizationVerifier {
             resource,
             operation,
             domain: None,
+            prefix: None,
             service_chain: None,
         })
     }
@@ -246,6 +251,18 @@ impl AuthorizationVerifier {
     /// * `domain` - The domain to verify against (e.g., "example.com")
     pub fn with_domain(mut self, domain: String) -> Self {
         self.domain = Some(domain);
+        self
+    }
+
+    /// Adds a prefix restriction to the verification.
+    ///
+    /// When set, adds a prefix fact to the authorizer. This is required for
+    /// verifying prefix-restricted tokens.
+    ///
+    /// # Arguments
+    /// * `prefix` - The prefix to verify against (e.g., "tenant/TENANTID/user/USERID/")
+    pub fn with_prefix(mut self, prefix: String) -> Self {
+        self.prefix = Some(prefix);
         self
     }
 
@@ -293,6 +310,7 @@ impl AuthorizationVerifier {
                 service_nodes,
                 component,
                 self.domain,
+                self.prefix,
             )
         } else {
             // Basic verification
@@ -302,6 +320,7 @@ impl AuthorizationVerifier {
                 self.resource,
                 self.operation,
                 self.domain,
+                self.prefix,
             )
         }
     }
@@ -312,6 +331,7 @@ pub(crate) fn build_base_authorizer(
     resource: String,
     operation: String,
     domain: Option<String>,
+    prefix: Option<String>,
 ) -> Result<biscuit::AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
@@ -330,6 +350,11 @@ pub(crate) fn build_base_authorizer(
         authz = authz.fact(fact!(r#"domain({domain});"#))?;
     }
 
+    // Add prefix fact if specified
+    if let Some(prefix) = prefix {
+        authz = authz.fact(fact!(r#"prefix({prefix});"#))?;
+    }
+
     Ok(authz)
 }
 
@@ -343,6 +368,7 @@ pub(crate) fn build_capability_authorizer(
     resource: String,
     operation: String,
     domain: Option<String>,
+    prefix: Option<String>,
 ) -> Result<biscuit::AuthorizerBuilder, TokenError> {
     let now = Utc::now().timestamp();
 
@@ -362,6 +388,11 @@ pub(crate) fn build_capability_authorizer(
         authz = authz.fact(fact!(r#"domain({domain});"#))?;
     }
 
+    // Add prefix fact if specified
+    if let Some(prefix) = prefix {
+        authz = authz.fact(fact!(r#"prefix({prefix});"#))?;
+    }
+
     Ok(authz)
 }
 
@@ -371,6 +402,7 @@ fn verify_raw_biscuit(
     resource: String,
     operation: String,
     domain: Option<String>,
+    prefix: Option<String>,
 ) -> Result<(), TokenError> {
     let authz = match &mode {
         VerificationMode::Identity { subject } => build_base_authorizer(
@@ -378,10 +410,14 @@ fn verify_raw_biscuit(
             resource.clone(),
             operation.clone(),
             domain.clone(),
+            prefix.clone(),
         )?,
-        VerificationMode::Capability => {
-            build_capability_authorizer(resource.clone(), operation.clone(), domain.clone())?
-        }
+        VerificationMode::Capability => build_capability_authorizer(
+            resource.clone(),
+            operation.clone(),
+            domain.clone(),
+            prefix.clone(),
+        )?,
     };
 
     match authz.build(&biscuit)?.authorize() {
@@ -392,6 +428,7 @@ fn verify_raw_biscuit(
             Some(&resource),
             Some(&operation),
             domain.as_deref(),
+            prefix.as_deref(),
         )),
     }
 }
@@ -503,6 +540,7 @@ pub fn biscuit_key_from_string(key: String) -> Result<PublicKey, TokenError> {
     Ok(key)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn verify_raw_service_chain_biscuit(
     biscuit: Biscuit,
     mode: VerificationMode,
@@ -511,6 +549,7 @@ fn verify_raw_service_chain_biscuit(
     service_nodes: Vec<ServiceNode>,
     component: Option<String>,
     domain: Option<String>,
+    prefix: Option<String>,
 ) -> Result<(), TokenError> {
     let mut authz = match &mode {
         VerificationMode::Identity { subject } => build_base_authorizer(
@@ -518,9 +557,10 @@ fn verify_raw_service_chain_biscuit(
             resource.clone(),
             operation.clone(),
             domain.clone(),
+            prefix.clone(),
         )?,
         VerificationMode::Capability => {
-            build_capability_authorizer(resource.clone(), operation.clone(), domain.clone())?
+            build_capability_authorizer(resource.clone(), operation.clone(), domain.clone(), prefix.clone())?
         }
     };
 
@@ -768,6 +808,7 @@ fn convert_authorization_error(
     resource: Option<&str>,
     operation: Option<&str>,
     domain: Option<&str>,
+    _prefix: Option<&str>,
 ) -> TokenError {
     use biscuit::error::{Logic, Token};
 

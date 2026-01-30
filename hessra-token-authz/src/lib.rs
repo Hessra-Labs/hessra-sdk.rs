@@ -56,12 +56,14 @@
 //! }
 //! ```
 
+mod attenuate;
 mod attest;
 mod mint;
 mod revocation;
 mod verify;
 
 // Re-export all authorization-specific functionality
+pub use attenuate::{add_prefix_restriction, add_prefix_restriction_to_token};
 pub use attest::{
     add_multi_party_attestation, add_multi_party_attestation_to_token, add_service_node_attestation,
 };
