@@ -45,6 +45,9 @@ pub use hessra_token_authz::{
     add_multi_party_attestation,
     add_multi_party_attestation_to_token,
     add_service_node_attestation,
+    // Prefix restriction functions
+    add_prefix_restriction,
+    add_prefix_restriction_to_token,
     // Verify functions
     biscuit_key_from_string,
     // Mint functions
@@ -63,6 +66,8 @@ pub use hessra_token_authz::{
     verify_service_chain_biscuit_local,
     verify_service_chain_token_local,
     verify_token_local,
+    // Verification builder
+    AuthorizationVerifier,
     ServiceNode,
 };
 

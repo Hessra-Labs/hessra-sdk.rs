@@ -268,6 +268,46 @@ pub struct MintIdentityTokenResponse {
     pub identity: Option<String>,
 }
 
+/// Request to mint a stub token that requires prefix attestation before use.
+///
+/// Stub tokens are minted by a realm identity on behalf of a target identity
+/// within their domain. The token requires a trusted third party (identified by
+/// the prefix_attenuator_key) to add a prefix restriction before the token
+/// can be used.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StubTokenRequest {
+    /// The identity who will use this token (must be in minter's domain)
+    pub target_identity: String,
+    /// The resource the stub token grants access to
+    pub resource: String,
+    /// The operation allowed on the resource
+    pub operation: String,
+    /// Public key that will attest the prefix (format: "ed25519/..." or "secp256r1/...")
+    pub prefix_attenuator_key: String,
+    /// Optional token duration in seconds (defaults to minter's configured duration)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration: Option<u64>,
+}
+
+/// Response from minting a stub token.
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct StubTokenResponse {
+    /// Response message from the server
+    pub response_msg: String,
+    /// The stub token (requires prefix attestation before use)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    /// Duration until expiry in seconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+    /// The target identity encoded in the token
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_identity: Option<String>,
+    /// The prefix attenuator key that must attest this token
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix_attenuator_key: Option<String>,
+}
+
 /// Base configuration for Hessra clients
 #[derive(Clone)]
 pub struct BaseConfig {
@@ -1218,6 +1258,107 @@ impl HessraClient {
             HessraClient::Http3(client) => {
                 client
                     .send_request::<_, MintIdentityTokenResponse>("mint_identity_token", &request)
+                    .await?
+            }
+        };
+
+        Ok(response)
+    }
+
+    /// Request a stub token that requires prefix attestation before use.
+    ///
+    /// This endpoint requires mTLS authentication from a "realm" identity.
+    /// The minted stub token will be for a target identity within the realm's domain
+    /// and will require a trusted third party (identified by prefix_attenuator_key)
+    /// to add a prefix restriction before the token can be used.
+    ///
+    /// # Arguments
+    /// * `target_identity` - The identity who will use this token (must be in minter's domain)
+    /// * `resource` - The resource the stub token grants access to
+    /// * `operation` - The operation allowed on the resource
+    /// * `prefix_attenuator_key` - Public key that will attest the prefix (format: "ed25519/..." or "secp256r1/...")
+    /// * `duration` - Optional token duration in seconds (defaults to minter's configured duration)
+    pub async fn request_stub_token(
+        &self,
+        target_identity: String,
+        resource: String,
+        operation: String,
+        prefix_attenuator_key: String,
+        duration: Option<u64>,
+    ) -> Result<StubTokenResponse, ApiError> {
+        let request = StubTokenRequest {
+            target_identity,
+            resource,
+            operation,
+            prefix_attenuator_key,
+            duration,
+        };
+
+        let response = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request::<_, StubTokenResponse>("request_stub", &request)
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request::<_, StubTokenResponse>("request_stub", &request)
+                    .await?
+            }
+        };
+
+        Ok(response)
+    }
+
+    /// Request a stub token using an identity token for authentication.
+    ///
+    /// This is similar to `request_stub_token` but uses an identity token
+    /// instead of mTLS for authentication. The identity token will be sent
+    /// in the Authorization header as a Bearer token.
+    ///
+    /// # Arguments
+    /// * `target_identity` - The identity who will use this token (must be in minter's domain)
+    /// * `resource` - The resource the stub token grants access to
+    /// * `operation` - The operation allowed on the resource
+    /// * `prefix_attenuator_key` - Public key that will attest the prefix (format: "ed25519/..." or "secp256r1/...")
+    /// * `identity_token` - The identity token to use for authentication
+    /// * `duration` - Optional token duration in seconds (defaults to minter's configured duration)
+    pub async fn request_stub_token_with_identity(
+        &self,
+        target_identity: String,
+        resource: String,
+        operation: String,
+        prefix_attenuator_key: String,
+        identity_token: String,
+        duration: Option<u64>,
+    ) -> Result<StubTokenResponse, ApiError> {
+        let request = StubTokenRequest {
+            target_identity,
+            resource,
+            operation,
+            prefix_attenuator_key,
+            duration,
+        };
+
+        let response = match self {
+            HessraClient::Http1(client) => {
+                client
+                    .send_request_with_auth::<_, StubTokenResponse>(
+                        "request_stub",
+                        &request,
+                        &format!("Bearer {identity_token}"),
+                    )
+                    .await?
+            }
+            #[cfg(feature = "http3")]
+            HessraClient::Http3(client) => {
+                client
+                    .send_request_with_auth::<_, StubTokenResponse>(
+                        "request_stub",
+                        &request,
+                        &format!("Bearer {identity_token}"),
+                    )
                     .await?
             }
         };

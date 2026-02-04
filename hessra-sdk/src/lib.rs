@@ -39,9 +39,14 @@ pub use hessra_token::{
     add_service_node_attestation,
     decode_token,
     encode_token,
+    // Prefix restriction functions
+    add_prefix_restriction,
+    add_prefix_restriction_to_token,
     // Token verification
     verify_biscuit_local,
     verify_service_chain_biscuit_local,
+    // Verification builder
+    AuthorizationVerifier,
     // Re-exported biscuit types
     Biscuit,
     KeyPair,
@@ -63,8 +68,9 @@ pub use hessra_config::{ConfigError, HessraConfig, Protocol};
 pub use hessra_api::{
     parse_server_address, ApiError, HessraClient, HessraClientBuilder, IdentityTokenRequest,
     IdentityTokenResponse, MintIdentityTokenRequest, MintIdentityTokenResponse, PublicKeyResponse,
-    RefreshIdentityTokenRequest, SignTokenRequest, SignTokenResponse, SignoffInfo, TokenRequest,
-    TokenResponse, VerifyServiceChainTokenRequest, VerifyTokenRequest, VerifyTokenResponse,
+    RefreshIdentityTokenRequest, SignTokenRequest, SignTokenResponse, SignoffInfo,
+    StubTokenRequest, StubTokenResponse, TokenRequest, TokenResponse,
+    VerifyServiceChainTokenRequest, VerifyTokenRequest, VerifyTokenResponse,
 };
 
 /// Errors that can occur in the Hessra SDK
@@ -772,6 +778,98 @@ impl Hessra {
     ) -> Result<MintIdentityTokenResponse, SdkError> {
         self.client
             .mint_domain_restricted_identity_token(subject.into(), duration)
+            .await
+            .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Request a stub token that requires prefix attestation before use.
+    ///
+    /// This method requires mTLS authentication from a "realm" identity.
+    /// The minted stub token will be for a target identity within the realm's domain
+    /// and will require a trusted third party (identified by prefix_attenuator_key)
+    /// to add a prefix restriction before the token can be used.
+    ///
+    /// # Arguments
+    /// * `target_identity` - The identity who will use this token (must be in minter's domain)
+    /// * `resource` - The resource the stub token grants access to
+    /// * `operation` - The operation allowed on the resource
+    /// * `prefix_attenuator_key` - Public key that will attest the prefix (format: "ed25519/..." or "secp256r1/...")
+    /// * `duration` - Optional token duration in seconds (defaults to minter's configured duration)
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use hessra_sdk::Hessra;
+    /// # async fn example(sdk: &Hessra) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Request a stub token for a user that requires prefix attestation
+    /// let response = sdk.request_stub_token(
+    ///     "uri:urn:test:argo-cli1:user123".to_string(),
+    ///     "files".to_string(),
+    ///     "read".to_string(),
+    ///     "ed25519/abcdef1234567890...".to_string(),
+    ///     Some(3600), // 1 hour
+    /// ).await?;
+    ///
+    /// if let Some(token) = response.token {
+    ///     println!("Got stub token: {}", token);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn request_stub_token(
+        &self,
+        target_identity: impl Into<String>,
+        resource: impl Into<String>,
+        operation: impl Into<String>,
+        prefix_attenuator_key: impl Into<String>,
+        duration: Option<u64>,
+    ) -> Result<StubTokenResponse, SdkError> {
+        self.client
+            .request_stub_token(
+                target_identity.into(),
+                resource.into(),
+                operation.into(),
+                prefix_attenuator_key.into(),
+                duration,
+            )
+            .await
+            .map_err(|e| SdkError::Generic(e.to_string()))
+    }
+
+    /// Request a stub token using an identity token for authentication.
+    ///
+    /// This is similar to `request_stub_token` but uses an identity token
+    /// instead of mTLS for authentication. The identity token will be
+    /// automatically attenuated with a 5-second expiry for security.
+    ///
+    /// # Arguments
+    /// * `target_identity` - The identity who will use this token (must be in minter's domain)
+    /// * `resource` - The resource the stub token grants access to
+    /// * `operation` - The operation allowed on the resource
+    /// * `prefix_attenuator_key` - Public key that will attest the prefix (format: "ed25519/..." or "secp256r1/...")
+    /// * `identity_token` - The identity token to use for authentication
+    /// * `duration` - Optional token duration in seconds (defaults to minter's configured duration)
+    pub async fn request_stub_token_with_identity(
+        &self,
+        target_identity: impl Into<String>,
+        resource: impl Into<String>,
+        operation: impl Into<String>,
+        prefix_attenuator_key: impl Into<String>,
+        identity_token: impl Into<String>,
+        duration: Option<u64>,
+    ) -> Result<StubTokenResponse, SdkError> {
+        let token = identity_token.into();
+        // Apply JIT attenuation to the identity token
+        let attenuated_token = self.apply_jit_attenuation(token);
+
+        self.client
+            .request_stub_token_with_identity(
+                target_identity.into(),
+                resource.into(),
+                operation.into(),
+                prefix_attenuator_key.into(),
+                attenuated_token,
+                duration,
+            )
             .await
             .map_err(|e| SdkError::Generic(e.to_string()))
     }
